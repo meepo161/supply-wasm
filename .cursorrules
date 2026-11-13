@@ -1,0 +1,38 @@
+# Project instructions
+
+Before starting a task, read this file. Use `Scratchpad` to state the task, plan, and progress. Replace completed task notes when a new task starts. Record reusable project facts and corrections in `Lessons`.
+
+## Scratchpad
+
+Task: promote all seven appendix L rules explicitly approved by the user, correct section numbering, and capture first-version confirmation and organizational follow-up.
+
+Plan:
+- [x] Read user approval and compare it with the five current subsection headings and seven logical rules.
+- [x] Rewrite appendix L as seven approved, separately numbered requirements.
+- [x] Promote decisions and update architecture/plan; keep internal appointments and regulations open.
+- [x] Verify consistency and links, update Lessons, and continue the interview.
+
+Agent workflow: read this Scratchpad first; work only in the assigned document and your own progress line above; report reusable facts or corrections so they can be added to Lessons. Do not overwrite another agent's edits.
+
+## Lessons
+
+- This repository currently has no Git metadata in its working directory; do not rely on `git status` for verification.
+- The project is a Kotlin Multiplatform starter with `:core`, `:app:shared`, `:app:webApp`, and `:server` modules. Document implemented behavior only; avoid implying a supply management feature already exists.
+- The web app and Ktor server do not call each other; both use `:core`. The server defines only `GET /`.
+- JS gets the browser name from `userAgent`; Wasm uses the fixed name `Web with Kotlin/Wasm`.
+- Dependency versions are in `gradle/libs.versions.toml`; Gradle Wrapper is 9.5.1. No required JDK version is pinned in this repository.
+- Target architecture uses Koin for client and server composition. Koin containers are separate; domain classes use constructor injection and have no Koin dependency. Verify Koin version compatibility with Kotlin 2.4.21 and Wasm JS before adding dependencies.
+- The supplied specification defines the target as a unified ERP/WMS/Chat/Task Manager for ООО «Авиаагрегат-Н». Fixed stack: Kotlin/Ktor, Kotlin/Wasm/Compose, PostgreSQL, jOOQ; the user additionally selected Koin. The code remains a starter example.
+- Shared directories for users, nomenclature, projects, and documents; server-side permissions on every action; immutable history of posted stock operations; atomic posting and balance updates are required by the specification.
+- Approved clarification: Mail is only for shared departmental mailboxes over IMAP/SMTP, with no independent ERP archive or links/actions involving projects, tasks, procurement, or Documents. It follows users/rights/projects/tasks/chats in implementation order.
+- Task Chat access is derived from task assignee, co-assignees, and observers; adding grants full history, removing revokes access while preserving messages. Author and send time must be visible.
+- Tasks may be project, personal, or departmental. Latest clarification supersedes the earlier "closed tasks remain discussable" answer: closed tasks and Task Chat are read-only until authorized reopening with a reason. Task Chat access also includes initiator, reviewer, and all department staff for departmental task viewing; removing a participant only revokes access when no other basis remains.
+- The lead engineer's reserve is shared enterprise material stock for future projects, not prebuilt products or an engineer's personal physical stock. Allocation to a project creates a reservation, not a physical issue.
+- Attached planning text can contain explicit "requires approval" and recommendation labels; keep those items open even when the attachment is supplied by the user. Record confirmed choices in `docs/decisions.md` separately from proposals.
+- Round 1 approved on-prem server, local ERP logins, project-wide task/chat read access, in-app plus browser notifications, realtime messages, desktop/mobile/WMS device coverage, and clean start without 1C/Bitrix migration. WebSocket, exact first-release breadth, and internet access remain recommendations/open.
+- Future dedicated Android warehouse client uses WMS API only; multiple unambiguous barcodes per nomenclature must be supported now. The Android module is not implemented yet. Round 2 attachment labels central Demand, BOM revision rules, production scope, and accounting export as recommendations, while receipt without blanket OTK and multi-purpose reservation are presented as approved.
+- Official avem.ru/about describes a public engineering-to-service cycle; internal project types, route ownership, software revisions, structured tests, and service workflows cannot be inferred as approved ERP scope from the public site. Use `docs/production-process-map.md` for the gap inventory.
+- Round 3 attachment explicitly frames all nine process choices as proposed architecture. Existing TZ already covers project change requests, hierarchical versioned BOM, production order with revision/serial trace, and quality/document artifacts; the gaps are exact project types/approval grounds, cross-module change impact, structured test result, finished-instance lifecycle, and service scope. Keep proposals in appendix J until confirmed.
+- Round 4 explicitly approved all nine appendix J choices as target architecture, not as first-release scope. A project can link multiple reusable product models and production orders; each actually completed unit in a batch gets a separate serial-numbered instance. Engineering change requires documented material decisions through WMS; failed tests and unresolved critical defects block shipment independently of production-order closure. Exact signing mechanism, role assignments, and actual-instance configuration fields remain open.
+- Round 5 attachment labels all seven new document/approval rules as recommendations. Keep them in candidate appendix L until confirmed. The already approved shipping block for failed tests and unresolved critical remarks must not be downgraded when later proposed details are discussed.
+- The user subsequently explicitly accepted all seven appendix L rules as target requirements; appendix L was split into L.1–L.7 to match that approval. Personal ERP confirmation with audit is sufficient for v1; legally significant e-signature is a pre-production quality/legal check. Manual customer-deviation proof, configurable rights/routes/criteria and product-type checklists are approved. Actual names, severity thresholds and checklist matrices remain enterprise deliverables.
