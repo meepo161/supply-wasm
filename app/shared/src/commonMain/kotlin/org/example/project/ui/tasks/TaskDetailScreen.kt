@@ -22,7 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +40,9 @@ import org.example.project.dto.TaskStatus
 import org.example.project.dto.UserDto
 import org.example.project.dto.hasPermission
 import org.example.project.ui.attachments.AttachmentsSection
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.PageHeader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,22 +55,25 @@ fun TaskDetailScreen(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onBack) {
-                Text("← Назад к списку")
+        PageHeader(
+            title = "Задача ${task.number}",
+            glyph = ErpIconGlyph.Tasks,
+            gradient = Gradients.Ocean,
+            subtitle = task.title,
+            onBack = onBack,
+            actions = {
+                Text(
+                    text = task.status.localizedName(),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = task.status.accentColor(),
+                    modifier = Modifier
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(task.status.accentColor().copy(alpha = 0.12f))
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                )
             }
-            Text(
-                text = task.number,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        )
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isWide = maxWidth >= 840.dp
@@ -77,7 +84,7 @@ fun TaskDetailScreen(
                             .weight(1f)
                             .fillMaxHeight()
                             .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 24.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         TaskDescription(task, currentUser, state, viewModel)

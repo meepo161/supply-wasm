@@ -7,6 +7,7 @@
 - [Текущая архитектура и модули](architecture.md)
 - [Целевая архитектура приложения](target-architecture.md)
 - [План внедрения](implementation-plan.md)
+- [Фактический прогресс по задачам ТЗ](../PROGRESS.md)
 - [Черновая карта инженерного и производственного процесса](production-process-map.md)
 - [Каталог 100 бизнес-сценариев WMS / ERP — для уточнения](wms-erp-100-scenarios.md)
 - [Разработка: запуск и проверки](development.md)

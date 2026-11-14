@@ -22,10 +22,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,6 +34,9 @@ import org.example.project.dto.DemandStatus
 import org.example.project.dto.UserDto
 import org.example.project.ui.approvals.ApprovalsSection
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.PageHeader
 
 @Composable
 fun DemandScreen(
@@ -45,24 +46,19 @@ fun DemandScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(state.currentPage.title) },
-                navigationIcon = {
-                    if (state.currentPage != DemandPage.LIST) {
-                        TextButton(onClick = viewModel::goBack) { Text("Назад") }
-                    }
-                }
-            )
-        },
-        modifier = modifier
-    ) { padding ->
+    Column(modifier = modifier.fillMaxSize()) {
+        PageHeader(
+            title = state.currentPage.title,
+            glyph = ErpIconGlyph.Cart,
+            gradient = Gradients.Sunset,
+            subtitle = "Заявки, закупки и покрытие потребностей",
+            onBack = if (state.currentPage != DemandPage.LIST) viewModel::goBack else null
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 20.dp)
         ) {
             when (state.currentPage) {
                 DemandPage.LIST -> DemandListPage(state, viewModel)

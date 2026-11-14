@@ -108,3 +108,15 @@ Relevant sources:
 ## Not yet implemented
 
 Complete WMS, procurement, production, BOM, documents, approvals, calendar/Gantt, external Mail, external push delivery, Android and the full 100 business scenarios are not implemented. Work in progress is not presented as a working feature until its API/UI integration and checks pass.
+
+## Визуальное оформление интерфейса
+
+Веб-клиент использует собственную дизайн-систему (решение `D-47`): токены бренда, градиенты и переиспользуемые компоненты находятся в `app/shared/src/commonMain/kotlin/org/example/project/ui/theme/`.
+
+- `Brand.kt` — палитра, градиенты и токены светлой/тёмной темы; `ErpTheme.kt` — цветовая схема, типографика и формы Material 3.
+- `Components.kt` — `AppBackground`, `GlassCard`, `GradientButton`, `SoftButton`, `PageHeader`, `SectionHeader`, `PillBadge`, `Avatar`, `IconBadge`, `EmptyState`, `SkeletonLine`, `GradientSpinner` и собственный набор векторных иконок `ErpIcon`.
+- Переключатель светлой и тёмной темы доступен в шапке и на экране профиля; состояние хранится в `ThemeController` (только в памяти вкладки).
+- Главная, список задач, проекты, уведомления, профиль и страница входа переведены на новое оформление; экраны WMS, BOM, снабжения, документов и администрирования получили единую градиентную шапку страницы.
+- `index.html` и `styles.css` содержат брендированную заставку загрузки, которая скрывается после появления канваса Compose.
+
+Оформление не проверено визуальным прогоном в браузере в текущей среде: сборка Wasm и JDK в ней недоступны, изменения проверены только статически (баланс скобок, отсутствие неиспользуемых импортов). Перед приёмкой требуется прогон `:app:webApp:wasmJsBrowserDevelopmentRun`.

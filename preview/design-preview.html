@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ERP «Авиаагрегат-Н» — превью дизайна</title>
+<style>
+  :root{
+    --blue:#1668e3; --blue-br:#3b8cff; --indigo:#4f46e5; --violet:#8b5cf6;
+    --cyan:#22d3ee; --teal:#0d9488; --mint:#34d399; --amber:#f59e0b;
+    --orange:#fb7143; --rose:#f43f5e; --crimson:#e11d48; --slate:#5a6a85;
+    --ink:#0e1726; --mist:#f4f7fc;
+    --card:rgba(255,255,255,.95); --line:rgba(22,104,227,.10);
+    --muted:#5a6a85; --shadow:0 18px 44px -22px rgba(18,54,120,.42);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:"Golos Text","Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink); background:#eef3fb; overflow-x:hidden;
+  }
+  body::before{
+    content:""; position:fixed; inset:0; z-index:-1;
+    background:
+      radial-gradient(1100px 620px at 4% -6%, rgba(59,140,255,.26), transparent 62%),
+      radial-gradient(1000px 640px at 96% 8%, rgba(139,92,246,.22), transparent 62%),
+      radial-gradient(900px 720px at 62% 106%, rgba(34,211,238,.20), transparent 62%),
+      linear-gradient(165deg,#f8fafe 0%, #eff4fb 52%, #e9eefb 100%);
+  }
+  .app{display:flex; gap:0; min-height:100vh; padding:0 22px 22px 0}
+
+  /* ---------- sidebar ---------- */
+  .sidebar{
+    width:270px; flex:0 0 270px; margin:18px 18px 0 22px; border-radius:26px;
+    background:linear-gradient(170deg,#0b1428 0%,#102a5c 52%,#1b1440 100%);
+    border:1px solid rgba(255,255,255,.10); padding:0 12px 12px;
+    display:flex; flex-direction:column; position:sticky; top:18px; height:calc(100vh - 40px);
+    box-shadow:0 26px 60px -30px rgba(9,22,52,.85);
+  }
+  .brand{display:flex; align-items:center; gap:12px; padding:22px 10px 18px}
+  .logo{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--blue-br),var(--violet));
+    box-shadow:0 10px 24px -10px rgba(139,92,246,.9)}
+  .logo svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:1.9}
+  .brand b{color:#fff;font-size:15px;display:block;line-height:1.1}
+  .brand span{color:rgba(255,255,255,.52);font-size:10.5px;letter-spacing:.08em}
+  .nav{overflow-y:auto; flex:1; padding-bottom:8px}
+  .nav::-webkit-scrollbar{width:6px}
+  .nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:9px}
+  .group{color:rgba(255,255,255,.36);font-size:10px;font-weight:700;letter-spacing:.12em;
+    padding:14px 12px 8px}
+  .item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;
+    color:rgba(255,255,255,.78);font-size:13px;cursor:pointer;margin-bottom:4px;
+    border:1px solid transparent;transition:.18s}
+  .item:hover{background:rgba(255,255,255,.08)}
+  .item .ic{width:28px;height:28px;border-radius:9px;background:rgba(255,255,255,.08);
+    display:grid;place-items:center;flex:0 0 28px}
+  .item .ic svg{width:15px;height:15px;stroke:rgba(255,255,255,.75);fill:none;stroke-width:1.9;
+    stroke-linecap:round;stroke-linejoin:round}
+  .item.active{background:linear-gradient(120deg,rgba(22,104,227,.96),rgba(79,70,229,.9));
+    color:#fff;border-color:rgba(255,255,255,.18);box-shadow:0 12px 26px -14px rgba(59,140,255,.95)}
+  .item.active .ic{background:rgba(255,255,255,.2)}
+  .item.active .ic svg{stroke:#fff}
+  .user-card{margin-top:10px;border-radius:18px;background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.10);padding:12px}
+  .user-row{display:flex;align-items:center;gap:10px}
+  .avatar{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;
+    color:#fff;font-weight:700;font-size:12px;letter-spacing:.02em}
+  .user-row b{color:#fff;font-size:12.5px;display:block}
+  .user-row small{color:rgba(255,255,255,.5);font-size:11px}
+  .logout{display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.7);
+    font-size:11.5px;padding:8px 4px 2px;cursor:pointer}
+  .logout svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9}
+
+  /* ---------- main ---------- */
+  .main{flex:1;min-width:0;padding-top:16px}
+  .topbar{display:flex;align-items:center;gap:10px;margin:0 0 18px}
+  .crumb{display:flex;align-items:center;gap:8px;flex:1}
+  .pill-erp{font-size:10.5px;font-weight:700;color:var(--blue);background:rgba(22,104,227,.12);
+    padding:3px 7px;border-radius:6px;letter-spacing:.06em}
+  .crumb .sep{opacity:.5}
+  .crumb b{font-size:13px;font-weight:500;color:var(--muted)}
+  .ibtn{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;cursor:pointer;
+    background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.9);
+    box-shadow:0 6px 18px -12px rgba(18,54,120,.6);transition:.16s}
+  .ibtn:hover{background:#fff;transform:translateY(-1px)}
+  .ibtn svg{width:19px;height:19px;stroke:#5a6a85;fill:none;stroke-width:1.9;
+    stroke-linecap:round;stroke-linejoin:round}
+  .uchip{display:flex;align-items:center;gap:9px;padding:5px 12px 5px 5px;border-radius:99px;
+    background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.95);cursor:pointer;
+    box-shadow:0 6px 18px -12px rgba(18,54,120,.6)}
+  .uchip .avatar{width:30px;height:30px;border-radius:10px;font-size:11px}
+  .uchip b{font-size:12.5px;display:block;line-height:1.15}
+  .uchip small{font-size:10.5px;color:var(--muted)}
+
+  /* hero */
+  .hero{position:relative;overflow:hidden;border-radius:28px;padding:26px;color:#fff;
+    background:linear-gradient(120deg,#1247c0 0%,#4b2dd6 54%,#7c2fd6 100%);
+    border:1px solid rgba(255,255,255,.14);box-shadow:0 30px 60px -34px rgba(48,32,150,.95)}
+  .hero::before{content:"";position:absolute;width:340px;height:340px;right:-60px;top:-120px;
+    background:radial-gradient(circle,rgba(255,255,255,.22),transparent 68%)}
+  .hero::after{content:"";position:absolute;width:260px;height:260px;left:-60px;bottom:-140px;
+    background:radial-gradient(circle,rgba(34,211,238,.28),transparent 68%)}
+  .hero-top{display:flex;justify-content:space-between;gap:18px;position:relative;z-index:1}
+  .dotline{display:flex;align-items:center;gap:8px;font-size:10.5px;color:rgba(255,255,255,.72);
+    letter-spacing:.04em}
+  .dotline i{width:6px;height:6px;border-radius:3px;background:var(--mint);
+    box-shadow:0 0 12px rgba(52,211,153,.9)}
+  h1{margin:10px 0 8px;font-size:30px;line-height:1.16;letter-spacing:-.6px;font-weight:700}
+  .hero p{margin:0;font-size:13px;color:rgba(255,255,255,.8);max-width:52ch}
+  .badge{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);
+    border-radius:16px;padding:10px 14px;display:flex;align-items:center;gap:9px;cursor:pointer;
+    backdrop-filter:blur(6px)}
+  .badge svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:1.9}
+  .badge b{font-size:15px;display:block;line-height:1}
+  .badge small{font-size:10px;color:rgba(255,255,255,.72)}
+  .hero-actions{display:flex;gap:10px;margin-top:20px;position:relative;z-index:1;flex-wrap:wrap}
+  .btn-grad{display:inline-flex;align-items:center;gap:8px;border-radius:14px;cursor:pointer;
+    padding:10px 16px;font-size:12.5px;font-weight:600;color:#fff;border:1px solid rgba(255,255,255,.22);
+    background:linear-gradient(120deg,rgba(255,255,255,.3),rgba(255,255,255,.16));transition:.18s}
+  .btn-grad:hover{transform:translateY(-1px);box-shadow:0 14px 26px -16px rgba(0,0,0,.6)}
+  .glass-chip{display:inline-flex;align-items:center;padding:8px 12px;border-radius:99px;
+    font-size:10.5px;color:rgba(255,255,255,.88);background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.16)}
+
+  /* metrics */
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}
+  .metric{background:var(--card);border:1px solid rgba(255,255,255,.9);border-radius:20px;
+    padding:16px;box-shadow:var(--shadow);transition:.2s}
+  .metric:hover{transform:translateY(-3px);box-shadow:0 26px 48px -26px rgba(18,54,120,.55)}
+  .metric-head{display:flex;justify-content:space-between;align-items:center}
+  .ibadge{width:34px;height:34px;border-radius:11px;display:grid;place-items:center}
+  .ibadge svg{width:17px;height:17px;stroke:#fff;fill:none;stroke-width:1.9;
+    stroke-linecap:round;stroke-linejoin:round}
+  .tag{font-size:10px;font-weight:600;padding:3px 9px;border-radius:99px}
+  .metric b{display:block;font-size:24px;letter-spacing:-.5px;margin-top:12px}
+  .metric span{font-size:11.5px;color:var(--muted)}
+  .g-primary{background:linear-gradient(135deg,#1668e3,#4f46e5,#8b5cf6)}
+  .g-ocean{background:linear-gradient(135deg,#0ea5e9,#1668e3,#4f46e5)}
+  .g-aurora{background:linear-gradient(135deg,#22d3ee,#0d9488,#4f46e5)}
+  .g-sunset{background:linear-gradient(135deg,#ff9a62,#fb7143,#f43f5e)}
+  .g-berry{background:linear-gradient(135deg,#8b5cf6,#f43f5e,#e11d48)}
+  .g-amber{background:linear-gradient(135deg,#fcd34d,#f59e0b,#fb7143)}
+  .g-emerald{background:linear-gradient(135deg,#34d399,#10b981,#0d9488)}
+  .g-slate{background:linear-gradient(135deg,#8ca0bd,#64748b,#475569)}
+
+  /* columns */
+  .cols{display:grid;grid-template-columns:1.12fr .88fr;gap:18px;margin-top:18px;align-items:start}
+  .col{display:flex;flex-direction:column;gap:18px}
+  .card{background:var(--card);border:1px solid rgba(255,255,255,.9);border-radius:22px;
+    padding:18px;box-shadow:var(--shadow)}
+  .card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .card-title{display:flex;align-items:center;gap:10px}
+  .bar-accent{width:4px;height:20px;border-radius:2px}
+  .card-title h3{margin:0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .count{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px}
+  .sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+  .row{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;
+    cursor:pointer;transition:.16s;margin-bottom:8px;border:1px solid transparent}
+  .row:hover{transform:translateX(2px)}
+  .row-bar{width:3px;height:32px;border-radius:2px;flex:0 0 3px}
+  .row b{font-size:12.8px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
+  .row small{font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px}
+  .pdot{width:6px;height:6px;border-radius:3px;display:inline-block}
+  .row .date{font-size:11px;font-weight:600;margin-left:auto;white-space:nowrap}
+  .empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px 0;
+    color:var(--muted);font-size:12px;text-align:center}
+  .empty .ebox{width:56px;height:56px;border-radius:18px;display:grid;place-items:center}
+  .empty .ebox svg{width:24px;height:24px;fill:none;stroke-width:1.8}
+
+  /* login view */
+  .login{position:fixed;inset:0;display:none;background:#eef3fb;z-index:50;padding:20px}
+  .login.on{display:flex;gap:0}
+  .login-art{flex:1.05;border-radius:32px;padding:36px;display:flex;flex-direction:column;
+    justify-content:space-between;color:#fff;position:relative;overflow:hidden;
+    background:linear-gradient(170deg,#0b1428,#102a5c 55%,#1b1440);
+    border:1px solid rgba(255,255,255,.1)}
+  .login-art::after{content:"";position:absolute;width:420px;height:420px;right:-120px;bottom:-160px;
+    background:radial-gradient(circle,rgba(139,92,246,.4),transparent 70%)}
+  .login-art h2{font-size:40px;line-height:1.1;letter-spacing:-1px;margin:0 0 14px}
+  .login-art .lead{color:rgba(255,255,255,.7);font-size:13px;max-width:40ch;line-height:1.6}
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:99px;
+    font-size:10.5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);
+    color:rgba(255,255,255,.88)}
+  .chip svg{width:14px;height:14px;stroke:rgba(255,255,255,.8);fill:none;stroke-width:1.9}
+  .login-form{flex:.95;display:grid;place-items:center;position:relative}
+  .form-card{width:100%;max-width:400px}
+  .form-card h3{font-size:30px;letter-spacing:-.6px;margin:0 0 6px}
+  .form-card>p{margin:0 0 22px;color:var(--muted);font-size:13px}
+  .fields{background:var(--card);border:1px solid rgba(255,255,255,.9);border-radius:22px;
+    padding:22px;box-shadow:var(--shadow)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:11px;color:var(--muted);margin-bottom:6px}
+  .field .inp{display:flex;align-items:center;gap:10px;border:1px solid #dbe4f2;border-radius:14px;
+    padding:11px 13px;background:#f8fafe;transition:.16s}
+  .field .inp:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px rgba(22,104,227,.12)}
+  .field .inp svg{width:17px;height:17px;stroke:#7b8aa3;fill:none;stroke-width:1.9;flex:0 0 17px}
+  .field .inp input{border:0;outline:0;background:transparent;font:inherit;font-size:13px;
+    width:100%;color:var(--ink)}
+  .btn-primary{width:100%;border:0;border-radius:14px;padding:13px;color:#fff;font:inherit;
+    font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;gap:8px;
+    background:linear-gradient(120deg,#1668e3,#4f46e5,#8b5cf6);
+    box-shadow:0 16px 30px -16px rgba(79,70,229,.9);transition:.18s}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 22px 36px -16px rgba(79,70,229,.95)}
+  .btn-soft{margin-top:14px;width:100%;border-radius:14px;padding:11px;font:inherit;font-size:12px;
+    cursor:pointer;color:var(--blue);background:rgba(22,104,227,.08);
+    border:1px solid rgba(22,104,227,.22);display:flex;align-items:center;justify-content:center;gap:7px}
+  .footnote{text-align:center;margin-top:26px;font-size:10.5px;color:#8d99ad}
+
+  .toggle-view{position:fixed;right:22px;bottom:22px;z-index:60;display:flex;gap:6px;
+    background:rgba(255,255,255,.9);border:1px solid rgba(255,255,255,.95);padding:6px;
+    border-radius:16px;box-shadow:0 16px 36px -18px rgba(18,54,120,.6);backdrop-filter:blur(8px)}
+  .toggle-view button{border:0;background:transparent;font:inherit;font-size:11.5px;
+    padding:7px 12px;border-radius:11px;cursor:pointer;color:var(--muted)}
+  .toggle-view button.on{background:linear-gradient(120deg,#1668e3,#4f46e5);color:#fff}
+
+  @media (max-width:1180px){
+    .sidebar{display:none} .app{padding:0 16px 16px}
+    .metrics{grid-template-columns:repeat(2,1fr)} .cols{grid-template-columns:1fr}
+  }
+  @media (max-width:720px){
+    .metrics{grid-template-columns:1fr} h1{font-size:24px}
+    .login{flex-direction:column;overflow:auto} .login-art{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1.3 5.4 3.3 7.4 8.7 8.7-5.4 1.3-7.4 3.3-8.7 8.7-1.3-5.4-3.3-7.4-8.7-8.7C8.7 10.4 10.7 8.4 12 3z"/></svg></div>
+      <div><b>Авиаагрегат</b><span>ERP · WMS · MES</span></div>
+    </div>
+
+    <div class="nav">
+      <div class="group">РАБОТА</div>
+      <div class="item active"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg></span>Главная</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 10l2.5 2.5L16 7"/><path d="M8 17h8"/></svg></span>Мои задачи</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="7" height="6" rx="1.6"/><rect x="13.5" y="4.5" width="7" height="6" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="6" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="6" rx="1.6"/></svg></span>Проекты</div>
+
+      <div class="group">РЕСУРСЫ</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M2.5 10L12 4l9.5 6"/><rect x="4.5" y="10" width="15" height="10" rx="1.6"/><path d="M9 20v-5h6v5"/></svg></span>Склад</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3.5l9 4.5-9 4.5-9-4.5 9-4.5z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 16.5L12 21l9-4.5"/></svg></span>Номенклатура и BOM</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 5h3l3 10h10"/><path d="M7 8h14"/><circle cx="9.5" cy="19" r="1.3"/><circle cx="17.5" cy="19" r="1.3"/></svg></span>Снабжение</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M6 3h8l6 6v12H6z"/><path d="M14 3v6h6"/><path d="M9 13h8M9 17h6"/></svg></span>Документы</div>
+
+      <div class="group">СЛУЖЕБНОЕ</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M6 17v-5a6 6 0 1112 0v5l2 2H4l2-2z"/><path d="M10 20.5h4"/></svg></span>Уведомления</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>Администрирование</div>
+      <div class="item"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 21c0-4 3.2-6 7-6s7 2 7 6"/></svg></span>Профиль</div>
+    </div>
+
+    <div class="user-card">
+      <div class="user-row">
+        <div class="avatar" style="background:linear-gradient(135deg,#3b8cff,#8b5cf6)">АИ</div>
+        <div><b>Иванова Анна</b><small>@a.ivanova</small></div>
+      </div>
+      <div class="logout">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5v16h4"/><path d="M12 12h9"/><path d="M18 8.5l3.5 3.5L18 15.5"/></svg>
+        Выйти из системы
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="crumb">
+        <span class="pill-erp">ERP</span>
+        <span class="sep" style="color:#9aa8bd">›</span>
+        <b>Главная</b>
+      </div>
+      <div class="ibtn"><svg viewBox="0 0 24 24"><path d="M6 17v-5a6 6 0 1112 0v5l2 2H4l2-2z"/><path d="M10 20.5h4"/></svg></div>
+      <div class="ibtn"><svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 019.5 4 8.5 8.5 0 1020 14.5z"/></svg></div>
+      <div class="uchip">
+        <div class="avatar" style="background:linear-gradient(135deg,#3b8cff,#8b5cf6)">АИ</div>
+        <div><b>Иванова Анна</b><small>@a.ivanova</small></div>
+      </div>
+    </div>
+
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <div class="dotline"><i></i> Рабочий день · сегодня</div>
+          <h1>Здравствуйте,<br>Анна Иванова</h1>
+          <p>У вас 2 просроченных задачи — начните с них. Ещё 5 задач в работе и 3 ждут вашей приёмки.</p>
+        </div>
+        <div class="badge">
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M6 17v-5a6 6 0 1112 0v5l2 2H4l2-2z"/><path d="M10 20.5h4"/></svg>
+          <div><b>7</b><small>непрочитанных</small></div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn-grad">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19.5 12a7.5 7.5 0 11-2.3-5.4"/><path d="M20 4v4.5h-4.5"/></svg>
+          Обновить данные
+        </button>
+        <span class="glass-chip">Открытых: 9</span>
+        <span class="glass-chip">На приёмке: 3</span>
+      </div>
+    </section>
+
+    <section class="metrics">
+      <div class="metric">
+        <div class="metric-head">
+          <div class="ibadge g-sunset"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l9 16H3l9-16z"/><path d="M12 10v4"/><circle cx="12" cy="17" r=".8" fill="#fff" stroke="none"/></svg></div>
+          <span class="tag" style="color:#e11d48;background:rgba(244,63,94,.12)">активно</span>
+        </div>
+        <b>2</b><span>Просрочено</span>
+      </div>
+      <div class="metric">
+        <div class="metric-head">
+          <div class="ibadge g-amber"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></div>
+          <span class="tag" style="color:#b45309;background:rgba(245,158,11,.14)">активно</span>
+        </div>
+        <b>4</b><span>Ближайшие сроки</span>
+      </div>
+      <div class="metric">
+        <div class="metric-head">
+          <div class="ibadge g-aurora"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12l2.5 2.5 4.5-4.5"/></svg></div>
+          <span class="tag" style="color:#0d9488;background:rgba(13,148,136,.14)">активно</span>
+        </div>
+        <b>3</b><span>На приёмке</span>
+      </div>
+      <div class="metric">
+        <div class="metric-head">
+          <div class="ibadge g-primary"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 10l2.5 2.5L16 7"/><path d="M8 17h8"/></svg></div>
+          <span class="tag" style="color:#1668e3;background:rgba(22,104,227,.12)">активно</span>
+        </div>
+        <b>9</b><span>В работе</span>
+      </div>
+    </section>
+
+    <div class="cols">
+      <div class="col">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <div class="bar-accent" style="background:linear-gradient(#f43f5e,rgba(244,63,94,.3))"></div>
+              <div>
+                <h3>Просроченные задачи <span class="count" style="color:#e11d48;background:rgba(244,63,94,.12)">2</span></h3>
+                <div class="sub">Требуют внимания в первую очередь</div>
+              </div>
+            </div>
+            <div class="ibadge g-sunset" style="width:30px;height:30px;border-radius:10px"><svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 4l9 16H3l9-16z"/></svg></div>
+          </div>
+
+          <div class="row" style="background:rgba(244,63,94,.06);border-color:rgba(244,63,94,.12)">
+            <div class="row-bar" style="background:linear-gradient(#f43f5e,rgba(244,63,94,.25))"></div>
+            <div style="flex:1;min-width:0"><b>Согласовать КД на кронштейн 740.12</b><small>ЗД-1042 · В работе <span class="pdot" style="background:#e11d48"></span></small></div>
+            <span class="date" style="color:#e11d48">2026-11-09</span>
+          </div>
+          <div class="row" style="background:rgba(244,63,94,.06);border-color:rgba(244,63,94,.12)">
+            <div class="row-bar" style="background:linear-gradient(#f43f5e,rgba(244,63,94,.25))"></div>
+            <div style="flex:1;min-width:0"><b>Проверить остатки по складу №2</b><small>ЗД-1039 · На доработке <span class="pdot" style="background:#fb7143"></span></small></div>
+            <span class="date" style="color:#e11d48">2026-11-11</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <div class="bar-accent" style="background:linear-gradient(#f59e0b,rgba(245,158,11,.3))"></div>
+              <div>
+                <h3>Ближайшие сроки <span class="count" style="color:#b45309;background:rgba(245,158,11,.14)">4</span></h3>
+                <div class="sub">Держите фокус на этих задачах</div>
+              </div>
+            </div>
+            <div class="ibadge g-amber" style="width:30px;height:30px;border-radius:10px"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg></div>
+          </div>
+
+          <div class="row" style="background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.14)">
+            <div class="row-bar" style="background:linear-gradient(#f59e0b,rgba(245,158,11,.25))"></div>
+            <div style="flex:1;min-width:0"><b>Принять партию подшипников 6205</b><small>ЗД-1051 · На проверке <span class="pdot" style="background:#f59e0b"></span></small></div>
+            <span class="date" style="color:#b45309">2026-11-16</span>
+          </div>
+          <div class="row" style="background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.14)">
+            <div class="row-bar" style="background:linear-gradient(#f59e0b,rgba(245,158,11,.25))"></div>
+            <div style="flex:1;min-width:0"><b>Обновить ревизию BOM изделия АГ-77</b><small>ЗД-1054 · В работе <span class="pdot" style="background:#1668e3"></span></small></div>
+            <span class="date" style="color:#b45309">2026-11-18</span>
+          </div>
+          <div class="row" style="background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.14)">
+            <div class="row-bar" style="background:linear-gradient(#f59e0b,rgba(245,158,11,.25))"></div>
+            <div style="flex:1;min-width:0"><b>Сформировать заявку на снабжение</b><small>ЗД-1056 · Назначена <span class="pdot" style="background:#34d399"></span></small></div>
+            <span class="date" style="color:#b45309">2026-11-20</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <div class="bar-accent" style="background:linear-gradient(#0d9488,rgba(13,148,136,.3))"></div>
+              <div>
+                <h3>Задачи на приёмке <span class="count" style="color:#0d9488;background:rgba(13,148,136,.14)">3</span></h3>
+                <div class="sub">Ожидают вашего решения</div>
+              </div>
+            </div>
+            <div class="ibadge g-aurora" style="width:30px;height:30px;border-radius:10px"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12l2.5 2.5 4.5-4.5"/></svg></div>
+          </div>
+          <div class="row" style="background:rgba(13,148,136,.06);border-color:rgba(13,148,136,.14)">
+            <div class="row-bar" style="background:linear-gradient(#0d9488,rgba(13,148,136,.25))"></div>
+            <div style="flex:1;min-width:0"><b>Приёмка комплекта оснастки</b><small>ЗД-1048 · На проверке</small></div>
+            <span class="date" style="color:#0d9488">2026-11-15</span>
+          </div>
+          <div class="row" style="background:rgba(13,148,136,.06);border-color:rgba(13,148,136,.14)">
+            <div class="row-bar" style="background:linear-gradient(#0d9488,rgba(13,148,136,.25))"></div>
+            <div style="flex:1;min-width:0"><b>Проверить протокол испытаний</b><small>ЗД-1044 · На проверке</small></div>
+            <span class="date" style="color:#0d9488">2026-11-17</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <div class="bar-accent" style="background:linear-gradient(#8b5cf6,rgba(139,92,246,.3))"></div>
+              <div>
+                <h3>Непрочитанные уведомления <span class="count" style="color:#7c3aed;background:rgba(139,92,246,.14)">7</span></h3>
+                <div class="sub">События, требующие просмотра</div>
+              </div>
+            </div>
+            <button class="btn-soft" style="margin:0;width:auto;padding:8px 12px;font-size:11px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 17v-5a6 6 0 1112 0v5l2 2H4l2-2z"/></svg>
+              Все
+            </button>
+          </div>
+          <div class="row" style="background:rgba(139,92,246,.06);border-color:rgba(139,92,246,.14)">
+            <div class="ibadge g-berry" style="width:30px;height:30px;border-radius:10px"><svg viewBox="0 0 24 24"><path d="M6 17v-5a6 6 0 1112 0v5l2 2H4l2-2z"/></svg></div>
+            <div style="flex:1;min-width:0"><b>Задача назначена на вас</b><small>TASK_ASSIGNED · TASK 1056 · 2026-11-14</small></div>
+            <span class="pdot" style="background:#8b5cf6"></span>
+          </div>
+          <div class="row" style="background:rgba(139,92,246,.06);border-color:rgba(139,92,246,.14)">
+            <div class="ibadge g-berry" style="width:30px;height:30px;border-radius:10px"><svg viewBox="0 0 24 24"><path d="M6 17v-5a6 6 0 1112 0v5l2 2H4l2-2z"/></svg></div>
+            <div style="flex:1;min-width:0"><b>Задача отправлена на приёмку</b><small>TASK_ON_REVIEW · TASK 1048 · 2026-11-14</small></div>
+            <span class="pdot" style="background:#8b5cf6"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===== Login view ===== -->
+<div class="login" id="loginView">
+  <div class="login-art">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="logo" style="width:42px;height:42px;border-radius:13px">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><path d="M12 3c1.3 5.4 3.3 7.4 8.7 8.7-5.4 1.3-7.4 3.3-8.7 8.7-1.3-5.4-3.3-7.4-8.7-8.7C8.7 10.4 10.7 8.4 12 3z"/></svg>
+      </div>
+      <div><b style="color:#fff;font-size:15px;display:block">Авиаагрегат-Н</b>
+        <span style="color:rgba(255,255,255,.55);font-size:10.5px">Единая ERP-платформа</span></div>
+    </div>
+    <div style="position:relative;z-index:1">
+      <div style="width:150px;height:3px;border-radius:2px;margin-bottom:18px;
+        background:linear-gradient(90deg,#22d3ee,#0d9488,#4f46e5)"></div>
+      <h2>От потребности<br>до готового изделия</h2>
+      <p class="lead">Проекты, задачи, склад, снабжение и документы — в одном связанном контуре
+        с историей изменений и прозрачными статусами.</p>
+      <div class="chips">
+        <span class="chip"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 10l2.5 2.5L16 7"/></svg>Задачи и приёмка</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M12 3.5l9 4.5-9 4.5-9-4.5 9-4.5z"/><path d="M3 12l9 4.5 9-4.5"/></svg>Склад и BOM</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M3 5h3l3 10h10"/><path d="M7 8h14"/></svg>Снабжение</span>
+        <span class="chip"><svg viewBox="0 0 24 24"><path d="M6 3h8l6 6v12H6z"/><path d="M14 3v6h6"/></svg>Документы</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;position:relative;z-index:1">
+      <div style="width:44px;height:44px;border-radius:50%;
+        background:conic-gradient(#22d3ee,#0d9488,#4f46e5,#22d3ee);
+        -webkit-mask:radial-gradient(circle,transparent 56%,#000 58%);
+        mask:radial-gradient(circle,transparent 56%,#000 58%)"></div>
+      <span style="color:rgba(255,255,255,.6);font-size:11.5px">Безопасный доступ по ролям и правам</span>
+    </div>
+  </div>
+
+  <div class="login-form">
+    <div class="form-card">
+      <h3>С возвращением</h3>
+      <p>Войдите, чтобы продолжить работу с системой предприятия</p>
+      <div class="fields">
+        <div class="field">
+          <label>Логин</label>
+          <div class="inp">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 21c0-4 3.2-6 7-6s7 2 7 6"/></svg>
+            <input value="a.ivanova">
+          </div>
+        </div>
+        <div class="field">
+          <label>Пароль</label>
+          <div class="inp">
+            <svg viewBox="0 0 24 24"><path d="M12 3l8 3v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3z"/></svg>
+            <input type="password" value="••••••••••">
+          </div>
+        </div>
+        <button class="btn-primary">
+          Войти в систему
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+      <button class="btn-soft">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Создать первого администратора
+      </button>
+      <div class="footnote">ООО «Авиаагрегат-Н» · Единая информационная система</div>
+    </div>
+  </div>
+</div>
+
+<div class="toggle-view">
+  <button class="on" id="btnApp" onclick="showApp()">Рабочий стол</button>
+  <button id="btnLogin" onclick="showLogin()">Вход в систему</button>
+</div>
+
+<script>
+  function showLogin(){
+    document.getElementById('loginView').classList.add('on');
+    document.getElementById('btnLogin').classList.add('on');
+    document.getElementById('btnApp').classList.remove('on');
+  }
+  function showApp(){
+    document.getElementById('loginView').classList.remove('on');
+    document.getElementById('btnApp').classList.add('on');
+    document.getElementById('btnLogin').classList.remove('on');
+  }
+  document.querySelectorAll('.nav .item').forEach(function(item){
+    item.addEventListener('click', function(){
+      document.querySelectorAll('.nav .item').forEach(function(i){ i.classList.remove('active'); });
+      item.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

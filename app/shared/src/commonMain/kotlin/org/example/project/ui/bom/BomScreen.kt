@@ -16,10 +16,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,6 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.BomRevisionStatus
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.PageHeader
 
 @Composable
 fun BomScreen(
@@ -36,24 +37,19 @@ fun BomScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(state.currentPage.title) },
-                navigationIcon = {
-                    if (state.currentPage != BomPage.MODELS) {
-                        TextButton(onClick = viewModel::goBack) { Text("Назад") }
-                    }
-                }
-            )
-        },
-        modifier = modifier
-    ) { padding ->
+    Column(modifier = modifier.fillMaxSize()) {
+        PageHeader(
+            title = state.currentPage.title,
+            glyph = ErpIconGlyph.Layers,
+            gradient = Gradients.Berry,
+            subtitle = "Номенклатура и состав изделий",
+            onBack = if (state.currentPage != BomPage.MODELS) viewModel::goBack else null
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 20.dp)
         ) {
             when (state.currentPage) {
                 BomPage.MODELS -> ModelsPage(state, viewModel)

@@ -1,20 +1,46 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KotlinProject</title>
+    <meta name="theme-color" content="#1668e3">
+    <title>ERP «Авиаагрегат-Н»</title>
     <link type="text/css" rel="stylesheet" href="styles.css">
 </head>
-<body style="text-align: center; align-content: center">
-    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 50 50" role="presentation">
-        <circle cx="25" cy="25" r="20" stroke="#ccc" stroke-width="4" fill="none"/>
-        <circle cx="25" cy="25" r="20" stroke="#333" stroke-width="4" fill="none" stroke-linecap="round"
-                stroke-dasharray="90 125">
-            <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="1s"
-                              repeatCount="indefinite"/>
-        </circle>
-    </svg>
+<body>
+    <div id="erp-splash">
+        <div class="mark">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                 stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3c1.3 5.4 3.3 7.4 8.7 8.7-5.4 1.3-7.4 3.3-8.7 8.7-1.3-5.4-3.3-7.4-8.7-8.7C8.7 10.4 10.7 8.4 12 3z"/>
+            </svg>
+        </div>
+        <p class="title">Авиаагрегат · ERP</p>
+        <div class="bar"><span></span></div>
+        <p class="hint">Загружаем рабочее пространство…</p>
+    </div>
+    <script type="application/javascript">
+        // Прячем заставку, когда Compose добавит свой канвас в документ.
+        (function () {
+            var splash = document.getElementById('erp-splash');
+            if (!splash) return;
+            var hide = function () {
+                splash.classList.add('is-hidden');
+                setTimeout(function () { splash.remove(); }, 600);
+            };
+            var observer = new MutationObserver(function () {
+                if (document.querySelector('canvas')) {
+                    observer.disconnect();
+                    setTimeout(hide, 350);
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+            // Страховка: если канвас так и не появился, не держим заставку вечно.
+            setTimeout(function () {
+                if (splash.isConnected) hide();
+            }, 15000);
+        })();
+    </script>
     <script type="application/javascript" src="webApp.js"></script>
 </body>
 </html>
