@@ -18,6 +18,8 @@ import org.example.project.data.DocumentApiClient
 import org.example.project.data.DocumentRepository
 import org.example.project.data.NotificationApiClient
 import org.example.project.data.NotificationRepository
+import org.example.project.data.ProductionApiClient
+import org.example.project.data.ProductionRepository
 import org.example.project.data.ProjectApiClient
 import org.example.project.data.ProjectRepository
 import org.example.project.data.SearchApiClient
@@ -49,4 +51,5 @@ val sharedModule = module {
     singleOf(::AdminApiClient) bind AdminRepository::class
     singleOf(::ApprovalApiClient) bind ApprovalRepository::class
     singleOf(::SearchApiClient) bind SearchRepository::class
+    singleOf(::ProductionApiClient) bind ProductionRepository::class
 }

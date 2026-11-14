@@ -51,6 +51,7 @@ import org.example.project.data.ChatRepository
 import org.example.project.data.DemandRepository
 import org.example.project.data.DocumentRepository
 import org.example.project.data.NotificationRepository
+import org.example.project.data.ProductionRepository
 import org.example.project.data.ProjectRepository
 import org.example.project.data.SearchRepository
 import org.example.project.data.TaskRepository
@@ -81,6 +82,8 @@ import org.example.project.ui.theme.ErpIcon
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.LocalBrandPalette
 import org.example.project.ui.theme.LocalThemeController
+import org.example.project.ui.production.ProductionScreen
+import org.example.project.ui.production.ProductionViewModel
 import org.example.project.ui.wms.WmsScreen
 import org.example.project.ui.wms.WmsViewModel
 import org.koin.compose.koinInject
@@ -101,6 +104,7 @@ fun MainScaffold(
     val chatRepository: ChatRepository = koinInject()
     val wmsRepository: WmsRepository = koinInject()
     val bomRepository: BomRepository = koinInject()
+    val productionRepository: ProductionRepository = koinInject()
     val demandRepository: DemandRepository = koinInject()
     val documentRepository: DocumentRepository = koinInject()
     val notificationRepository: NotificationRepository = koinInject()
@@ -127,6 +131,19 @@ fun MainScaffold(
     }
     val bomViewModel = if (NavigationDestination.BOM in destinations) {
         remember(user) { BomViewModel(bomRepository, wmsRepository, user) }
+    } else {
+        null
+    }
+    val productionViewModel = if (NavigationDestination.PRODUCTION in destinations) {
+        remember(user) {
+            ProductionViewModel(
+                productionRepository,
+                projectRepository,
+                bomRepository,
+                userRepository,
+                user
+            )
+        }
     } else {
         null
     }
@@ -237,6 +254,7 @@ fun MainScaffold(
                         notificationViewModel = notificationViewModel,
                         wmsViewModel = wmsViewModel,
                         bomViewModel = bomViewModel,
+                        productionViewModel = productionViewModel,
                         demandViewModel = demandViewModel,
                         documentViewModel = documentViewModel,
                         adminViewModel = adminViewModel,
@@ -785,6 +803,7 @@ private fun MainContent(
     notificationViewModel: NotificationViewModel,
     wmsViewModel: WmsViewModel?,
     bomViewModel: BomViewModel?,
+    productionViewModel: ProductionViewModel?,
     demandViewModel: DemandViewModel?,
     documentViewModel: DocumentViewModel,
     adminViewModel: AdminViewModel?,
@@ -815,6 +834,10 @@ private fun MainContent(
 
         NavigationDestination.BOM -> bomViewModel?.let {
             BomScreen(viewModel = it)
+        }
+
+        NavigationDestination.PRODUCTION -> productionViewModel?.let {
+            ProductionScreen(viewModel = it)
         }
 
         NavigationDestination.DEMANDS -> demandViewModel?.let {
