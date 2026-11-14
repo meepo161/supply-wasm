@@ -14,6 +14,24 @@ import org.example.project.dto.ReservationStatus
 import org.example.project.dto.StockBalanceDto
 import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.WarehouseDto
+import org.example.project.dto.CancelTransferRequest
+import org.example.project.dto.CreateIssueOrderRequest
+import org.example.project.dto.CreateReturnOrderRequest
+import org.example.project.dto.CreateTransferRequest
+import org.example.project.dto.InspectReturnLineRequest
+import org.example.project.dto.IssueActionRequest
+import org.example.project.dto.IssueOrderDto
+import org.example.project.dto.IssueStatus
+import org.example.project.dto.MarkTransferInTransitRequest
+import org.example.project.dto.PickIssueRequest
+import org.example.project.dto.ReceiveTransferRequest
+import org.example.project.dto.RefuseIssueRequest
+import org.example.project.dto.ReturnActionRequest
+import org.example.project.dto.ReturnOrderDto
+import org.example.project.dto.ReturnStatus
+import org.example.project.dto.ShipTransferRequest
+import org.example.project.dto.TransferDto
+import org.example.project.dto.TransferStatus
 
 interface WmsRepository {
     suspend fun listWarehouses(): ApiResult<List<WarehouseDto>>
@@ -41,4 +59,38 @@ interface WmsRepository {
 
     suspend fun getReservation(id: Long): ApiResult<ReservationDto>
     suspend fun releaseReservation(id: Long, request: ReleaseReservationRequest): ApiResult<ReservationDto>
+
+    // Перемещения (ТЗ §8.6)
+    suspend fun createTransfer(request: CreateTransferRequest): ApiResult<TransferDto>
+    suspend fun listTransfers(
+        warehouseId: Long?,
+        nomenclatureId: Long?,
+        status: TransferStatus?
+    ): ApiResult<List<TransferDto>>
+    suspend fun getTransfer(id: Long): ApiResult<TransferDto>
+    suspend fun shipTransfer(id: Long, request: ShipTransferRequest): ApiResult<TransferDto>
+    suspend fun markTransferInTransit(id: Long, request: MarkTransferInTransitRequest): ApiResult<TransferDto>
+    suspend fun receiveTransfer(id: Long, request: ReceiveTransferRequest): ApiResult<TransferDto>
+    suspend fun cancelTransfer(id: Long, request: CancelTransferRequest): ApiResult<TransferDto>
+
+    // Выдача (ТЗ §8.8)
+    suspend fun createIssue(request: CreateIssueOrderRequest): ApiResult<IssueOrderDto>
+    suspend fun listIssues(warehouseId: Long?, status: IssueStatus?): ApiResult<List<IssueOrderDto>>
+    suspend fun getIssue(id: Long): ApiResult<IssueOrderDto>
+    suspend fun pickIssue(id: Long, request: PickIssueRequest): ApiResult<IssueOrderDto>
+    suspend fun issueOrder(id: Long, request: IssueActionRequest): ApiResult<IssueOrderDto>
+    suspend fun confirmIssue(id: Long, request: IssueActionRequest): ApiResult<IssueOrderDto>
+    suspend fun refuseIssue(id: Long, request: RefuseIssueRequest): ApiResult<IssueOrderDto>
+    suspend fun cancelIssue(id: Long, request: IssueActionRequest): ApiResult<IssueOrderDto>
+
+    // Возвраты (ТЗ §8.9)
+    suspend fun createReturn(request: CreateReturnOrderRequest): ApiResult<ReturnOrderDto>
+    suspend fun listReturns(warehouseId: Long?, status: ReturnStatus?): ApiResult<List<ReturnOrderDto>>
+    suspend fun getReturn(id: Long): ApiResult<ReturnOrderDto>
+    suspend fun receiveReturn(id: Long, request: ReturnActionRequest): ApiResult<ReturnOrderDto>
+    suspend fun inspectReturnLine(
+        id: Long,
+        lineId: Long,
+        request: InspectReturnLineRequest
+    ): ApiResult<ReturnOrderDto>
 }

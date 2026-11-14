@@ -16,7 +16,25 @@ import org.example.project.dto.CreateReceiptRequest
 import org.example.project.dto.CreateReservationRequest
 import org.example.project.dto.CreateStorageLocationRequest
 import org.example.project.dto.CreateWarehouseRequest
+import org.example.project.dto.CancelTransferRequest
+import org.example.project.dto.CreateIssueOrderRequest
+import org.example.project.dto.CreateReturnOrderRequest
+import org.example.project.dto.CreateTransferRequest
+import org.example.project.dto.InspectReturnLineRequest
+import org.example.project.dto.IssueActionRequest
+import org.example.project.dto.IssueOrderDto
+import org.example.project.dto.IssueStatus
+import org.example.project.dto.MarkTransferInTransitRequest
 import org.example.project.dto.NomenclatureDto
+import org.example.project.dto.PickIssueRequest
+import org.example.project.dto.ReceiveTransferRequest
+import org.example.project.dto.RefuseIssueRequest
+import org.example.project.dto.ReturnActionRequest
+import org.example.project.dto.ReturnOrderDto
+import org.example.project.dto.ReturnStatus
+import org.example.project.dto.ShipTransferRequest
+import org.example.project.dto.TransferDto
+import org.example.project.dto.TransferStatus
 import org.example.project.dto.PostReceiptRequest
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReleaseReservationRequest
@@ -87,6 +105,107 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
         id: Long,
         request: ReleaseReservationRequest
     ): ApiResult<ReservationDto> = post("/api/wms/reservations/$id/release", request)
+
+    // ---- Перемещения ----
+
+    override suspend fun createTransfer(request: CreateTransferRequest): ApiResult<TransferDto> =
+        post("/api/wms/transfers", request)
+
+    override suspend fun listTransfers(
+        warehouseId: Long?,
+        nomenclatureId: Long?,
+        status: TransferStatus?
+    ): ApiResult<List<TransferDto>> =
+        getWithParams(
+            path = "/api/wms/transfers",
+            params = buildMap {
+                warehouseId?.let { put("warehouseId", it.toString()) }
+                nomenclatureId?.let { put("nomenclatureId", it.toString()) }
+                status?.let { put("status", it.name) }
+            }
+        )
+
+    override suspend fun getTransfer(id: Long): ApiResult<TransferDto> = get("/api/wms/transfers/$id")
+
+    override suspend fun shipTransfer(id: Long, request: ShipTransferRequest): ApiResult<TransferDto> =
+        post("/api/wms/transfers/$id/ship", request)
+
+    override suspend fun markTransferInTransit(
+        id: Long,
+        request: MarkTransferInTransitRequest
+    ): ApiResult<TransferDto> = post("/api/wms/transfers/$id/in-transit", request)
+
+    override suspend fun receiveTransfer(
+        id: Long,
+        request: ReceiveTransferRequest
+    ): ApiResult<TransferDto> = post("/api/wms/transfers/$id/receive", request)
+
+    override suspend fun cancelTransfer(
+        id: Long,
+        request: CancelTransferRequest
+    ): ApiResult<TransferDto> = post("/api/wms/transfers/$id/cancel", request)
+
+    // ---- Выдача ----
+
+    override suspend fun createIssue(request: CreateIssueOrderRequest): ApiResult<IssueOrderDto> =
+        post("/api/wms/issues", request)
+
+    override suspend fun listIssues(
+        warehouseId: Long?,
+        status: IssueStatus?
+    ): ApiResult<List<IssueOrderDto>> =
+        getWithParams(
+            path = "/api/wms/issues",
+            params = buildMap {
+                warehouseId?.let { put("warehouseId", it.toString()) }
+                status?.let { put("status", it.name) }
+            }
+        )
+
+    override suspend fun getIssue(id: Long): ApiResult<IssueOrderDto> = get("/api/wms/issues/$id")
+
+    override suspend fun pickIssue(id: Long, request: PickIssueRequest): ApiResult<IssueOrderDto> =
+        post("/api/wms/issues/$id/picks", request)
+
+    override suspend fun issueOrder(id: Long, request: IssueActionRequest): ApiResult<IssueOrderDto> =
+        post("/api/wms/issues/$id/issue", request)
+
+    override suspend fun confirmIssue(id: Long, request: IssueActionRequest): ApiResult<IssueOrderDto> =
+        post("/api/wms/issues/$id/confirm", request)
+
+    override suspend fun refuseIssue(id: Long, request: RefuseIssueRequest): ApiResult<IssueOrderDto> =
+        post("/api/wms/issues/$id/refuse", request)
+
+    override suspend fun cancelIssue(id: Long, request: IssueActionRequest): ApiResult<IssueOrderDto> =
+        post("/api/wms/issues/$id/cancel", request)
+
+    // ---- Возвраты ----
+
+    override suspend fun createReturn(request: CreateReturnOrderRequest): ApiResult<ReturnOrderDto> =
+        post("/api/wms/returns", request)
+
+    override suspend fun listReturns(
+        warehouseId: Long?,
+        status: ReturnStatus?
+    ): ApiResult<List<ReturnOrderDto>> =
+        getWithParams(
+            path = "/api/wms/returns",
+            params = buildMap {
+                warehouseId?.let { put("warehouseId", it.toString()) }
+                status?.let { put("status", it.name) }
+            }
+        )
+
+    override suspend fun getReturn(id: Long): ApiResult<ReturnOrderDto> = get("/api/wms/returns/$id")
+
+    override suspend fun receiveReturn(id: Long, request: ReturnActionRequest): ApiResult<ReturnOrderDto> =
+        post("/api/wms/returns/$id/receive", request)
+
+    override suspend fun inspectReturnLine(
+        id: Long,
+        lineId: Long,
+        request: InspectReturnLineRequest
+    ): ApiResult<ReturnOrderDto> = post("/api/wms/returns/$id/lines/$lineId/inspect", request)
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         execute { client.get(path) }

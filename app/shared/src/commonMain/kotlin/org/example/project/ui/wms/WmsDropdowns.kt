@@ -21,6 +21,10 @@ import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.StorageLocationKind
 import org.example.project.dto.StorageLocationPurpose
 import org.example.project.dto.WarehouseDto
+import org.example.project.dto.IssueStatus
+import org.example.project.dto.ReturnInspectionDecision
+import org.example.project.dto.ReturnStatus
+import org.example.project.dto.TransferStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -364,6 +368,164 @@ fun ReservationStatusDropdown(
                     text = { Text(status?.localizedName() ?: "Все") },
                     onClick = {
                         onSelect(status)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TransferStatusDropdown(
+    selected: TransferStatus?,
+    onSelect: (TransferStatus?) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Статус"
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(null) + TransferStatus.entries
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected?.localizedName() ?: "Все",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { status ->
+                DropdownMenuItem(
+                    text = { Text(status?.localizedName() ?: "Все") },
+                    onClick = {
+                        onSelect(status)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IssueStatusDropdown(
+    selected: IssueStatus?,
+    onSelect: (IssueStatus?) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Статус"
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(null) + IssueStatus.entries
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected?.localizedName() ?: "Все",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { status ->
+                DropdownMenuItem(
+                    text = { Text(status?.localizedName() ?: "Все") },
+                    onClick = {
+                        onSelect(status)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReturnStatusDropdown(
+    selected: ReturnStatus?,
+    onSelect: (ReturnStatus?) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Статус"
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(null) + ReturnStatus.entries
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected?.localizedName() ?: "Все",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { status ->
+                DropdownMenuItem(
+                    text = { Text(status?.localizedName() ?: "Все") },
+                    onClick = {
+                        onSelect(status)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReturnInspectionDecisionDropdown(
+    selected: ReturnInspectionDecision,
+    onSelect: (ReturnInspectionDecision) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected.localizedName(),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Решение по строке") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            ReturnInspectionDecision.entries.forEach { decision ->
+                DropdownMenuItem(
+                    text = { Text(decision.localizedName()) },
+                    onClick = {
+                        onSelect(decision)
                         expanded = false
                     }
                 )

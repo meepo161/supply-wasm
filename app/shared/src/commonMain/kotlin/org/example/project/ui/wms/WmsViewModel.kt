@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 import org.example.project.data.ApiResult
 import org.example.project.data.WmsRepository
 import org.example.project.dto.ApiError
@@ -23,6 +24,29 @@ import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
 import org.example.project.dto.StorageLocationKind
 import org.example.project.dto.StorageLocationPurpose
+import org.example.project.dto.CancelTransferRequest
+import org.example.project.dto.CreateIssueOrderRequest
+import org.example.project.dto.CreateReturnOrderRequest
+import org.example.project.dto.CreateTransferRequest
+import org.example.project.dto.InspectReturnLineRequest
+import org.example.project.dto.IssueActionRequest
+import org.example.project.dto.IssueLineInput
+import org.example.project.dto.IssueOrderDto
+import org.example.project.dto.IssuePickInput
+import org.example.project.dto.IssueStatus
+import org.example.project.dto.MarkTransferInTransitRequest
+import org.example.project.dto.PickIssueRequest
+import org.example.project.dto.ReceiveTransferRequest
+import org.example.project.dto.RefuseIssueRequest
+import org.example.project.dto.ReturnActionRequest
+import org.example.project.dto.ReturnInspectionDecision
+import org.example.project.dto.ReturnLineInput
+import org.example.project.dto.ReturnOrderDto
+import org.example.project.dto.ReturnStatus
+import org.example.project.dto.ShipTransferRequest
+import org.example.project.dto.TransferDto
+import org.example.project.dto.TransferKind
+import org.example.project.dto.TransferStatus
 
 class WmsViewModel(
     private val repository: WmsRepository,
@@ -57,6 +81,9 @@ class WmsViewModel(
             WmsTab.STOCK -> loadStock()
             WmsTab.RECEIPTS -> { }
             WmsTab.RESERVATIONS -> loadReservations()
+            WmsTab.TRANSFERS -> loadTransfers()
+            WmsTab.ISSUES -> loadIssues()
+            WmsTab.RETURNS -> loadReturns()
         }
     }
 
@@ -478,6 +505,693 @@ class WmsViewModel(
         _uiState.value = _uiState.value.copy(currentReservation = null, releaseReason = "")
     }
 
+    // ---------------- Перемещения (§8.6) ----------------
+
+    fun loadTransfers() {
+        val status = _uiState.value.transferStatusFilter
+        _uiState.value = _uiState.value.copy(transfersLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.listTransfers(null, null, status)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    transfers = result.data,
+                    transfersLoading = false,
+                    operationError = null
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    transfersLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateTransferStatusFilter(status: TransferStatus?) {
+        _uiState.value = _uiState.value.copy(transferStatusFilter = status)
+        loadTransfers()
+    }
+
+    fun selectTransfer(transfer: TransferDto?) {
+        _uiState.value = _uiState.value.copy(
+            selectedTransfer = transfer,
+            transferReceiveQuantity = transfer?.quantity ?: "",
+            operationError = null
+        )
+    }
+
+    fun updateTransferReceiveQuantity(value: String) {
+        _uiState.value = _uiState.value.copy(transferReceiveQuantity = value)
+    }
+
+    fun updateCreateTransferForm(form: CreateTransferForm) {
+        _uiState.value = _uiState.value.copy(createTransferForm = form)
+    }
+
+    fun onTransferFromWarehouseChanged(warehouseId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            createTransferForm = _uiState.value.createTransferForm.copy(
+                fromWarehouseId = warehouseId,
+                fromLocationId = null
+            ),
+            transferLocationsFrom = emptyList()
+        )
+        warehouseId?.let { id ->
+            viewModelScope.launch {
+                when (val result = repository.listLocations(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(transferLocationsFrom = result.data)
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+                }
+            }
+        }
+    }
+
+    fun onTransferToWarehouseChanged(warehouseId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            createTransferForm = _uiState.value.createTransferForm.copy(
+                toWarehouseId = warehouseId,
+                toLocationId = null
+            ),
+            transferLocationsTo = emptyList()
+        )
+        warehouseId?.let { id ->
+            viewModelScope.launch {
+                when (val result = repository.listLocations(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(transferLocationsTo = result.data)
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+                }
+            }
+        }
+    }
+
+    fun createTransfer() {
+        val form = _uiState.value.createTransferForm
+        val fromWarehouseId = form.fromWarehouseId
+        val fromLocationId = form.fromLocationId
+        val toWarehouseId = form.toWarehouseId
+        val toLocationId = form.toLocationId
+        val nomenclatureId = form.nomenclatureId
+        if (fromWarehouseId == null || fromLocationId == null || toWarehouseId == null ||
+            toLocationId == null || nomenclatureId == null || form.quantity.isBlank()
+        ) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError(
+                    "VALIDATION_ERROR",
+                    "Заполните склады, ячейки, номенклатуру и количество"
+                )
+            )
+            return
+        }
+        if (fromWarehouseId == toWarehouseId && fromLocationId == toLocationId) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Ячейка-источник и ячейка-получатель совпадают")
+            )
+            return
+        }
+        val kind = if (fromWarehouseId == toWarehouseId) TransferKind.INTERNAL else TransferKind.INTER_WAREHOUSE
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.createTransfer(
+                CreateTransferRequest(
+                    kind = kind,
+                    fromWarehouseId = fromWarehouseId,
+                    fromLocationId = fromLocationId,
+                    toWarehouseId = toWarehouseId,
+                    toLocationId = toLocationId,
+                    nomenclatureId = nomenclatureId,
+                    lotId = form.lotId.toLongOrNull(),
+                    serialId = form.serialId.toLongOrNull(),
+                    quantity = form.quantity.trim(),
+                    note = form.note.takeIf { it.isNotBlank() }?.trim(),
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        createTransferForm = CreateTransferForm(),
+                        activeDialog = null,
+                        isLoading = false
+                    )
+                    loadTransfers()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun shipTransfer() = transferCommand { id, version ->
+        repository.shipTransfer(id, ShipTransferRequest(version, newIdempotencyKey()))
+    }
+
+    fun markTransferInTransit() = transferCommand { id, version ->
+        repository.markTransferInTransit(id, MarkTransferInTransitRequest(version, newIdempotencyKey()))
+    }
+
+    fun receiveTransfer() {
+        val transfer = _uiState.value.selectedTransfer ?: return
+        val quantity = _uiState.value.transferReceiveQuantity.trim()
+        if (quantity.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите принятое количество")
+            )
+            return
+        }
+        transferCommand { id, version ->
+            repository.receiveTransfer(
+                id,
+                ReceiveTransferRequest(
+                    version = version,
+                    receivedQuantity = quantity,
+                    note = null,
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )
+        }
+    }
+
+    fun cancelTransfer() {
+        if (_uiState.value.transferCancelReason.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите причину отмены")
+            )
+            return
+        }
+        val reason = _uiState.value.transferCancelReason.trim()
+        transferCommand { id, version ->
+            repository.cancelTransfer(id, CancelTransferRequest(version, reason, newIdempotencyKey()))
+        }
+    }
+
+    fun updateTransferCancelReason(value: String) {
+        _uiState.value = _uiState.value.copy(transferCancelReason = value)
+    }
+
+    private fun transferCommand(
+        action: suspend (Long, Long) -> ApiResult<TransferDto>
+    ) {
+        val transfer = _uiState.value.selectedTransfer ?: return
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = action(transfer.id, transfer.version)) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedTransfer = result.data,
+                        transferReceiveQuantity = result.data.quantity,
+                        transferCancelReason = "",
+                        isLoading = false
+                    )
+                    loadTransfers()
+                    loadStock()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    // ---------------- Выдача (§8.8) ----------------
+
+    fun loadIssues() {
+        val status = _uiState.value.issueStatusFilter
+        _uiState.value = _uiState.value.copy(issuesLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.listIssues(null, status)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    issues = result.data,
+                    issuesLoading = false,
+                    operationError = null
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    issuesLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateIssueStatusFilter(status: IssueStatus?) {
+        _uiState.value = _uiState.value.copy(issueStatusFilter = status)
+        loadIssues()
+    }
+
+    fun selectIssue(issue: IssueOrderDto?) {
+        _uiState.value = _uiState.value.copy(
+            selectedIssue = issue,
+            issuePickForms = emptyMap(),
+            issueRefusalReason = "",
+            operationError = null
+        )
+        // Ячейки нужны для формы отбора по строкам выбранного заказа.
+        issue?.let { order ->
+            viewModelScope.launch {
+                when (val result = repository.listLocations(order.warehouseId)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(issueLocations = result.data)
+                    is ApiResult.Error -> { }
+                }
+            }
+        }
+    }
+
+    fun updateCreateIssueForm(form: CreateIssueForm) {
+        _uiState.value = _uiState.value.copy(createIssueForm = form)
+    }
+
+    fun onIssueWarehouseChanged(warehouseId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            createIssueForm = _uiState.value.createIssueForm.copy(warehouseId = warehouseId),
+            issueLocations = emptyList()
+        )
+        warehouseId?.let { id ->
+            viewModelScope.launch {
+                when (val result = repository.listLocations(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(issueLocations = result.data)
+                    is ApiResult.Error -> { }
+                }
+            }
+        }
+    }
+
+    fun addIssueLine() {
+        val form = _uiState.value.createIssueForm
+        val nextLineNo = (form.lines.maxOfOrNull { it.lineNo } ?: 0) + 1
+        _uiState.value = _uiState.value.copy(
+            createIssueForm = form.copy(lines = form.lines + CreateIssueLineForm(lineNo = nextLineNo))
+        )
+    }
+
+    fun updateIssueLine(index: Int, line: CreateIssueLineForm) {
+        val form = _uiState.value.createIssueForm
+        if (index !in form.lines.indices) return
+        val lines = form.lines.toMutableList()
+        lines[index] = line
+        _uiState.value = _uiState.value.copy(createIssueForm = form.copy(lines = lines))
+    }
+
+    fun removeIssueLine(index: Int) {
+        val form = _uiState.value.createIssueForm
+        if (index !in form.lines.indices) return
+        val lines = form.lines.toMutableList()
+        lines.removeAt(index)
+        _uiState.value = _uiState.value.copy(createIssueForm = form.copy(lines = lines))
+    }
+
+    fun createIssue() {
+        val form = _uiState.value.createIssueForm
+        val warehouseId = form.warehouseId
+        val lines = form.lines.mapNotNull { line ->
+            val nomenclatureId = line.nomenclatureId ?: return@mapNotNull null
+            if (line.quantity.isBlank()) return@mapNotNull null
+            IssueLineInput(
+                lineNo = line.lineNo,
+                nomenclatureId = nomenclatureId,
+                requestedQuantity = line.quantity.trim(),
+                reservationId = line.reservationId.toLongOrNull(),
+                note = line.note.takeIf { it.isNotBlank() }?.trim()
+            )
+        }
+        if (warehouseId == null || lines.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError(
+                    "VALIDATION_ERROR",
+                    "Выберите склад и добавьте хотя бы одну строку с количеством"
+                )
+            )
+            return
+        }
+        if (form.reasonType == org.example.project.dto.ReservationReasonType.PROJECT &&
+            form.projectId.isBlank() && form.taskId.isBlank()
+        ) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Для основания «Проект» укажите проект или задачу")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.createIssue(
+                CreateIssueOrderRequest(
+                    warehouseId = warehouseId,
+                    reasonType = form.reasonType,
+                    projectId = form.projectId.toLongOrNull(),
+                    taskId = form.taskId.toLongOrNull(),
+                    reasonNote = form.reasonNote.takeIf { it.isNotBlank() }?.trim(),
+                    recipientId = form.recipientId.toLongOrNull() ?: currentUserId,
+                    note = form.note.takeIf { it.isNotBlank() }?.trim(),
+                    lines = lines,
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        createIssueForm = CreateIssueForm(),
+                        activeDialog = null,
+                        isLoading = false
+                    )
+                    loadIssues()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateIssuePickForm(lineId: Long, form: IssuePickForm) {
+        val forms = _uiState.value.issuePickForms.toMutableMap()
+        forms[lineId] = form
+        _uiState.value = _uiState.value.copy(issuePickForms = forms)
+    }
+
+    fun pickIssueLine(lineId: Long) {
+        val issue = _uiState.value.selectedIssue ?: return
+        val form = _uiState.value.issuePickForms[lineId] ?: IssuePickForm()
+        val locationId = form.locationId
+        if (locationId == null || form.quantity.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Для отбора укажите ячейку и количество")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.pickIssue(
+                issue.id,
+                PickIssueRequest(
+                    version = issue.version,
+                    picks = listOf(
+                        IssuePickInput(
+                            lineId = lineId,
+                            locationId = locationId,
+                            lotId = form.lotId.toLongOrNull(),
+                            serialId = form.serialId.toLongOrNull(),
+                            quantity = form.quantity.trim()
+                        )
+                    ),
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    val picks = _uiState.value.issuePickForms.toMutableMap()
+                    picks.remove(lineId)
+                    _uiState.value = _uiState.value.copy(
+                        selectedIssue = result.data,
+                        issuePickForms = picks,
+                        isLoading = false
+                    )
+                    loadIssues()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun issueSelectedOrder() = issueCommand { id, version ->
+        repository.issueOrder(id, IssueActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun confirmSelectedIssue() = issueCommand { id, version ->
+        repository.confirmIssue(id, IssueActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun cancelSelectedIssue() = issueCommand { id, version ->
+        repository.cancelIssue(id, IssueActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun updateIssueRefusalReason(value: String) {
+        _uiState.value = _uiState.value.copy(issueRefusalReason = value)
+    }
+
+    fun refuseSelectedIssue() {
+        val issue = _uiState.value.selectedIssue ?: return
+        val reason = _uiState.value.issueRefusalReason.trim()
+        if (reason.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите причину отказа")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.refuseIssue(
+                issue.id,
+                RefuseIssueRequest(issue.version, reason, newIdempotencyKey())
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedIssue = result.data,
+                        issueRefusalReason = "",
+                        isLoading = false
+                    )
+                    loadIssues()
+                    loadStock()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    private fun issueCommand(
+        action: suspend (Long, Long) -> ApiResult<IssueOrderDto>
+    ) {
+        val issue = _uiState.value.selectedIssue ?: return
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = action(issue.id, issue.version)) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(selectedIssue = result.data, isLoading = false)
+                    loadIssues()
+                    loadStock()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    // ---------------- Возвраты (§8.9) ----------------
+
+    fun loadReturns() {
+        val status = _uiState.value.returnStatusFilter
+        _uiState.value = _uiState.value.copy(returnsLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.listReturns(null, status)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    returns = result.data,
+                    returnsLoading = false,
+                    operationError = null
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    returnsLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateReturnStatusFilter(status: ReturnStatus?) {
+        _uiState.value = _uiState.value.copy(returnStatusFilter = status)
+        loadReturns()
+    }
+
+    fun selectReturn(order: ReturnOrderDto?) {
+        _uiState.value = _uiState.value.copy(
+            selectedReturn = order,
+            returnInspectForms = emptyMap(),
+            operationError = null
+        )
+        // Ячейки нужны для размещения годной продукции при проверке.
+        order?.let { ret ->
+            viewModelScope.launch {
+                when (val result = repository.listLocations(ret.warehouseId)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(returnLocations = result.data)
+                    is ApiResult.Error -> { }
+                }
+            }
+        }
+    }
+
+    fun updateCreateReturnForm(form: CreateReturnForm) {
+        _uiState.value = _uiState.value.copy(createReturnForm = form)
+    }
+
+    fun onReturnWarehouseChanged(warehouseId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            createReturnForm = _uiState.value.createReturnForm.copy(
+                warehouseId = warehouseId,
+                quarantineLocationId = null
+            ),
+            returnLocations = emptyList()
+        )
+        warehouseId?.let { id ->
+            viewModelScope.launch {
+                when (val result = repository.listLocations(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(returnLocations = result.data)
+                    is ApiResult.Error -> { }
+                }
+            }
+        }
+    }
+
+    fun addReturnLine() {
+        _uiState.value = _uiState.value.copy(
+            createReturnForm = _uiState.value.createReturnForm.copy(
+                lines = _uiState.value.createReturnForm.lines + CreateReturnLineForm()
+            )
+        )
+    }
+
+    fun updateReturnLine(index: Int, line: CreateReturnLineForm) {
+        val form = _uiState.value.createReturnForm
+        if (index !in form.lines.indices) return
+        val lines = form.lines.toMutableList()
+        lines[index] = line
+        _uiState.value = _uiState.value.copy(createReturnForm = form.copy(lines = lines))
+    }
+
+    fun removeReturnLine(index: Int) {
+        val form = _uiState.value.createReturnForm
+        if (index !in form.lines.indices) return
+        val lines = form.lines.toMutableList()
+        lines.removeAt(index)
+        _uiState.value = _uiState.value.copy(createReturnForm = form.copy(lines = lines))
+    }
+
+    fun createReturn() {
+        val form = _uiState.value.createReturnForm
+        val warehouseId = form.warehouseId
+        val quarantineLocationId = form.quarantineLocationId
+        val issueOrderId = form.issueOrderId.toLongOrNull()
+        val lines = form.lines.mapNotNull { line ->
+            val issueLineId = line.issueLineId.toLongOrNull() ?: return@mapNotNull null
+            if (line.quantity.isBlank()) return@mapNotNull null
+            ReturnLineInput(
+                issueLineId = issueLineId,
+                quantity = line.quantity.trim(),
+                lotId = line.lotId.toLongOrNull(),
+                serialId = line.serialId.toLongOrNull()
+            )
+        }
+        if (warehouseId == null || quarantineLocationId == null || issueOrderId == null ||
+            form.reason.isBlank() || lines.isEmpty()
+        ) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError(
+                    "VALIDATION_ERROR",
+                    "Заполните заказ выдачи, карантинную ячейку, причину и строки возврата"
+                )
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.createReturn(
+                CreateReturnOrderRequest(
+                    issueOrderId = issueOrderId,
+                    quarantineLocationId = quarantineLocationId,
+                    returnedById = currentUserId,
+                    reason = form.reason.trim(),
+                    lines = lines,
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        createReturnForm = CreateReturnForm(),
+                        activeDialog = null,
+                        isLoading = false
+                    )
+                    loadReturns()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun receiveSelectedReturn() {
+        val order = _uiState.value.selectedReturn ?: return
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.receiveReturn(
+                order.id,
+                ReturnActionRequest(order.version, newIdempotencyKey())
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(selectedReturn = result.data, isLoading = false)
+                    loadReturns()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateReturnInspectForm(lineId: Long, form: ReturnInspectForm) {
+        val forms = _uiState.value.returnInspectForms.toMutableMap()
+        forms[lineId] = form
+        _uiState.value = _uiState.value.copy(returnInspectForms = forms)
+    }
+
+    fun inspectReturnLine(lineId: Long) {
+        val order = _uiState.value.selectedReturn ?: return
+        val form = _uiState.value.returnInspectForms[lineId] ?: ReturnInspectForm()
+        if (form.decision == ReturnInspectionDecision.GOOD && form.targetLocationId == null) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Для годной продукции укажите ячейку размещения")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.inspectReturnLine(
+                order.id,
+                lineId,
+                InspectReturnLineRequest(
+                    version = order.version,
+                    decision = form.decision,
+                    targetLocationId = form.targetLocationId,
+                    note = form.note.takeIf { it.isNotBlank() }?.trim(),
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    val forms = _uiState.value.returnInspectForms.toMutableMap()
+                    forms.remove(lineId)
+                    _uiState.value = _uiState.value.copy(
+                        selectedReturn = result.data,
+                        returnInspectForms = forms,
+                        isLoading = false
+                    )
+                    loadReturns()
+                    loadStock()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    private fun newIdempotencyKey(): String =
+        "ui-${Random.nextLong().toString(16)}-${Random.nextLong().toString(16)}"
+
     fun updateCreateWarehouseForm(form: CreateWarehouseForm) {
         _uiState.value = _uiState.value.copy(createWarehouseForm = form)
     }
@@ -635,7 +1349,38 @@ data class WmsUiState(
     val loadReceiptId: String = "",
     val releaseReason: String = "",
     val receiptLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
-    val reservationLocations: List<org.example.project.dto.StorageLocationDto> = emptyList()
+    val reservationLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
+
+    // Перемещения (§8.6)
+    val transfers: List<org.example.project.dto.TransferDto> = emptyList(),
+    val transfersLoading: Boolean = false,
+    val transferStatusFilter: org.example.project.dto.TransferStatus? = null,
+    val createTransferForm: CreateTransferForm = CreateTransferForm(),
+    val transferLocationsFrom: List<org.example.project.dto.StorageLocationDto> = emptyList(),
+    val transferLocationsTo: List<org.example.project.dto.StorageLocationDto> = emptyList(),
+    val transferReceiveQuantity: String = "",
+
+    // Выдача (§8.8)
+    val issues: List<org.example.project.dto.IssueOrderDto> = emptyList(),
+    val issuesLoading: Boolean = false,
+    val issueStatusFilter: org.example.project.dto.IssueStatus? = null,
+    val createIssueForm: CreateIssueForm = CreateIssueForm(),
+    val issueLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
+
+    // Возвраты (§8.9)
+    val returns: List<org.example.project.dto.ReturnOrderDto> = emptyList(),
+    val returnsLoading: Boolean = false,
+    val returnStatusFilter: org.example.project.dto.ReturnStatus? = null,
+
+    val selectedTransfer: TransferDto? = null,
+    val transferCancelReason: String = "",
+    val selectedIssue: IssueOrderDto? = null,
+    val issueRefusalReason: String = "",
+    val issuePickForms: Map<Long, IssuePickForm> = emptyMap(),
+    val selectedReturn: ReturnOrderDto? = null,
+    val createReturnForm: CreateReturnForm = CreateReturnForm(),
+    val returnLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
+    val returnInspectForms: Map<Long, ReturnInspectForm> = emptyMap()
 )
 
 enum class WmsTab(val title: String) {
@@ -644,7 +1389,10 @@ enum class WmsTab(val title: String) {
     NOMENCLATURE("Номенклатура"),
     STOCK("Остатки"),
     RECEIPTS("Приёмка"),
-    RESERVATIONS("Резервы")
+    RESERVATIONS("Резервы"),
+    TRANSFERS("Перемещения"),
+    ISSUES("Выдача"),
+    RETURNS("Возвраты")
 }
 
 sealed class WmsDialog {
@@ -653,6 +1401,9 @@ sealed class WmsDialog {
     data object CreateNomenclature : WmsDialog()
     data object CreateReceipt : WmsDialog()
     data object CreateReservation : WmsDialog()
+    data object CreateTransfer : WmsDialog()
+    data object CreateIssue : WmsDialog()
+    data object CreateReturn : WmsDialog()
 }
 
 data class CreateWarehouseForm(
@@ -723,4 +1474,63 @@ data class ReservationFilters(
     val warehouseId: Long? = null,
     val nomenclatureId: Long? = null,
     val status: ReservationStatus? = null
+)
+
+data class CreateTransferForm(
+    val fromWarehouseId: Long? = null,
+    val fromLocationId: Long? = null,
+    val toWarehouseId: Long? = null,
+    val toLocationId: Long? = null,
+    val nomenclatureId: Long? = null,
+    val lotId: String = "",
+    val serialId: String = "",
+    val quantity: String = "",
+    val note: String = ""
+)
+
+data class CreateIssueForm(
+    val warehouseId: Long? = null,
+    val reasonType: org.example.project.dto.ReservationReasonType = org.example.project.dto.ReservationReasonType.PROJECT,
+    val projectId: String = "",
+    val taskId: String = "",
+    val reasonNote: String = "",
+    val recipientId: String = "",
+    val note: String = "",
+    val lines: List<CreateIssueLineForm> = listOf(CreateIssueLineForm())
+)
+
+data class CreateIssueLineForm(
+    val lineNo: Int = 1,
+    val nomenclatureId: Long? = null,
+    val quantity: String = "",
+    val reservationId: String = "",
+    val note: String = ""
+)
+
+data class IssuePickForm(
+    val locationId: Long? = null,
+    val lotId: String = "",
+    val serialId: String = "",
+    val quantity: String = ""
+)
+
+data class CreateReturnForm(
+    val warehouseId: Long? = null,
+    val issueOrderId: String = "",
+    val quarantineLocationId: Long? = null,
+    val reason: String = "",
+    val lines: List<CreateReturnLineForm> = listOf(CreateReturnLineForm())
+)
+
+data class CreateReturnLineForm(
+    val issueLineId: String = "",
+    val quantity: String = "",
+    val lotId: String = "",
+    val serialId: String = ""
+)
+
+data class ReturnInspectForm(
+    val decision: ReturnInspectionDecision = ReturnInspectionDecision.GOOD,
+    val targetLocationId: Long? = null,
+    val note: String = ""
 )

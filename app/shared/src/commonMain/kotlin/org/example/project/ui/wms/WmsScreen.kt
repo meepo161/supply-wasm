@@ -51,7 +51,7 @@ fun WmsScreen(
             title = "Склад",
             glyph = ErpIconGlyph.Warehouse,
             gradient = Gradients.Emerald,
-            subtitle = "Склады, ячейки, остатки, приёмка и резервы"
+            subtitle = "Склады, ячейки, остатки, приёмка, резервы, перемещения, выдача и возвраты"
         )
         Spacer(Modifier.height(10.dp))
         ScrollableTabRow(
@@ -79,6 +79,9 @@ fun WmsScreen(
                 WmsTab.STOCK -> StockTab(state, viewModel)
                 WmsTab.RECEIPTS -> ReceiptsTab(state, viewModel)
                 WmsTab.RESERVATIONS -> ReservationsTab(state, viewModel)
+                WmsTab.TRANSFERS -> TransfersTab(state, viewModel)
+                WmsTab.ISSUES -> IssuesTab(state, viewModel)
+                WmsTab.RETURNS -> ReturnsTab(state, viewModel)
             }
         }
     }
@@ -131,12 +134,51 @@ fun WmsScreen(
             onCreate = viewModel::createReservation,
             onDismiss = viewModel::dismissDialog
         )
+        WmsDialog.CreateTransfer -> CreateTransferDialog(
+            form = state.createTransferForm,
+            warehouses = state.warehouses,
+            locationsFrom = state.transferLocationsFrom,
+            locationsTo = state.transferLocationsTo,
+            nomenclature = state.nomenclature,
+            error = state.operationError,
+            onFormChange = viewModel::updateCreateTransferForm,
+            onFromWarehouseChange = viewModel::onTransferFromWarehouseChanged,
+            onToWarehouseChange = viewModel::onTransferToWarehouseChanged,
+            onCreate = viewModel::createTransfer,
+            onDismiss = viewModel::dismissDialog
+        )
+        WmsDialog.CreateIssue -> CreateIssueDialog(
+            form = state.createIssueForm,
+            warehouses = state.warehouses,
+            nomenclature = state.nomenclature,
+            error = state.operationError,
+            onFormChange = viewModel::updateCreateIssueForm,
+            onWarehouseChange = viewModel::onIssueWarehouseChanged,
+            onAddLine = viewModel::addIssueLine,
+            onUpdateLine = viewModel::updateIssueLine,
+            onRemoveLine = viewModel::removeIssueLine,
+            onCreate = viewModel::createIssue,
+            onDismiss = viewModel::dismissDialog
+        )
+        WmsDialog.CreateReturn -> CreateReturnDialog(
+            form = state.createReturnForm,
+            warehouses = state.warehouses,
+            locations = state.returnLocations,
+            error = state.operationError,
+            onFormChange = viewModel::updateCreateReturnForm,
+            onWarehouseChange = viewModel::onReturnWarehouseChanged,
+            onAddLine = viewModel::addReturnLine,
+            onUpdateLine = viewModel::updateReturnLine,
+            onRemoveLine = viewModel::removeReturnLine,
+            onCreate = viewModel::createReturn,
+            onDismiss = viewModel::dismissDialog
+        )
         null -> { }
     }
 }
 
 @Composable
-private fun TabHeader(
+internal fun TabHeader(
     title: String,
     onCreate: () -> Unit,
     onRefresh: () -> Unit,
@@ -158,7 +200,7 @@ private fun TabHeader(
 }
 
 @Composable
-private fun LoadingOverlay(modifier: Modifier = Modifier) {
+internal fun LoadingOverlay(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -529,7 +571,7 @@ private fun ReservationDetailDialog(
 }
 
 @Composable
-private fun EmptyState(text: String, modifier: Modifier = Modifier) {
+internal fun EmptyState(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
