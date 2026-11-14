@@ -1,0 +1,3 @@
+[submodule "vendor/ComposeDataGrid"]
+	path = vendor/ComposeDataGrid
+	url = https://github.com/unchil/ComposeDataGrid.git

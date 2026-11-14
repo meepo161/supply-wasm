@@ -1,7 +1,9 @@
-import org.example.project.build.FlywayMigrateTask
+import org.example.project.gradle.FlywayMigrateTask
+import org.example.project.gradle.GenerateJooqTask
 
 plugins {
     alias(libs.plugins.kotlinJvm)
+    alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.ktor)
 }
 
@@ -23,8 +25,15 @@ dependencies {
     implementation(libs.logback)
     implementation(libs.ktor.serverCore)
     implementation(libs.ktor.serverNetty)
+    implementation(libs.ktor.serverContentNegotiation)
+    implementation(libs.ktor.serverSerializationJson)
+    implementation(libs.ktor.serverStatusPages)
+    implementation(libs.ktor.serverCors)
+    implementation(libs.ktor.serverAuth)
+    implementation(libs.ktor.serverWebsockets)
 
     implementation(libs.postgres)
+    implementation(libs.hikaricp)
     implementation(libs.flyway.core)
     implementation(libs.flyway.postgres)
 
@@ -36,70 +45,71 @@ dependencies {
     implementation(libs.koin.ktor)
     implementation(libs.koin.logger)
 
+    implementation(libs.bcrypt)
+
     testImplementation(libs.ktor.serverTestHost)
+    testImplementation(libs.ktor.clientWebsockets)
     testImplementation(libs.kotlin.testJunit)
 }
 
+val jooqTargetDir = layout.buildDirectory.dir("generated/jooq/src/main/kotlin")
+
 kotlin {
     sourceSets.main {
-        kotlin.srcDir(layout.buildDirectory.dir("generated/jooq/src/main/kotlin"))
+        kotlin.srcDir(jooqTargetDir)
     }
 }
 
-val dbUrl = providers.gradleProperty("erp.db.url").orElse("jdbc:postgresql://localhost:5432/erp")
-val dbUser = providers.gradleProperty("erp.db.user").orElse("erp")
-val dbPassword = providers.gradleProperty("erp.db.password").orElse("erp")
+sourceSets {
+    main {
+        java.srcDir(jooqTargetDir)
+    }
+}
 
- tasks.register<FlywayMigrateTask>("flywayMigrate") {
+tasks.named<JavaCompile>("compileJava").configure {
+    dependsOn("generateJooq")
+}
+
+tasks.named("compileKotlin").configure {
+    dependsOn(tasks.named("generateJooq"))
+}
+
+tasks.test {
+    maxParallelForks = 1
+    testLogging {
+        showStandardStreams = true
+        events("passed", "skipped", "failed")
+    }
+}
+
+val erpDbUrl = providers.gradleProperty("erp.db.url").orElse("jdbc:postgresql://localhost:5433/erp")
+val erpDbUser = providers.gradleProperty("erp.db.user").orElse("erp")
+val erpDbPassword = providers.gradleProperty("erp.db.password").orElse("erp")
+
+val migrationDir = layout.projectDirectory.dir("src/main/resources/db/migration")
+
+tasks.register<FlywayMigrateTask>("flywayMigrate") {
     group = "database"
     description = "Apply Flyway migrations to the configured PostgreSQL database"
-    url = dbUrl
-    user = dbUser
-    password = dbPassword
+    url = erpDbUrl
+    user = erpDbUser
+    password = erpDbPassword
     locations = providers.gradleProperty("erp.db.locations")
-        .orElse("filesystem:src/main/resources/db/migration")
+        .orElse(providers.provider { "filesystem:${migrationDir.asFile.absolutePath}" })
     baselineOnMigrate = providers.gradleProperty("erp.db.baselineOnMigrate")
         .map(String::toBoolean)
         .orElse(true)
 }
 
-tasks.register<JavaExec>("generateJooq") {
+tasks.register<GenerateJooqTask>("generateJooq") {
     group = "jooq"
     description = "Generate jOOQ classes from the migrated PostgreSQL schema"
     dependsOn(tasks.named("flywayMigrate"))
+    inputs.dir(migrationDir)
 
-    classpath = jooqCodegen
-    mainClass.set("org.jooq.codegen.GenerationTool")
-
-    val configFile = layout.buildDirectory.file("jooq-config.xml").get().asFile
-    args = listOf(configFile.absolutePath)
-
-    doFirst {
-        configFile.parentFile.mkdirs()
-        configFile.writeText(
-            """
-            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-            <configuration xmlns="http://www.jooq.org/xsd/jooq-codegen-3.19.0.xsd">
-              <jdbc>
-                <driver>org.postgresql.Driver</driver>
-                <url>${dbUrl.get()}</url>
-                <user>${dbUser.get()}</user>
-                <password>${dbPassword.get()}</password>
-              </jdbc>
-              <generator>
-                <database>
-                  <name>org.jooq.meta.postgres.PostgresDatabase</name>
-                  <includes>.*</includes>
-                  <excludes>flyway_schema_history</excludes>
-                  <inputSchema>public</inputSchema>
-                </database>
-                <target>
-                  <packageName>org.example.project.generated.jooq</packageName>
-                  <directory>${layout.buildDirectory.dir("generated/jooq/src/main/kotlin").get().asFile.absolutePath.replace("\\", "/")}</directory>
-                </target>
-              </generator>
-            </configuration>
-            """.trimIndent()
-        )
-    }
+    dbUrl = erpDbUrl
+    dbUser = erpDbUser
+    dbPassword = erpDbPassword
+    outputDir = jooqTargetDir
+    toolClasspath = jooqCodegen
 }

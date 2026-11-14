@@ -33,6 +33,7 @@ subagents:
   - security
   - reviewer
   - devops
+  - messaging
 ---
 
 ${base_prompt}
