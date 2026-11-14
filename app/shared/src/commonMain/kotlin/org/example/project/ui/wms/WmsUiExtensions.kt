@@ -14,6 +14,8 @@ import org.example.project.dto.ReturnInspectionDecision
 import org.example.project.dto.ReturnStatus
 import org.example.project.dto.TransferKind
 import org.example.project.dto.TransferStatus
+import org.example.project.dto.WriteOffReasonType
+import org.example.project.dto.WriteOffStatus
 
 fun StorageLocationKind.localizedName(): String = when (this) {
     StorageLocationKind.ZONE -> "Зона"
@@ -118,6 +120,24 @@ fun ReturnInspection.localizedName(): String = when (this) {
 fun ReturnInspectionDecision.localizedName(): String = when (this) {
     ReturnInspectionDecision.GOOD -> "Годно — на хранение"
     ReturnInspectionDecision.DEFECT -> "Брак — в брак"
+}
+
+fun WriteOffReasonType.localizedName(): String = when (this) {
+    WriteOffReasonType.DAMAGE -> "Повреждение"
+    WriteOffReasonType.DEFECT -> "Брак"
+    WriteOffReasonType.EXPIRY -> "Истёк срок годности"
+    WriteOffReasonType.LOSS -> "Потеря"
+    WriteOffReasonType.NATURAL_WASTAGE -> "Естественная убыль"
+    WriteOffReasonType.TECHNOLOGICAL -> "Технологический расход"
+    WriteOffReasonType.OTHER -> "Прочее"
+}
+
+fun WriteOffStatus.localizedName(): String = when (this) {
+    WriteOffStatus.DRAFT -> "Черновик"
+    WriteOffStatus.PENDING_APPROVAL -> "На согласовании"
+    WriteOffStatus.APPROVED -> "Согласовано"
+    WriteOffStatus.POSTED -> "Проведено"
+    WriteOffStatus.CANCELLED -> "Отменено"
 }
 
 fun String?.toShortDate(): String {

@@ -70,6 +70,9 @@ fun appModule(config: AppConfig) = module {
     single { WmsService(get(), get(), get()) }
     single { WmsTransferService(get(), get(), get()) }
     single { WmsIssueService(get(), get(), get()) }
+    single { WmsWriteOffRepository(get()) }
+    single { WmsWriteOffService(get(), get(), get()) }
+    single { WriteOffApprovalTarget(get()) }
     single { AttachmentService(get(), get(), get(), get(), get(), get()) }
     single { BomService(get(), get(), get()) }
     single { DocumentRepository(get()) }
@@ -79,6 +82,12 @@ fun appModule(config: AppConfig) = module {
     single { ApprovalRepository(get()) }
     single { DemandApprovalTarget(get(), get(), get()) }
     single<ApprovalGuard> { ApprovalRouteGuard(get()) }
-    single { ApprovalService(get(), listOf<ApprovalTargetPort>(get<DemandApprovalTarget>()), get(), get(), get(), get()) }
+    single {
+        ApprovalService(
+            get(),
+            listOf<ApprovalTargetPort>(get<DemandApprovalTarget>(), get<WriteOffApprovalTarget>()),
+            get(), get(), get(), get()
+        )
+    }
     single { DemandService(get(), get(), get(), get(), get(), get()) }
 }

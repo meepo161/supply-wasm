@@ -32,6 +32,13 @@ import org.example.project.dto.ReturnStatus
 import org.example.project.dto.ShipTransferRequest
 import org.example.project.dto.TransferDto
 import org.example.project.dto.TransferStatus
+import org.example.project.dto.CancelWriteOffRequest
+import org.example.project.dto.CreateWriteOffRequest
+import org.example.project.dto.SetWriteOffLimitRequest
+import org.example.project.dto.WriteOffActionRequest
+import org.example.project.dto.WriteOffDto
+import org.example.project.dto.WriteOffLimitDto
+import org.example.project.dto.WriteOffStatus
 
 interface WmsRepository {
     suspend fun listWarehouses(): ApiResult<List<WarehouseDto>>
@@ -93,4 +100,13 @@ interface WmsRepository {
         lineId: Long,
         request: InspectReturnLineRequest
     ): ApiResult<ReturnOrderDto>
+
+    // Списание (ТЗ §8.10)
+    suspend fun createWriteOff(request: CreateWriteOffRequest): ApiResult<WriteOffDto>
+    suspend fun listWriteOffs(warehouseId: Long?, status: WriteOffStatus?): ApiResult<List<WriteOffDto>>
+    suspend fun getWriteOff(id: Long): ApiResult<WriteOffDto>
+    suspend fun postWriteOff(id: Long, request: WriteOffActionRequest): ApiResult<WriteOffDto>
+    suspend fun cancelWriteOff(id: Long, request: CancelWriteOffRequest): ApiResult<WriteOffDto>
+    suspend fun getWriteOffLimit(warehouseId: Long): ApiResult<WriteOffLimitDto>
+    suspend fun setWriteOffLimit(warehouseId: Long, request: SetWriteOffLimitRequest): ApiResult<WriteOffLimitDto>
 }

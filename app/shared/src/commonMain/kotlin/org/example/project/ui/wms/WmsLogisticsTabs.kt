@@ -32,6 +32,8 @@ import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.TransferDto
 import org.example.project.dto.TransferStatus
 import org.example.project.dto.WarehouseDto
+import org.example.project.dto.WriteOffDto
+import org.example.project.dto.WriteOffStatus
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.PillBadge
@@ -893,6 +895,296 @@ internal fun CreateReturnDialog(
                             label = { Text("ID строки выдачи *") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = line.quantity,
+                            onValueChange = { onUpdateLine(index, line.copy(quantity = it)) },
+                            label = { Text("Количество *") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = line.lotId,
+                            onValueChange = { onUpdateLine(index, line.copy(lotId = it)) },
+                            label = { Text("ID партии") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                }
+                Button(onClick = onAddLine) { Text("Добавить строку") }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onCreate, enabled = warehouses.isNotEmpty() && form.lines.isNotEmpty()) {
+                Text("Создать")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Списание (ТЗ 8.10)
+// ---------------------------------------------------------------------------
+
+@Composable
+internal fun WriteOffsTab(
+    state: WmsUiState,
+    viewModel: WmsViewModel
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TabHeader(
+            title = "Списания",
+            onCreate = { viewModel.showDialog(WmsDialog.CreateWriteOff) },
+            onRefresh = viewModel::loadWriteOffs,
+            createLabel = "Создать списание"
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            WriteOffStatusDropdown(
+                selected = state.writeOffStatusFilter,
+                onSelect = viewModel::updateWriteOffStatusFilter,
+                modifier = Modifier.weight(1f)
+            )
+            Button(onClick = viewModel::loadWriteOffs) { Text("Применить") }
+        }
+        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.writeOffsLoading && state.writeOffs.isEmpty()) {
+            LoadingOverlay()
+        } else if (state.writeOffs.isEmpty()) {
+            EmptyState("Списаний нет. Создайте первое списание.")
+        } else {
+            WriteOffsGrid(
+                writeOffs = state.writeOffs,
+                onClick = { viewModel.selectWriteOff(it) },
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
+        }
+        state.selectedWriteOff?.let { writeOff ->
+            WriteOffDetailDialog(
+                writeOff = writeOff,
+                cancelReason = state.writeOffCancelReason,
+                onCancelReasonChange = viewModel::updateWriteOffCancelReason,
+                onPost = viewModel::postSelectedWriteOff,
+                onCancel = viewModel::cancelSelectedWriteOff,
+                onClose = { viewModel.selectWriteOff(null) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun WriteOffDetailDialog(
+    writeOff: WriteOffDto,
+    cancelReason: String,
+    onCancelReasonChange: (String) -> Unit,
+    onPost: () -> Unit,
+    onCancel: () -> Unit,
+    onClose: () -> Unit
+) {
+    val canPost = writeOff.status == WriteOffStatus.DRAFT || writeOff.status == WriteOffStatus.APPROVED
+    val canCancel = writeOff.status == WriteOffStatus.DRAFT ||
+        writeOff.status == WriteOffStatus.PENDING_APPROVAL ||
+        writeOff.status == WriteOffStatus.APPROVED
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Списание ${writeOff.number}", modifier = Modifier.weight(1f))
+                PillBadge(text = writeOff.status.localizedName(), accent = writeOffStatusAccent(writeOff.status))
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Причина: ${writeOff.reasonType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+                Text("Основание: ${writeOff.reasonNote}", style = MaterialTheme.typography.bodyMedium)
+                Text("Количество: ${writeOff.totalQuantity}", style = MaterialTheme.typography.bodyMedium)
+                if (writeOff.overLimit) {
+                    Text(
+                        "Сверх лимита склада (${writeOff.limitQuantity ?: "—"}): требуется согласование",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Brand.Amber
+                    )
+                }
+                writeOff.postedAt?.let {
+                    Text("Проведено: ${it.toShortDate()}", style = MaterialTheme.typography.bodyMedium)
+                }
+                writeOff.cancelReason?.let {
+                    Text("Причина отмены: $it", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text("Версия: ${writeOff.version}", style = MaterialTheme.typography.bodySmall)
+
+                HorizontalDivider()
+                Text("Строки", style = MaterialTheme.typography.labelLarge)
+                writeOff.lines.forEach { line ->
+                    Text(
+                        "Строка ${line.lineNo}: номенклатура ${line.nomenclatureId}, " +
+                            "ячейка ${line.locationId}, ${line.quantity}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (canCancel) {
+                    HorizontalDivider()
+                    OutlinedTextField(
+                        value = cancelReason,
+                        onValueChange = onCancelReasonChange,
+                        label = { Text("Причина отмены") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canPost) Button(onClick = onPost) { Text("Провести") }
+                if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
+    )
+}
+
+private fun writeOffStatusAccent(status: WriteOffStatus) = when (status) {
+    WriteOffStatus.DRAFT -> Brand.Blue
+    WriteOffStatus.PENDING_APPROVAL -> Brand.Amber
+    WriteOffStatus.APPROVED -> Brand.Indigo
+    WriteOffStatus.POSTED -> Brand.Teal
+    WriteOffStatus.CANCELLED -> Brand.Rose
+}
+
+@Composable
+internal fun CreateWriteOffDialog(
+    form: CreateWriteOffForm,
+    warehouses: List<WarehouseDto>,
+    locations: List<StorageLocationDto>,
+    nomenclature: List<NomenclatureDto>,
+    limit: String,
+    error: org.example.project.dto.ApiError?,
+    onFormChange: (CreateWriteOffForm) -> Unit,
+    onWarehouseChange: (Long?) -> Unit,
+    onLimitChange: (String) -> Unit,
+    onSaveLimit: () -> Unit,
+    onAddLine: () -> Unit,
+    onUpdateLine: (Int, CreateWriteOffLineForm) -> Unit,
+    onRemoveLine: (Int) -> Unit,
+    onCreate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Новое списание") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                error?.let { ErrorMessageCard(error = it) }
+                if (warehouses.isEmpty()) {
+                    Text(
+                        text = "Нет доступных складов.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                WarehouseDropdown(
+                    warehouses = warehouses,
+                    selected = warehouses.find { it.id == form.warehouseId },
+                    onSelect = { onWarehouseChange(it.id) },
+                    label = "Склад *",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                WriteOffReasonTypeDropdown(
+                    selected = form.reasonType,
+                    onSelect = { onFormChange(form.copy(reasonType = it)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = form.reasonNote,
+                    onValueChange = { onFormChange(form.copy(reasonNote = it)) },
+                    label = { Text("Основание списания *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                OutlinedTextField(
+                    value = form.note,
+                    onValueChange = { onFormChange(form.copy(note = it)) },
+                    label = { Text("Примечание") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+
+                HorizontalDivider()
+                Text("Лимит без согласования", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = limit,
+                        onValueChange = onLimitChange,
+                        label = { Text("Лимит склада") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    Button(onClick = onSaveLimit, enabled = form.warehouseId != null) { Text("Сохранить") }
+                }
+                Text(
+                    text = "Списание сверх лимита проводится только после согласования " +
+                        "или с правом «wms:write_off_over_limit».",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider()
+                Text("Строки списания", style = MaterialTheme.typography.labelLarge)
+                form.lines.forEachIndexed { index, line ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Строка ${line.lineNo}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(onClick = { onRemoveLine(index) }) { Text("Удалить") }
+                        }
+                        NomenclatureDropdown(
+                            items = nomenclature,
+                            selected = nomenclature.find { it.id == line.nomenclatureId },
+                            onSelect = { onUpdateLine(index, line.copy(nomenclatureId = it.id)) },
+                            label = "Номенклатура *",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        LocationDropdown(
+                            locations = locations,
+                            selected = locations.find { it.id == line.locationId },
+                            onSelect = { onUpdateLine(index, line.copy(locationId = it.id)) },
+                            label = "Ячейка списания *",
+                            modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
                             value = line.quantity,

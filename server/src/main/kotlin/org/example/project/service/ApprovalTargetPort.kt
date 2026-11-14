@@ -23,6 +23,7 @@ interface ApprovalTargetPort {
     /** Текущая версия объекта для отказа по устаревшей версии (M.6). */
     fun currentTargetVersion(targetId: Long): Long
 
+
     /**
      * Применяет одобрение к объекту при завершении последнего этапа.
      * Обязан быть атомарным и отклонять устаревшую expectedVersion,

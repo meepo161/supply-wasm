@@ -51,7 +51,7 @@ fun WmsScreen(
             title = "Склад",
             glyph = ErpIconGlyph.Warehouse,
             gradient = Gradients.Emerald,
-            subtitle = "Склады, ячейки, остатки, приёмка, резервы, перемещения, выдача и возвраты"
+            subtitle = "Склады, ячейки, остатки, приёмка, резервы, перемещения, выдача, возвраты и списания"
         )
         Spacer(Modifier.height(10.dp))
         ScrollableTabRow(
@@ -82,6 +82,7 @@ fun WmsScreen(
                 WmsTab.TRANSFERS -> TransfersTab(state, viewModel)
                 WmsTab.ISSUES -> IssuesTab(state, viewModel)
                 WmsTab.RETURNS -> ReturnsTab(state, viewModel)
+                WmsTab.WRITE_OFFS -> WriteOffsTab(state, viewModel)
             }
         }
     }
@@ -158,6 +159,23 @@ fun WmsScreen(
             onUpdateLine = viewModel::updateIssueLine,
             onRemoveLine = viewModel::removeIssueLine,
             onCreate = viewModel::createIssue,
+            onDismiss = viewModel::dismissDialog
+        )
+        WmsDialog.CreateWriteOff -> CreateWriteOffDialog(
+            form = state.createWriteOffForm,
+            warehouses = state.warehouses,
+            locations = state.writeOffLocations,
+            nomenclature = state.nomenclature,
+            limit = state.writeOffLimit,
+            error = state.operationError,
+            onFormChange = viewModel::updateCreateWriteOffForm,
+            onWarehouseChange = viewModel::onWriteOffWarehouseChanged,
+            onLimitChange = viewModel::updateWriteOffLimit,
+            onSaveLimit = viewModel::saveWriteOffLimit,
+            onAddLine = viewModel::addWriteOffLine,
+            onUpdateLine = viewModel::updateWriteOffLine,
+            onRemoveLine = viewModel::removeWriteOffLine,
+            onCreate = viewModel::createWriteOff,
             onDismiss = viewModel::dismissDialog
         )
         WmsDialog.CreateReturn -> CreateReturnDialog(

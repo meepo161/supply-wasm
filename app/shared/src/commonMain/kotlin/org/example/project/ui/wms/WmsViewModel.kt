@@ -47,6 +47,14 @@ import org.example.project.dto.ShipTransferRequest
 import org.example.project.dto.TransferDto
 import org.example.project.dto.TransferKind
 import org.example.project.dto.TransferStatus
+import org.example.project.dto.CancelWriteOffRequest
+import org.example.project.dto.CreateWriteOffRequest
+import org.example.project.dto.SetWriteOffLimitRequest
+import org.example.project.dto.WriteOffActionRequest
+import org.example.project.dto.WriteOffDto
+import org.example.project.dto.WriteOffLineInput
+import org.example.project.dto.WriteOffReasonType
+import org.example.project.dto.WriteOffStatus
 
 class WmsViewModel(
     private val repository: WmsRepository,
@@ -84,6 +92,7 @@ class WmsViewModel(
             WmsTab.TRANSFERS -> loadTransfers()
             WmsTab.ISSUES -> loadIssues()
             WmsTab.RETURNS -> loadReturns()
+            WmsTab.WRITE_OFFS -> loadWriteOffs()
         }
     }
 
@@ -1192,6 +1201,256 @@ class WmsViewModel(
     private fun newIdempotencyKey(): String =
         "ui-${Random.nextLong().toString(16)}-${Random.nextLong().toString(16)}"
 
+    // ---------------- Списание (§8.10) ----------------
+
+    fun loadWriteOffs() {
+        val status = _uiState.value.writeOffStatusFilter
+        _uiState.value = _uiState.value.copy(writeOffsLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.listWriteOffs(null, status)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    writeOffs = result.data,
+                    writeOffsLoading = false,
+                    operationError = null
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    writeOffsLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateWriteOffStatusFilter(status: WriteOffStatus?) {
+        _uiState.value = _uiState.value.copy(writeOffStatusFilter = status)
+        loadWriteOffs()
+    }
+
+    fun selectWriteOff(writeOff: WriteOffDto?) {
+        _uiState.value = _uiState.value.copy(
+            selectedWriteOff = writeOff,
+            writeOffCancelReason = "",
+            operationError = null
+        )
+        writeOff?.let { order ->
+            viewModelScope.launch {
+                when (val result = repository.listLocations(order.warehouseId)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(writeOffLocations = result.data)
+                    is ApiResult.Error -> { }
+                }
+            }
+        }
+    }
+
+    fun updateCreateWriteOffForm(form: CreateWriteOffForm) {
+        _uiState.value = _uiState.value.copy(createWriteOffForm = form)
+    }
+
+    fun onWriteOffWarehouseChanged(warehouseId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            createWriteOffForm = _uiState.value.createWriteOffForm.copy(
+                warehouseId = warehouseId,
+                lines = listOf(CreateWriteOffLineForm())
+            ),
+            writeOffLocations = emptyList(),
+            writeOffLimit = "",
+            operationError = null
+        )
+        warehouseId ?: return
+        viewModelScope.launch {
+            when (val locations = repository.listLocations(warehouseId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(writeOffLocations = locations.data)
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = locations.error)
+            }
+            when (val limit = repository.getWriteOffLimit(warehouseId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    writeOffLimit = limit.data.limitQuantity,
+                    writeOffLimitWarehouseId = warehouseId
+                )
+                is ApiResult.Error -> { }
+            }
+        }
+    }
+
+    fun updateWriteOffLimit(value: String) {
+        _uiState.value = _uiState.value.copy(writeOffLimit = value)
+    }
+
+    fun saveWriteOffLimit() {
+        val warehouseId = _uiState.value.writeOffLimitWarehouseId ?: _uiState.value.createWriteOffForm.warehouseId ?: return
+        val limit = _uiState.value.writeOffLimit.trim()
+        if (limit.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите лимит списания без согласования")
+            )
+            return
+        }
+        viewModelScope.launch {
+            when (val result = repository.setWriteOffLimit(warehouseId, SetWriteOffLimitRequest(limit))) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    writeOffLimit = result.data.limitQuantity,
+                    operationError = null
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+            }
+        }
+    }
+
+    fun addWriteOffLine() {
+        val form = _uiState.value.createWriteOffForm
+        val nextLineNo = (form.lines.maxOfOrNull { it.lineNo } ?: 0) + 1
+        _uiState.value = _uiState.value.copy(
+            createWriteOffForm = form.copy(lines = form.lines + CreateWriteOffLineForm(lineNo = nextLineNo))
+        )
+    }
+
+    fun updateWriteOffLine(index: Int, line: CreateWriteOffLineForm) {
+        val form = _uiState.value.createWriteOffForm
+        if (index !in form.lines.indices) return
+        val lines = form.lines.toMutableList()
+        lines[index] = line
+        _uiState.value = _uiState.value.copy(createWriteOffForm = form.copy(lines = lines))
+    }
+
+    fun removeWriteOffLine(index: Int) {
+        val form = _uiState.value.createWriteOffForm
+        if (index !in form.lines.indices) return
+        val lines = form.lines.toMutableList()
+        lines.removeAt(index)
+        _uiState.value = _uiState.value.copy(createWriteOffForm = form.copy(lines = lines))
+    }
+
+    fun createWriteOff() {
+        val form = _uiState.value.createWriteOffForm
+        val warehouseId = form.warehouseId
+        if (warehouseId == null) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Выберите склад")
+            )
+            return
+        }
+        if (form.reasonNote.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите основание списания")
+            )
+            return
+        }
+        if (form.reasonType == WriteOffReasonType.OTHER && form.reasonNote.trim().length < 10) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError(
+                    "VALIDATION_ERROR",
+                    "Для прочей причины основание должно быть не короче 10 символов"
+                )
+            )
+            return
+        }
+        val lines = form.lines.mapNotNull { line ->
+            val nomenclatureId = line.nomenclatureId ?: return@mapNotNull null
+            val locationId = line.locationId ?: return@mapNotNull null
+            if (line.quantity.isBlank()) return@mapNotNull null
+            WriteOffLineInput(
+                lineNo = line.lineNo,
+                nomenclatureId = nomenclatureId,
+                locationId = locationId,
+                quantity = line.quantity.trim(),
+                lotId = line.lotId.toLongOrNull(),
+                serialId = line.serialId.toLongOrNull(),
+                note = line.note.takeIf { it.isNotBlank() }?.trim()
+            )
+        }
+        if (lines.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError(
+                    "VALIDATION_ERROR",
+                    "Добавьте хотя бы одну строку: номенклатуру, ячейку и количество"
+                )
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.createWriteOff(
+                CreateWriteOffRequest(
+                    warehouseId = warehouseId,
+                    reasonType = form.reasonType,
+                    reasonNote = form.reasonNote.trim(),
+                    note = form.note.takeIf { it.isNotBlank() }?.trim(),
+                    lines = lines,
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        createWriteOffForm = CreateWriteOffForm(),
+                        activeDialog = null,
+                        isLoading = false
+                    )
+                    loadWriteOffs()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun postSelectedWriteOff() {
+        val writeOff = _uiState.value.selectedWriteOff ?: return
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.postWriteOff(
+                writeOff.id,
+                WriteOffActionRequest(writeOff.version, newIdempotencyKey())
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(selectedWriteOff = result.data, isLoading = false)
+                    loadWriteOffs()
+                    loadStock()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateWriteOffCancelReason(value: String) {
+        _uiState.value = _uiState.value.copy(writeOffCancelReason = value)
+    }
+
+    fun cancelSelectedWriteOff() {
+        val writeOff = _uiState.value.selectedWriteOff ?: return
+        val reason = _uiState.value.writeOffCancelReason.trim()
+        if (reason.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите причину отмены")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.cancelWriteOff(
+                writeOff.id,
+                CancelWriteOffRequest(writeOff.version, reason, newIdempotencyKey())
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedWriteOff = result.data,
+                        writeOffCancelReason = "",
+                        isLoading = false
+                    )
+                    loadWriteOffs()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
     fun updateCreateWarehouseForm(form: CreateWarehouseForm) {
         _uiState.value = _uiState.value.copy(createWarehouseForm = form)
     }
@@ -1380,7 +1639,18 @@ data class WmsUiState(
     val selectedReturn: ReturnOrderDto? = null,
     val createReturnForm: CreateReturnForm = CreateReturnForm(),
     val returnLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
-    val returnInspectForms: Map<Long, ReturnInspectForm> = emptyMap()
+    val returnInspectForms: Map<Long, ReturnInspectForm> = emptyMap(),
+
+    // Списание (§8.10)
+    val writeOffs: List<WriteOffDto> = emptyList(),
+    val writeOffsLoading: Boolean = false,
+    val writeOffStatusFilter: WriteOffStatus? = null,
+    val createWriteOffForm: CreateWriteOffForm = CreateWriteOffForm(),
+    val writeOffLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
+    val selectedWriteOff: WriteOffDto? = null,
+    val writeOffCancelReason: String = "",
+    val writeOffLimit: String = "",
+    val writeOffLimitWarehouseId: Long? = null
 )
 
 enum class WmsTab(val title: String) {
@@ -1392,7 +1662,8 @@ enum class WmsTab(val title: String) {
     RESERVATIONS("Резервы"),
     TRANSFERS("Перемещения"),
     ISSUES("Выдача"),
-    RETURNS("Возвраты")
+    RETURNS("Возвраты"),
+    WRITE_OFFS("Списания")
 }
 
 sealed class WmsDialog {
@@ -1404,6 +1675,7 @@ sealed class WmsDialog {
     data object CreateTransfer : WmsDialog()
     data object CreateIssue : WmsDialog()
     data object CreateReturn : WmsDialog()
+    data object CreateWriteOff : WmsDialog()
 }
 
 data class CreateWarehouseForm(
@@ -1532,5 +1804,23 @@ data class CreateReturnLineForm(
 data class ReturnInspectForm(
     val decision: ReturnInspectionDecision = ReturnInspectionDecision.GOOD,
     val targetLocationId: Long? = null,
+    val note: String = ""
+)
+
+data class CreateWriteOffForm(
+    val warehouseId: Long? = null,
+    val reasonType: WriteOffReasonType = WriteOffReasonType.DAMAGE,
+    val reasonNote: String = "",
+    val note: String = "",
+    val lines: List<CreateWriteOffLineForm> = listOf(CreateWriteOffLineForm())
+)
+
+data class CreateWriteOffLineForm(
+    val lineNo: Int = 1,
+    val nomenclatureId: Long? = null,
+    val locationId: Long? = null,
+    val quantity: String = "",
+    val lotId: String = "",
+    val serialId: String = "",
     val note: String = ""
 )

@@ -12,6 +12,7 @@ import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.IssueOrderDto
 import org.example.project.dto.ReturnOrderDto
 import org.example.project.dto.TransferDto
+import org.example.project.dto.WriteOffDto
 
 private val gridConfig = Un7KCMPDataGridConfig(
     isUsableHaptic = false,
@@ -219,6 +220,32 @@ fun ReturnsGrid(
         onClick = { selected ->
             val number = selected.firstOrNull()?.second?.firstOrNull() as? String
             returns.firstOrNull { it.number == number }?.let(onClick)
+        }
+    )
+}
+
+@Composable
+fun WriteOffsGrid(
+    writeOffs: List<WriteOffDto>,
+    onClick: (WriteOffDto) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val data = mapOf(
+        "Номер" to writeOffs.map { it.number },
+        "Склад ID" to writeOffs.map { it.warehouseId.toString() },
+        "Причина" to writeOffs.map { it.reasonType.localizedName() },
+        "Количество" to writeOffs.map { it.totalQuantity },
+        "Сверх лимита" to writeOffs.map { if (it.overLimit) "Да" else "Нет" },
+        "Статус" to writeOffs.map { it.status.localizedName() },
+        "Проведено" to writeOffs.map { it.postedAt.toShortDate() }
+    )
+    Un7KCMPDataGrid(
+        data = data,
+        modifier = modifier,
+        config = gridConfig,
+        onClick = { selected ->
+            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
+            writeOffs.firstOrNull { it.number == number }?.let(onClick)
         }
     )
 }

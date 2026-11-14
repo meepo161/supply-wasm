@@ -6,6 +6,7 @@ import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -35,6 +36,13 @@ import org.example.project.dto.ReturnStatus
 import org.example.project.dto.ShipTransferRequest
 import org.example.project.dto.TransferDto
 import org.example.project.dto.TransferStatus
+import org.example.project.dto.CancelWriteOffRequest
+import org.example.project.dto.CreateWriteOffRequest
+import org.example.project.dto.SetWriteOffLimitRequest
+import org.example.project.dto.WriteOffActionRequest
+import org.example.project.dto.WriteOffDto
+import org.example.project.dto.WriteOffLimitDto
+import org.example.project.dto.WriteOffStatus
 import org.example.project.dto.PostReceiptRequest
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReleaseReservationRequest
@@ -206,6 +214,47 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
         lineId: Long,
         request: InspectReturnLineRequest
     ): ApiResult<ReturnOrderDto> = post("/api/wms/returns/$id/lines/$lineId/inspect", request)
+
+    // ---- Списание ----
+
+    override suspend fun createWriteOff(request: CreateWriteOffRequest): ApiResult<WriteOffDto> =
+        post("/api/wms/write-offs", request)
+
+    override suspend fun listWriteOffs(
+        warehouseId: Long?,
+        status: WriteOffStatus?
+    ): ApiResult<List<WriteOffDto>> =
+        getWithParams(
+            path = "/api/wms/write-offs",
+            params = buildMap {
+                warehouseId?.let { put("warehouseId", it.toString()) }
+                status?.let { put("status", it.name) }
+            }
+        )
+
+    override suspend fun getWriteOff(id: Long): ApiResult<WriteOffDto> = get("/api/wms/write-offs/$id")
+
+    override suspend fun postWriteOff(id: Long, request: WriteOffActionRequest): ApiResult<WriteOffDto> =
+        post("/api/wms/write-offs/$id/post", request)
+
+    override suspend fun cancelWriteOff(id: Long, request: CancelWriteOffRequest): ApiResult<WriteOffDto> =
+        post("/api/wms/write-offs/$id/cancel", request)
+
+    override suspend fun getWriteOffLimit(warehouseId: Long): ApiResult<WriteOffLimitDto> =
+        get("/api/wms/write-off-limit/$warehouseId")
+
+    override suspend fun setWriteOffLimit(
+        warehouseId: Long,
+        request: SetWriteOffLimitRequest
+    ): ApiResult<WriteOffLimitDto> = put("/api/wms/write-off-limit/$warehouseId", request)
+
+    private suspend inline fun <reified T> put(path: String, body: Any): ApiResult<T> =
+        execute {
+            client.put(path) {
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
+        }
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         execute { client.get(path) }

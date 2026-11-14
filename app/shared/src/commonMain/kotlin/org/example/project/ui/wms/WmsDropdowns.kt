@@ -25,6 +25,8 @@ import org.example.project.dto.IssueStatus
 import org.example.project.dto.ReturnInspectionDecision
 import org.example.project.dto.ReturnStatus
 import org.example.project.dto.TransferStatus
+import org.example.project.dto.WriteOffReasonType
+import org.example.project.dto.WriteOffStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -526,6 +528,84 @@ fun ReturnInspectionDecisionDropdown(
                     text = { Text(decision.localizedName()) },
                     onClick = {
                         onSelect(decision)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WriteOffReasonTypeDropdown(
+    selected: WriteOffReasonType,
+    onSelect: (WriteOffReasonType) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected.localizedName(),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Причина списания") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            WriteOffReasonType.entries.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(type.localizedName()) },
+                    onClick = {
+                        onSelect(type)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WriteOffStatusDropdown(
+    selected: WriteOffStatus?,
+    onSelect: (WriteOffStatus?) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Статус"
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(null) + WriteOffStatus.entries
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected?.localizedName() ?: "Все",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { status ->
+                DropdownMenuItem(
+                    text = { Text(status?.localizedName() ?: "Все") },
+                    onClick = {
+                        onSelect(status)
                         expanded = false
                     }
                 )
