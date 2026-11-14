@@ -39,6 +39,12 @@ import org.example.project.dto.WriteOffActionRequest
 import org.example.project.dto.WriteOffDto
 import org.example.project.dto.WriteOffLimitDto
 import org.example.project.dto.WriteOffStatus
+import org.example.project.dto.CancelInventoryRequest
+import org.example.project.dto.CreateInventoryRequest
+import org.example.project.dto.InventoryActionRequest
+import org.example.project.dto.InventoryDto
+import org.example.project.dto.InventoryStatus
+import org.example.project.dto.SubmitInventoryCountsRequest
 
 interface WmsRepository {
     suspend fun listWarehouses(): ApiResult<List<WarehouseDto>>
@@ -109,4 +115,14 @@ interface WmsRepository {
     suspend fun cancelWriteOff(id: Long, request: CancelWriteOffRequest): ApiResult<WriteOffDto>
     suspend fun getWriteOffLimit(warehouseId: Long): ApiResult<WriteOffLimitDto>
     suspend fun setWriteOffLimit(warehouseId: Long, request: SetWriteOffLimitRequest): ApiResult<WriteOffLimitDto>
+
+    // Инвентаризация (ТЗ §8.11)
+    suspend fun createInventory(request: CreateInventoryRequest): ApiResult<InventoryDto>
+    suspend fun listInventories(warehouseId: Long?, status: InventoryStatus?): ApiResult<List<InventoryDto>>
+    suspend fun getInventory(id: Long): ApiResult<InventoryDto>
+    suspend fun bookInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto>
+    suspend fun submitInventoryCounts(id: Long, request: SubmitInventoryCountsRequest): ApiResult<InventoryDto>
+    suspend fun approveInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto>
+    suspend fun postInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto>
+    suspend fun cancelInventory(id: Long, request: CancelInventoryRequest): ApiResult<InventoryDto>
 }

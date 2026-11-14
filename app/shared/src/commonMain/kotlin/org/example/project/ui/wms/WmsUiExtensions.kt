@@ -16,6 +16,9 @@ import org.example.project.dto.TransferKind
 import org.example.project.dto.TransferStatus
 import org.example.project.dto.WriteOffReasonType
 import org.example.project.dto.WriteOffStatus
+import org.example.project.dto.InventoryDiscrepancyKind
+import org.example.project.dto.InventoryScopeType
+import org.example.project.dto.InventoryStatus
 
 fun StorageLocationKind.localizedName(): String = when (this) {
     StorageLocationKind.ZONE -> "Зона"
@@ -138,6 +141,28 @@ fun WriteOffStatus.localizedName(): String = when (this) {
     WriteOffStatus.APPROVED -> "Согласовано"
     WriteOffStatus.POSTED -> "Проведено"
     WriteOffStatus.CANCELLED -> "Отменено"
+}
+
+fun InventoryScopeType.localizedName(): String = when (this) {
+    InventoryScopeType.WAREHOUSE -> "Весь склад"
+    InventoryScopeType.ZONE -> "Зона"
+    InventoryScopeType.CELL -> "Ячейка"
+    InventoryScopeType.NOMENCLATURE -> "Номенклатура"
+}
+
+fun InventoryStatus.localizedName(): String = when (this) {
+    InventoryStatus.DRAFT -> "Черновик"
+    InventoryStatus.BOOKED -> "Срез зафиксирован"
+    InventoryStatus.COUNTING -> "Идёт подсчёт"
+    InventoryStatus.DISCREPANCY -> "Есть расхождения"
+    InventoryStatus.APPROVED -> "Согласовано"
+    InventoryStatus.POSTED -> "Проведено"
+    InventoryStatus.CANCELLED -> "Отменено"
+}
+
+fun InventoryDiscrepancyKind.localizedName(): String = when (this) {
+    InventoryDiscrepancyKind.SURPLUS -> "Излишек"
+    InventoryDiscrepancyKind.SHORTAGE -> "Недостача"
 }
 
 fun String?.toShortDate(): String {

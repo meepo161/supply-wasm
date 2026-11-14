@@ -27,6 +27,8 @@ import org.example.project.dto.ReturnStatus
 import org.example.project.dto.TransferStatus
 import org.example.project.dto.WriteOffReasonType
 import org.example.project.dto.WriteOffStatus
+import org.example.project.dto.InventoryScopeType
+import org.example.project.dto.InventoryStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -584,6 +586,84 @@ fun WriteOffStatusDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val options = listOf(null) + WriteOffStatus.entries
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected?.localizedName() ?: "Все",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { status ->
+                DropdownMenuItem(
+                    text = { Text(status?.localizedName() ?: "Все") },
+                    onClick = {
+                        onSelect(status)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InventoryScopeTypeDropdown(
+    selected: InventoryScopeType,
+    onSelect: (InventoryScopeType) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = selected.localizedName(),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Область инвентаризации") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            InventoryScopeType.entries.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(type.localizedName()) },
+                    onClick = {
+                        onSelect(type)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InventoryStatusDropdown(
+    selected: InventoryStatus?,
+    onSelect: (InventoryStatus?) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Статус"
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(null) + InventoryStatus.entries
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = it },

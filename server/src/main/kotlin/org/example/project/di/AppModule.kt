@@ -73,6 +73,8 @@ fun appModule(config: AppConfig) = module {
     single { WmsWriteOffRepository(get()) }
     single { WmsWriteOffService(get(), get(), get()) }
     single { WriteOffApprovalTarget(get()) }
+    single { WmsInventoryRepository(get()) }
+    single { WmsInventoryService(get(), get(), get()) }
     single { AttachmentService(get(), get(), get(), get(), get(), get()) }
     single { BomService(get(), get(), get()) }
     single { DocumentRepository(get()) }

@@ -13,6 +13,7 @@ import org.example.project.dto.IssueOrderDto
 import org.example.project.dto.ReturnOrderDto
 import org.example.project.dto.TransferDto
 import org.example.project.dto.WriteOffDto
+import org.example.project.dto.InventoryDto
 
 private val gridConfig = Un7KCMPDataGridConfig(
     isUsableHaptic = false,
@@ -246,6 +247,31 @@ fun WriteOffsGrid(
         onClick = { selected ->
             val number = selected.firstOrNull()?.second?.firstOrNull() as? String
             writeOffs.firstOrNull { it.number == number }?.let(onClick)
+        }
+    )
+}
+
+@Composable
+fun InventoriesGrid(
+    inventories: List<InventoryDto>,
+    onClick: (InventoryDto) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val data = mapOf(
+        "Номер" to inventories.map { it.number },
+        "Склад ID" to inventories.map { it.warehouseId.toString() },
+        "Область" to inventories.map { it.scopeType.localizedName() },
+        "Статус" to inventories.map { it.status.localizedName() },
+        "Срез" to inventories.map { it.bookedAt.toShortDate() },
+        "Проведено" to inventories.map { it.postedAt.toShortDate() }
+    )
+    Un7KCMPDataGrid(
+        data = data,
+        modifier = modifier,
+        config = gridConfig,
+        onClick = { selected ->
+            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
+            inventories.firstOrNull { it.number == number }?.let(onClick)
         }
     )
 }

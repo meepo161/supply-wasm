@@ -55,6 +55,14 @@ import org.example.project.dto.WriteOffDto
 import org.example.project.dto.WriteOffLineInput
 import org.example.project.dto.WriteOffReasonType
 import org.example.project.dto.WriteOffStatus
+import org.example.project.dto.CancelInventoryRequest
+import org.example.project.dto.CreateInventoryRequest
+import org.example.project.dto.InventoryActionRequest
+import org.example.project.dto.InventoryCountInput
+import org.example.project.dto.InventoryDto
+import org.example.project.dto.InventoryScopeType
+import org.example.project.dto.InventoryStatus
+import org.example.project.dto.SubmitInventoryCountsRequest
 
 class WmsViewModel(
     private val repository: WmsRepository,
@@ -93,6 +101,7 @@ class WmsViewModel(
             WmsTab.ISSUES -> loadIssues()
             WmsTab.RETURNS -> loadReturns()
             WmsTab.WRITE_OFFS -> loadWriteOffs()
+            WmsTab.INVENTORIES -> loadInventories()
         }
     }
 
@@ -1451,6 +1460,244 @@ class WmsViewModel(
         }
     }
 
+    // ---------------- Инвентаризация (§8.11) ----------------
+
+    fun loadInventories() {
+        val status = _uiState.value.inventoryStatusFilter
+        _uiState.value = _uiState.value.copy(inventoriesLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.listInventories(null, status)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    inventories = result.data,
+                    inventoriesLoading = false,
+                    operationError = null
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    inventoriesLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateInventoryStatusFilter(status: InventoryStatus?) {
+        _uiState.value = _uiState.value.copy(inventoryStatusFilter = status)
+        loadInventories()
+    }
+
+    fun selectInventory(inventory: InventoryDto?) {
+        // Строки подсчёта инициализируются значением среза, чтобы комиссии
+        // было достаточно поправить расхождения.
+        val inputs = inventory?.snapshot?.associate { line ->
+            line.id to (line.countedQuantity ?: line.bookQuantity)
+        }.orEmpty()
+        _uiState.value = _uiState.value.copy(
+            selectedInventory = inventory,
+            inventoryCountInputs = inputs,
+            inventoryCancelReason = "",
+            operationError = null
+        )
+    }
+
+    fun updateInventoryCountInput(snapshotId: Long, value: String) {
+        val inputs = _uiState.value.inventoryCountInputs.toMutableMap()
+        inputs[snapshotId] = value
+        _uiState.value = _uiState.value.copy(inventoryCountInputs = inputs)
+    }
+
+    fun updateInventoryCancelReason(value: String) {
+        _uiState.value = _uiState.value.copy(inventoryCancelReason = value)
+    }
+
+    fun updateCreateInventoryForm(form: CreateInventoryForm) {
+        _uiState.value = _uiState.value.copy(createInventoryForm = form)
+    }
+
+    fun onInventoryWarehouseChanged(warehouseId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            createInventoryForm = _uiState.value.createInventoryForm.copy(
+                warehouseId = warehouseId,
+                scopeLocationId = null
+            ),
+            inventoryLocations = emptyList()
+        )
+        warehouseId ?: return
+        viewModelScope.launch {
+            when (val result = repository.listLocations(warehouseId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(inventoryLocations = result.data)
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+            }
+        }
+    }
+
+    fun createInventory() {
+        val form = _uiState.value.createInventoryForm
+        val warehouseId = form.warehouseId
+        if (warehouseId == null) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Выберите склад")
+            )
+            return
+        }
+        if ((form.scopeType == InventoryScopeType.ZONE || form.scopeType == InventoryScopeType.CELL) &&
+            form.scopeLocationId == null
+        ) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Выберите зону или ячейку")
+            )
+            return
+        }
+        if (form.scopeType == InventoryScopeType.NOMENCLATURE && form.scopeNomenclatureId == null) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Выберите номенклатуру")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.createInventory(
+                CreateInventoryRequest(
+                    warehouseId = warehouseId,
+                    scopeType = form.scopeType,
+                    scopeLocationId = if (form.scopeType == InventoryScopeType.WAREHOUSE ||
+                        form.scopeType == InventoryScopeType.NOMENCLATURE
+                    ) null else form.scopeLocationId,
+                    scopeNomenclatureId = if (form.scopeType == InventoryScopeType.NOMENCLATURE) {
+                        form.scopeNomenclatureId
+                    } else {
+                        null
+                    },
+                    note = form.note.takeIf { it.isNotBlank() }?.trim(),
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        createInventoryForm = CreateInventoryForm(),
+                        activeDialog = null,
+                        isLoading = false
+                    )
+                    loadInventories()
+                    selectInventory(result.data)
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun bookSelectedInventory() = inventoryCommand { id, version ->
+        repository.bookInventory(id, InventoryActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun approveSelectedInventory() = inventoryCommand { id, version ->
+        repository.approveInventory(id, InventoryActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun postSelectedInventory() = inventoryCommand { id, version ->
+        repository.postInventory(id, InventoryActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun submitSelectedInventoryCounts() {
+        val inventory = _uiState.value.selectedInventory ?: return
+        if (inventory.snapshot.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Сначала зафиксируйте учётный срез")
+            )
+            return
+        }
+        val counts = inventory.snapshot.mapNotNull { line ->
+            val value = _uiState.value.inventoryCountInputs[line.id]?.trim() ?: return@mapNotNull null
+            if (value.isBlank()) return@mapNotNull null
+            InventoryCountInput(
+                snapshotId = line.id,
+                countedQuantity = value,
+                recount = line.countedQuantity != null
+            )
+        }
+        if (counts.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите фактическое количество")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.submitInventoryCounts(
+                inventory.id,
+                SubmitInventoryCountsRequest(
+                    version = inventory.version,
+                    counts = counts,
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    selectInventory(result.data)
+                    loadInventories()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun cancelSelectedInventory() {
+        val inventory = _uiState.value.selectedInventory ?: return
+        val reason = _uiState.value.inventoryCancelReason.trim()
+        if (reason.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите причину отмены")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.cancelInventory(
+                inventory.id,
+                CancelInventoryRequest(inventory.version, reason, newIdempotencyKey())
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedInventory = result.data,
+                        inventoryCancelReason = "",
+                        isLoading = false
+                    )
+                    loadInventories()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    private fun inventoryCommand(
+        action: suspend (Long, Long) -> ApiResult<InventoryDto>
+    ) {
+        val inventory = _uiState.value.selectedInventory ?: return
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = action(inventory.id, inventory.version)) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    selectInventory(result.data)
+                    loadInventories()
+                    loadStock()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
     fun updateCreateWarehouseForm(form: CreateWarehouseForm) {
         _uiState.value = _uiState.value.copy(createWarehouseForm = form)
     }
@@ -1650,7 +1897,17 @@ data class WmsUiState(
     val selectedWriteOff: WriteOffDto? = null,
     val writeOffCancelReason: String = "",
     val writeOffLimit: String = "",
-    val writeOffLimitWarehouseId: Long? = null
+    val writeOffLimitWarehouseId: Long? = null,
+
+    // Инвентаризация (§8.11)
+    val inventories: List<InventoryDto> = emptyList(),
+    val inventoriesLoading: Boolean = false,
+    val inventoryStatusFilter: InventoryStatus? = null,
+    val createInventoryForm: CreateInventoryForm = CreateInventoryForm(),
+    val inventoryLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
+    val selectedInventory: InventoryDto? = null,
+    val inventoryCountInputs: Map<Long, String> = emptyMap(),
+    val inventoryCancelReason: String = ""
 )
 
 enum class WmsTab(val title: String) {
@@ -1663,7 +1920,8 @@ enum class WmsTab(val title: String) {
     TRANSFERS("Перемещения"),
     ISSUES("Выдача"),
     RETURNS("Возвраты"),
-    WRITE_OFFS("Списания")
+    WRITE_OFFS("Списания"),
+    INVENTORIES("Инвентаризация")
 }
 
 sealed class WmsDialog {
@@ -1676,6 +1934,7 @@ sealed class WmsDialog {
     data object CreateIssue : WmsDialog()
     data object CreateReturn : WmsDialog()
     data object CreateWriteOff : WmsDialog()
+    data object CreateInventory : WmsDialog()
 }
 
 data class CreateWarehouseForm(
@@ -1822,5 +2081,13 @@ data class CreateWriteOffLineForm(
     val quantity: String = "",
     val lotId: String = "",
     val serialId: String = "",
+    val note: String = ""
+)
+
+data class CreateInventoryForm(
+    val warehouseId: Long? = null,
+    val scopeType: InventoryScopeType = InventoryScopeType.WAREHOUSE,
+    val scopeLocationId: Long? = null,
+    val scopeNomenclatureId: Long? = null,
     val note: String = ""
 )

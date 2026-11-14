@@ -34,6 +34,9 @@ import org.example.project.dto.TransferStatus
 import org.example.project.dto.WarehouseDto
 import org.example.project.dto.WriteOffDto
 import org.example.project.dto.WriteOffStatus
+import org.example.project.dto.InventoryDto
+import org.example.project.dto.InventoryScopeType
+import org.example.project.dto.InventoryStatus
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.PillBadge
@@ -1209,6 +1212,306 @@ internal fun CreateWriteOffDialog(
             Button(onClick = onCreate, enabled = warehouses.isNotEmpty() && form.lines.isNotEmpty()) {
                 Text("Создать")
             }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Инвентаризация (ТЗ 8.11)
+// ---------------------------------------------------------------------------
+
+@Composable
+internal fun InventoriesTab(
+    state: WmsUiState,
+    viewModel: WmsViewModel
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TabHeader(
+            title = "Инвентаризация",
+            onCreate = { viewModel.showDialog(WmsDialog.CreateInventory) },
+            onRefresh = viewModel::loadInventories,
+            createLabel = "Создать инвентаризацию"
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            InventoryStatusDropdown(
+                selected = state.inventoryStatusFilter,
+                onSelect = viewModel::updateInventoryStatusFilter,
+                modifier = Modifier.weight(1f)
+            )
+            Button(onClick = viewModel::loadInventories) { Text("Применить") }
+        }
+        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.inventoriesLoading && state.inventories.isEmpty()) {
+            LoadingOverlay()
+        } else if (state.inventories.isEmpty()) {
+            EmptyState("Инвентаризаций нет. Создайте первую.")
+        } else {
+            InventoriesGrid(
+                inventories = state.inventories,
+                onClick = { viewModel.selectInventory(it) },
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
+        }
+        state.selectedInventory?.let { inventory ->
+            InventoryDetailDialog(
+                inventory = inventory,
+                countInputs = state.inventoryCountInputs,
+                cancelReason = state.inventoryCancelReason,
+                onCountInputChange = viewModel::updateInventoryCountInput,
+                onCancelReasonChange = viewModel::updateInventoryCancelReason,
+                onBook = viewModel::bookSelectedInventory,
+                onSubmitCounts = viewModel::submitSelectedInventoryCounts,
+                onApprove = viewModel::approveSelectedInventory,
+                onPost = viewModel::postSelectedInventory,
+                onCancel = viewModel::cancelSelectedInventory,
+                onClose = { viewModel.selectInventory(null) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun InventoryDetailDialog(
+    inventory: InventoryDto,
+    countInputs: Map<Long, String>,
+    cancelReason: String,
+    onCountInputChange: (Long, String) -> Unit,
+    onCancelReasonChange: (String) -> Unit,
+    onBook: () -> Unit,
+    onSubmitCounts: () -> Unit,
+    onApprove: () -> Unit,
+    onPost: () -> Unit,
+    onCancel: () -> Unit,
+    onClose: () -> Unit
+) {
+    val canBook = inventory.status == InventoryStatus.DRAFT
+    val canCount = inventory.status in setOf(
+        InventoryStatus.BOOKED,
+        InventoryStatus.COUNTING,
+        InventoryStatus.DISCREPANCY
+    )
+    val canApprove = inventory.status == InventoryStatus.DISCREPANCY ||
+        inventory.status == InventoryStatus.COUNTING
+    val canPost = inventory.status == InventoryStatus.DISCREPANCY ||
+        inventory.status == InventoryStatus.APPROVED
+    val canCancel = inventory.status != InventoryStatus.POSTED && inventory.status != InventoryStatus.CANCELLED
+    val discrepancyBySnapshot = inventory.discrepancies.associateBy { it.snapshotId }
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Инвентаризация ${inventory.number}", modifier = Modifier.weight(1f))
+                PillBadge(
+                    text = inventory.status.localizedName(),
+                    accent = inventoryStatusAccent(inventory.status)
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Область: ${inventory.scopeType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+                inventory.scopeLocationId?.let {
+                    Text("Ячейка/зона ID: $it", style = MaterialTheme.typography.bodyMedium)
+                }
+                inventory.scopeNomenclatureId?.let {
+                    Text("Номенклатура ID: $it", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text("Срез: ${inventory.bookedAt.toShortDate()}", style = MaterialTheme.typography.bodyMedium)
+                inventory.note?.let { Text("Примечание: $it", style = MaterialTheme.typography.bodyMedium) }
+                inventory.cancelReason?.let {
+                    Text("Причина отмены: $it", style = MaterialTheme.typography.bodyMedium)
+                }
+                Text("Версия: ${inventory.version}", style = MaterialTheme.typography.bodySmall)
+
+                HorizontalDivider()
+                if (inventory.snapshot.isEmpty()) {
+                    Text(
+                        text = "Учётный срез не зафиксирован: нажмите «Зафиксировать срез», " +
+                            "чтобы снять остатки области.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text("Позиции и подсчёт", style = MaterialTheme.typography.labelLarge)
+                    inventory.snapshot.forEach { line ->
+                        val discrepancy = discrepancyBySnapshot[line.id]
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Ячейка ${line.locationId} · номенклатура ${line.nomenclatureId}",
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                PillBadge(
+                                    text = "Учёт ${line.bookQuantity}",
+                                    accent = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (discrepancy?.kind != null) {
+                                PillBadge(
+                                    text = "${discrepancy.kind.localizedName()}: ${discrepancy.discrepancy}",
+                                    accent = if (discrepancy.kind ==
+                                        org.example.project.dto.InventoryDiscrepancyKind.SURPLUS
+                                    ) {
+                                        Brand.Teal
+                                    } else {
+                                        Brand.Rose
+                                    }
+                                )
+                            }
+                            if (canCount) {
+                                OutlinedTextField(
+                                    value = countInputs[line.id] ?: "",
+                                    onValueChange = { onCountInputChange(line.id, it) },
+                                    label = { Text("Фактическое количество") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (canCancel) {
+                    HorizontalDivider()
+                    OutlinedTextField(
+                        value = cancelReason,
+                        onValueChange = onCancelReasonChange,
+                        label = { Text("Причина отмены") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canBook) Button(onClick = onBook) { Text("Зафиксировать срез") }
+                if (canCount) Button(onClick = onSubmitCounts) { Text("Сохранить подсчёт") }
+                if (canApprove) Button(onClick = onApprove) { Text("Согласовать") }
+                if (canPost) Button(onClick = onPost) { Text("Провести") }
+                if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
+    )
+}
+
+private fun inventoryStatusAccent(status: InventoryStatus) = when (status) {
+    InventoryStatus.DRAFT -> Brand.Blue
+    InventoryStatus.BOOKED -> Brand.Indigo
+    InventoryStatus.COUNTING -> Brand.Cyan
+    InventoryStatus.DISCREPANCY -> Brand.Amber
+    InventoryStatus.APPROVED -> Brand.Indigo
+    InventoryStatus.POSTED -> Brand.Teal
+    InventoryStatus.CANCELLED -> Brand.Rose
+}
+
+@Composable
+internal fun CreateInventoryDialog(
+    form: CreateInventoryForm,
+    warehouses: List<WarehouseDto>,
+    locations: List<StorageLocationDto>,
+    nomenclature: List<NomenclatureDto>,
+    error: org.example.project.dto.ApiError?,
+    onFormChange: (CreateInventoryForm) -> Unit,
+    onWarehouseChange: (Long?) -> Unit,
+    onCreate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Новая инвентаризация") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                error?.let { ErrorMessageCard(error = it) }
+                if (warehouses.isEmpty()) {
+                    Text(
+                        text = "Нет доступных складов.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                WarehouseDropdown(
+                    warehouses = warehouses,
+                    selected = warehouses.find { it.id == form.warehouseId },
+                    onSelect = { onWarehouseChange(it.id) },
+                    label = "Склад *",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                InventoryScopeTypeDropdown(
+                    selected = form.scopeType,
+                    onSelect = {
+                        onFormChange(
+                            form.copy(
+                                scopeType = it,
+                                scopeLocationId = null,
+                                scopeNomenclatureId = null
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (form.scopeType == InventoryScopeType.ZONE || form.scopeType == InventoryScopeType.CELL) {
+                    LocationDropdown(
+                        locations = locations,
+                        selected = locations.find { it.id == form.scopeLocationId },
+                        onSelect = { onFormChange(form.copy(scopeLocationId = it.id)) },
+                        label = "Зона или ячейка *",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (form.scopeType == InventoryScopeType.NOMENCLATURE) {
+                    NomenclatureDropdown(
+                        items = nomenclature,
+                        selected = nomenclature.find { it.id == form.scopeNomenclatureId },
+                        onSelect = { onFormChange(form.copy(scopeNomenclatureId = it.id)) },
+                        label = "Номенклатура *",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                OutlinedTextField(
+                    value = form.note,
+                    onValueChange = { onFormChange(form.copy(note = it)) },
+                    label = { Text("Примечание") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Text(
+                    text = "На складе может идти только одна активная инвентаризация. " +
+                        "Срез фиксируется отдельным шагом перед подсчётом.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onCreate, enabled = warehouses.isNotEmpty()) { Text("Создать") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
     )

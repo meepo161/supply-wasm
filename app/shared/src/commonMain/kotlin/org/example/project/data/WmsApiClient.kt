@@ -43,6 +43,12 @@ import org.example.project.dto.WriteOffActionRequest
 import org.example.project.dto.WriteOffDto
 import org.example.project.dto.WriteOffLimitDto
 import org.example.project.dto.WriteOffStatus
+import org.example.project.dto.CancelInventoryRequest
+import org.example.project.dto.CreateInventoryRequest
+import org.example.project.dto.InventoryActionRequest
+import org.example.project.dto.InventoryDto
+import org.example.project.dto.InventoryStatus
+import org.example.project.dto.SubmitInventoryCountsRequest
 import org.example.project.dto.PostReceiptRequest
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReleaseReservationRequest
@@ -247,6 +253,42 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
         warehouseId: Long,
         request: SetWriteOffLimitRequest
     ): ApiResult<WriteOffLimitDto> = put("/api/wms/write-off-limit/$warehouseId", request)
+
+    // ---- Инвентаризация ----
+
+    override suspend fun createInventory(request: CreateInventoryRequest): ApiResult<InventoryDto> =
+        post("/api/wms/inventories", request)
+
+    override suspend fun listInventories(
+        warehouseId: Long?,
+        status: InventoryStatus?
+    ): ApiResult<List<InventoryDto>> =
+        getWithParams(
+            path = "/api/wms/inventories",
+            params = buildMap {
+                warehouseId?.let { put("warehouseId", it.toString()) }
+                status?.let { put("status", it.name) }
+            }
+        )
+
+    override suspend fun getInventory(id: Long): ApiResult<InventoryDto> = get("/api/wms/inventories/$id")
+
+    override suspend fun bookInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto> =
+        post("/api/wms/inventories/$id/book", request)
+
+    override suspend fun submitInventoryCounts(
+        id: Long,
+        request: SubmitInventoryCountsRequest
+    ): ApiResult<InventoryDto> = post("/api/wms/inventories/$id/counts", request)
+
+    override suspend fun approveInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto> =
+        post("/api/wms/inventories/$id/approve", request)
+
+    override suspend fun postInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto> =
+        post("/api/wms/inventories/$id/post", request)
+
+    override suspend fun cancelInventory(id: Long, request: CancelInventoryRequest): ApiResult<InventoryDto> =
+        post("/api/wms/inventories/$id/cancel", request)
 
     private suspend inline fun <reified T> put(path: String, body: Any): ApiResult<T> =
         execute {
