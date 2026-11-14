@@ -52,6 +52,7 @@ import org.example.project.data.DemandRepository
 import org.example.project.data.DocumentRepository
 import org.example.project.data.NotificationRepository
 import org.example.project.data.ProjectRepository
+import org.example.project.data.SearchRepository
 import org.example.project.data.TaskRepository
 import org.example.project.data.UserRepository
 import org.example.project.data.WmsRepository
@@ -70,6 +71,8 @@ import org.example.project.ui.notifications.NotificationScreen
 import org.example.project.ui.notifications.NotificationViewModel
 import org.example.project.ui.projects.ProjectViewModel
 import org.example.project.ui.projects.ProjectsScreen
+import org.example.project.ui.search.GlobalSearchBox
+import org.example.project.ui.search.SearchViewModel
 import org.example.project.ui.tasks.TaskViewModel
 import org.example.project.ui.tasks.TasksScreen
 import org.example.project.ui.theme.Avatar
@@ -102,6 +105,7 @@ fun MainScaffold(
     val documentRepository: DocumentRepository = koinInject()
     val notificationRepository: NotificationRepository = koinInject()
     val adminRepository: AdminRepository = koinInject()
+    val searchRepository: SearchRepository = koinInject()
 
     val projectViewModel = remember(user.id) {
         ProjectViewModel(projectRepository, userRepository)
@@ -112,6 +116,7 @@ fun MainScaffold(
     val homeViewModel = remember(user.id) {
         HomeViewModel(taskRepository, notificationRepository, user)
     }
+    val searchViewModel = remember(user.id) { SearchViewModel(searchRepository) }
     val notificationViewModel = remember(user.id) {
         NotificationViewModel(notificationRepository, taskRepository, user)
     }
@@ -148,6 +153,10 @@ fun MainScaffold(
         }
         selected = NavigationDestination.TASKS
     }
+    val onOpenProject: (Long) -> Unit = { projectId ->
+        projectViewModel.openProjectById(projectId)
+        selected = NavigationDestination.PROJECTS
+    }
     val onOpenNotifications: () -> Unit = {
         selected = NavigationDestination.NOTIFICATIONS
     }
@@ -170,7 +179,11 @@ fun MainScaffold(
                     onSelect = { selected = it },
                     onLogout = onLogout,
                     onOpenNotifications = onOpenNotifications,
-                    onOpenProfile = { selected = NavigationDestination.PROFILE }
+                    onOpenProfile = { selected = NavigationDestination.PROFILE },
+                    searchViewModel = searchViewModel,
+                    showSearch = !isCompact,
+                    onOpenTask = onOpenTask,
+                    onOpenProject = onOpenProject
                 )
             },
             bottomBar = {
@@ -248,7 +261,11 @@ private fun TopBar(
     onSelect: (NavigationDestination) -> Unit,
     onLogout: () -> Unit,
     onOpenNotifications: () -> Unit,
-    onOpenProfile: () -> Unit
+    onOpenProfile: () -> Unit,
+    searchViewModel: SearchViewModel,
+    showSearch: Boolean,
+    onOpenTask: (Long) -> Unit,
+    onOpenProject: (Long) -> Unit
 ) {
     val palette = LocalBrandPalette.current
     val theme = LocalThemeController.current
@@ -307,6 +324,16 @@ private fun TopBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+
+        if (showSearch) {
+            GlobalSearchBox(
+                viewModel = searchViewModel,
+                onOpenTask = onOpenTask,
+                onOpenProject = onOpenProject,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+            Spacer(Modifier.width(6.dp))
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {

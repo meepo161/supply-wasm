@@ -70,6 +70,30 @@ class ProjectViewModel(
         }
     }
 
+    /**
+     * Открытие проекта из глобального поиска: id приходит без загруженного DTO,
+     * поэтому карточка запрашивается у сервера — права проверяются повторно.
+     */
+    fun openProjectById(projectId: Long) {
+        _uiState.value = _uiState.value.copy(
+            detailLoading = true,
+            openError = null,
+            memberError = null
+        )
+        viewModelScope.launch {
+            when (val result = projectRepository.get(projectId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    selectedProject = result.data,
+                    detailLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    detailLoading = false,
+                    error = result.error
+                )
+            }
+        }
+    }
+
     fun backToList() {
         _uiState.value = _uiState.value.copy(
             selectedProject = null,
