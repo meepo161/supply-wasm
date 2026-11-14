@@ -48,7 +48,7 @@ kotlin {
             implementation(libs.ktor.clientSerializationJson)
             implementation(libs.ktor.clientWebsockets)
             implementation("com.github.unchil:un7datagrid:0.2.10-1")
-            implementation("androidx.compose.material:material-icons-extended:1.7.3")
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
         }
         jsMain.dependencies {
             implementation(libs.ktor.clientJs)

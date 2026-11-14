@@ -378,8 +378,8 @@ private fun TopBar(
 @Composable
 private fun RoundIconButton(
     glyph: ErpIconGlyph,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
 ) {
     val palette = LocalBrandPalette.current
     val interaction = remember { MutableInteractionSource() }

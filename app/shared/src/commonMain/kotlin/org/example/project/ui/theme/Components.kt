@@ -428,7 +428,7 @@ fun Avatar(
 private fun gradientFor(seed: String): List<Color> {
     val palettes = listOf(
         Gradients.Primary, Gradients.Ocean, Gradients.Aurora,
-        Gradients.Sunset, Gradients.Berry, Gradients.Emerald, Gradients.Amber
+        Gradients.Sunset, Gradients.Berry, Gradients.Emerald, Gradients.AmberGlow
     )
     var hash = 7
     seed.forEach { hash = hash * 31 + it.code }
