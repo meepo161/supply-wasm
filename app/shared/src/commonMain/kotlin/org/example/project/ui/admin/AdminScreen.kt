@@ -19,11 +19,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,6 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.UserDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.PageHeader
 
 @Composable
 fun AdminScreen(
@@ -40,17 +41,18 @@ fun AdminScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Администрирование") })
-        },
-        modifier = modifier
-    ) { padding ->
+    Column(modifier = modifier.fillMaxSize()) {
+        PageHeader(
+            title = "Администрирование",
+            glyph = ErpIconGlyph.Shield,
+            gradient = Gradients.Slate,
+            subtitle = "Пользователи, подразделения и роли"
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             PrimaryTabRow(selectedTabIndex = state.selectedTab.ordinal) {

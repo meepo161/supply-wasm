@@ -453,7 +453,7 @@ private fun AddMemberSelector(
 }
 
 @Composable
-private fun ownerName(project: ProjectDto): String {
+internal fun ownerName(project: ProjectDto): String {
     val owner = project.members.find { it.userId == project.ownerId }
     return owner?.fullName ?: "ID ${project.ownerId}"
 }

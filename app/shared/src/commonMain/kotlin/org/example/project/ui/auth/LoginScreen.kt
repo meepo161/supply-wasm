@@ -1,24 +1,31 @@
 package org.example.project.ui.auth
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,9 +33,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.ApiError
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpIcon
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.GradientButton
+import org.example.project.ui.theme.GradientRing
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.IconBadge
+import org.example.project.ui.theme.LocalBrandPalette
+import org.example.project.ui.theme.SoftButton
 
 @Composable
 fun LoginScreen(
@@ -45,118 +68,317 @@ fun LoginScreen(
     var bootstrapPassword by remember { mutableStateOf("") }
     var bootstrapFullName by remember { mutableStateOf("") }
 
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .widthIn(max = 400.dp)
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "ERP «Авиаагрегат-Н»",
-                style = MaterialTheme.typography.headlineSmall
-            )
-            Text(
-                text = "Вход в систему",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = login,
-                onValueChange = {
-                    login = it
-                    if (state.error != null) onDismissError()
-                },
-                label = { Text("Логин") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isLoading
-            )
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    if (state.error != null) onDismissError()
-                },
-                label = { Text("Пароль") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isLoading
-            )
-
-            state.error?.let { error ->
-                ErrorMessage(error)
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val wide = maxWidth >= 980.dp
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (wide) {
+                BrandPanel(
+                    modifier = Modifier
+                        .weight(1.05f)
+                        .fillMaxHeight()
+                        .padding(20.dp)
+                )
             }
-
-            Button(
-                onClick = { onLogin(login, password) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isLoading && login.isNotBlank() && password.isNotBlank()
+            Box(
+                modifier = Modifier
+                    .weight(if (wide) 0.95f else 1f)
+                    .fillMaxHeight(),
+                contentAlignment = Alignment.Center
             ) {
-                if (state.isLoading) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.padding(4.dp)
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 430.dp)
+                        .padding(horizontal = 26.dp, vertical = 32.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (!wide) {
+                        LogoMark()
+                        Spacer(Modifier.height(18.dp))
+                    }
+                    Text(
+                        text = if (showBootstrap) "Новое пространство" else "С возвращением",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
-                } else {
-                    Text("Войти")
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = if (showBootstrap)
+                            "Создайте первого администратора системы"
+                        else
+                            "Войдите, чтобы продолжить работу с системой предприятия",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(24.dp))
+
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = 22.dp,
+                        gradient = null
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            AppTextField(
+                                value = login,
+                                onValueChange = {
+                                    login = it
+                                    if (state.error != null) onDismissError()
+                                },
+                                label = "Логин",
+                                glyph = ErpIconGlyph.User,
+                                enabled = !state.isLoading,
+                                imeAction = ImeAction.Next
+                            )
+                            AppTextField(
+                                value = password,
+                                onValueChange = {
+                                    password = it
+                                    if (state.error != null) onDismissError()
+                                },
+                                label = "Пароль",
+                                glyph = ErpIconGlyph.Shield,
+                                enabled = !state.isLoading,
+                                isPassword = true,
+                                imeAction = ImeAction.Done,
+                                onDone = {
+                                    if (login.isNotBlank() && password.isNotBlank()) {
+                                        onLogin(login, password)
+                                    }
+                                }
+                            )
+
+                            state.error?.let { error -> ErrorBanner(error) }
+
+                            GradientButton(
+                                text = if (state.isLoading) "Подключаемся…" else "Войти в систему",
+                                onClick = { onLogin(login, password) },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !state.isLoading && login.isNotBlank() && password.isNotBlank(),
+                                leadingIcon = if (state.isLoading) null else ErpIconGlyph.ChevronRight
+                            )
+                            if (state.isLoading) {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    SoftButton(
+                        text = if (showBootstrap) "Вернуться ко входу" else "Создать первого администратора",
+                        onClick = { showBootstrap = !showBootstrap },
+                        enabled = !state.isLoading,
+                        leadingIcon = if (showBootstrap) ErpIconGlyph.ChevronLeft else ErpIconGlyph.Plus
+                    )
+
+                    if (showBootstrap) {
+                        Spacer(Modifier.height(18.dp))
+                        BootstrapForm(
+                            login = bootstrapLogin,
+                            password = bootstrapPassword,
+                            fullName = bootstrapFullName,
+                            onLoginChange = { bootstrapLogin = it },
+                            onPasswordChange = { bootstrapPassword = it },
+                            onFullNameChange = { bootstrapFullName = it },
+                            onSubmit = { onBootstrap(bootstrapLogin, bootstrapPassword, bootstrapFullName) },
+                            isLoading = state.isLoading
+                        )
+                    }
+
+                    Spacer(Modifier.height(28.dp))
+                    Text(
+                        text = "ООО «Авиаагрегат-Н» · Единая информационная система",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            }
-
-            TextButton(
-                onClick = { showBootstrap = !showBootstrap },
-                enabled = !state.isLoading
-            ) {
-                Text(
-                    if (showBootstrap) "Скрыть создание администратора"
-                    else "Создать первого администратора"
-                )
-            }
-
-            if (showBootstrap) {
-                BootstrapForm(
-                    login = bootstrapLogin,
-                    password = bootstrapPassword,
-                    fullName = bootstrapFullName,
-                    onLoginChange = { bootstrapLogin = it },
-                    onPasswordChange = { bootstrapPassword = it },
-                    onFullNameChange = { bootstrapFullName = it },
-                    onSubmit = { onBootstrap(bootstrapLogin, bootstrapPassword, bootstrapFullName) },
-                    isLoading = state.isLoading
-                )
             }
         }
     }
 }
 
 @Composable
-private fun ErrorMessage(error: ApiError) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
+private fun BrandPanel(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(32.dp))
+            .background(Brush.linearGradient(Gradients.Sidebar))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(32.dp))
+            .padding(36.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(Brush.linearGradient(listOf(Brand.BlueBright, Brand.Violet))),
+                contentAlignment = Alignment.Center
+            ) {
+                ErpIcon(ErpIconGlyph.Sparkle, Color.White, Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "Авиаагрегат-Н",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White
+                )
+                Text(
+                    text = "Единая ERP-платформа",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.55f)
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(width = 150.dp, height = 3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Brush.horizontalGradient(Gradients.Aurora))
+            )
+            Text(
+                text = "От потребности\nдо готового изделия",
+                style = MaterialTheme.typography.displaySmall,
+                color = Color.White
+            )
+            Text(
+                text = "Проекты, задачи, склад, снабжение и документы — в одном связанном контуре с историей изменений и прозрачными статусами.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.68f)
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FeaturePill("Задачи и приёмка", ErpIconGlyph.Tasks)
+                FeaturePill("Склад и BOM", ErpIconGlyph.Layers)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FeaturePill("Снабжение", ErpIconGlyph.Cart)
+                FeaturePill("Документы", ErpIconGlyph.Documents)
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GradientRing(modifier = Modifier.size(44.dp))
+            Spacer(Modifier.width(14.dp))
+            Text(
+                text = "Безопасный доступ по ролям и правам",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FeaturePill(text: String, glyph: ErpIconGlyph) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ErpIcon(glyph, Color.White.copy(alpha = 0.8f), Modifier.size(14.dp))
+        Spacer(Modifier.width(7.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.85f)
+        )
+    }
+}
+
+@Composable
+private fun LogoMark() {
+    IconBadge(
+        glyph = ErpIconGlyph.Sparkle,
+        gradient = listOf(Brand.BlueBright, Brand.Violet),
+        size = 56.dp,
+        iconSize = 28.dp
+    )
+}
+
+@Composable
+private fun AppTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    glyph: ErpIconGlyph,
+    enabled: Boolean,
+    isPassword: Boolean = false,
+    imeAction: ImeAction = ImeAction.Next,
+    onDone: () -> Unit = {}
+) {
+    val scheme = MaterialTheme.colorScheme
+    val palette = LocalBrandPalette.current
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        enabled = enabled,
+        leadingIcon = {
+            ErpIcon(glyph, scheme.onSurfaceVariant, Modifier.size(18.dp))
+        },
+        visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(imeAction = imeAction),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = scheme.primary,
+            unfocusedBorderColor = scheme.outline.copy(alpha = 0.7f),
+            focusedContainerColor = if (palette.isDark) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
+            unfocusedContainerColor = if (palette.isDark) scheme.surfaceContainer.copy(alpha = 0.6f) else scheme.surfaceContainerLow.copy(alpha = 0.7f),
+            focusedLabelColor = scheme.primary,
+            unfocusedLabelColor = scheme.onSurfaceVariant
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
+private fun ErrorBanner(error: ApiError) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.75f))
+            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ErpIcon(
+            ErpIconGlyph.Alert,
+            MaterialTheme.colorScheme.error,
+            Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
             Text(
                 text = error.code,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.error
             )
             Text(
                 text = error.message,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
         }
@@ -174,52 +396,53 @@ private fun BootstrapForm(
     onSubmit: () -> Unit,
     isLoading: Boolean
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(22.dp)),
+        contentPadding = 20.dp
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(ErpIconGlyph.Shield, gradient = Gradients.Aurora, size = 32.dp, iconSize = 16.dp)
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = "Первый администратор",
                 style = MaterialTheme.typography.titleSmall
             )
-            OutlinedTextField(
-                value = login,
-                onValueChange = onLoginChange,
-                label = { Text("Логин") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
-            )
-            OutlinedTextField(
+        }
+        Spacer(Modifier.height(14.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppTextField(
                 value = fullName,
                 onValueChange = onFullNameChange,
-                label = { Text("Полное имя") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                label = "Полное имя",
+                glyph = ErpIconGlyph.User,
                 enabled = !isLoading
             )
-            OutlinedTextField(
+            AppTextField(
+                value = login,
+                onValueChange = onLoginChange,
+                label = "Логин",
+                glyph = ErpIconGlyph.User,
+                enabled = !isLoading
+            )
+            AppTextField(
                 value = password,
                 onValueChange = onPasswordChange,
-                label = { Text("Пароль") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                label = "Пароль",
+                glyph = ErpIconGlyph.Shield,
+                enabled = !isLoading,
+                isPassword = true,
+                imeAction = ImeAction.Done,
+                onDone = onSubmit
             )
-            Button(
+            GradientButton(
+                text = "Создать и войти",
                 onClick = onSubmit,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading && login.isNotBlank() && password.isNotBlank() && fullName.isNotBlank()
-            ) {
-                Text("Создать и войти")
-            }
+                enabled = !isLoading && login.isNotBlank() && password.isNotBlank() && fullName.isNotBlank(),
+                gradient = Gradients.Aurora
+            )
         }
     }
 }

@@ -1,28 +1,48 @@
 package org.example.project.ui.notifications
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.example.project.dto.NotificationDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.tasks.toShortDate
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.EmptyState
+import org.example.project.ui.theme.ErpIcon
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.GradientButton
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.IconBadge
+import org.example.project.ui.theme.PillBadge
+import org.example.project.ui.theme.SkeletonLine
+import org.example.project.ui.theme.SoftButton
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
     viewModel: NotificationViewModel,
@@ -31,61 +51,94 @@ fun NotificationScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    val unread = state.notifications.count { !it.isRead }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Центр уведомлений") },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Назад") }
-                }
-            )
-        },
+    Column(
         modifier = modifier
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            .fillMaxSize()
+            .padding(horizontal = 24.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Непрочитанных: ${state.notifications.count { !it.isRead }}",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                TextButton(onClick = viewModel::loadNotifications) { Text("Обновить") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconBadge(ErpIconGlyph.Bell, gradient = Gradients.Berry, size = 40.dp, iconSize = 20.dp)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Центр уведомлений",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = if (unread == 0) "Всё прочитано" else "Непрочитанных: $unread",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-
-            state.operationError?.let { ErrorMessageCard(error = it) }
-
-            if (state.isLoading && state.notifications.isEmpty()) {
-                LoadingOverlay()
-            } else if (state.notifications.isEmpty()) {
-                EmptyState("Нет уведомлений.")
-            } else {
-                NotificationsGrid(
-                    notifications = state.notifications,
-                    onClick = { notification ->
-                        viewModel.markRead(notification)
-                        if (notification.entityType.equals("TASK", ignoreCase = true)) {
-                            viewModel.openTask(notification.entityId, onOpenTask)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().weight(1f)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SoftButton(
+                    text = "Обновить",
+                    onClick = viewModel::loadNotifications,
+                    enabled = !state.isLoading,
+                    leadingIcon = ErpIconGlyph.Refresh
                 )
+                Spacer(Modifier.width(10.dp))
+                SoftButton(
+                    text = "На главную",
+                    onClick = onBack,
+                    leadingIcon = ErpIconGlyph.Home
+                )
+            }
+        }
+
+        state.operationError?.let {
+            ErrorMessageCard(error = it, modifier = Modifier.padding(bottom = 12.dp))
+        }
+
+        when {
+            state.isLoading && state.notifications.isEmpty() -> Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                repeat(5) { SkeletonLine(height = 64.dp) }
+            }
+            state.notifications.isEmpty() -> GlassCard(modifier = Modifier.fillMaxWidth()) {
+                EmptyState(
+                    title = "Уведомлений нет",
+                    text = "Здесь появятся события по задачам, проектам и документам",
+                    glyph = ErpIconGlyph.Bell,
+                    accent = Brand.Violet
+                )
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
+            ) {
+                items(state.notifications, key = { it.id }) { notification ->
+                    NotificationCard(
+                        notification = notification,
+                        onClick = {
+                            viewModel.markRead(notification)
+                            if (notification.entityType.equals("TASK", ignoreCase = true)) {
+                                viewModel.openTask(notification.entityId, onOpenTask)
+                            }
+                        }
+                    )
+                }
                 if (state.hasMore) {
-                    Button(
-                        onClick = viewModel::loadMore,
-                        enabled = !state.isLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Загрузить ещё")
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                            GradientButton(
+                                text = "Загрузить ещё",
+                                onClick = viewModel::loadMore,
+                                enabled = !state.isLoading,
+                                gradient = Gradients.Berry
+                            )
+                        }
                     }
                 }
             }
@@ -94,25 +147,60 @@ fun NotificationScreen(
 }
 
 @Composable
-private fun LoadingOverlay(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+private fun NotificationCard(notification: NotificationDto, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val accent = if (notification.isRead) Brand.Slate else Brand.Violet
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (notification.isRead) scheme.surfaceContainerLow.copy(alpha = 0.55f)
+                else scheme.surfaceContainerLowest
+            )
+            .border(1.dp, accent.copy(alpha = if (notification.isRead) 0.10f else 0.24f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun EmptyState(text: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        IconBadge(
+            ErpIconGlyph.Bell,
+            gradient = if (notification.isRead) Gradients.Slate else Gradients.Berry,
+            size = 36.dp,
+            iconSize = 18.dp
+        )
+        Spacer(Modifier.width(13.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = notification.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.SemiBold,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (!notification.isRead) {
+                    Spacer(Modifier.width(8.dp))
+                    PillBadge(text = "new", accent = Brand.Violet, filled = true)
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = notification.type + " · " + notification.entityType + " " +
+                    notification.entityId + " · " + notification.createdAt.toShortDate(),
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        ErpIcon(
+            ErpIconGlyph.ChevronRight,
+            scheme.onSurfaceVariant.copy(alpha = 0.7f),
+            Modifier.size(16.dp)
         )
     }
 }

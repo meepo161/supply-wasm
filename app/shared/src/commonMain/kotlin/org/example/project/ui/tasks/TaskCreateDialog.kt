@@ -1,14 +1,8 @@
 package org.example.project.ui.tasks
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -17,7 +11,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +24,9 @@ import org.example.project.dto.TaskPriority
 import org.example.project.dto.TaskWorkType
 import org.example.project.dto.UserDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpDialog
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
 import org.example.project.ui.projects.UserDropdown
 
 @Composable
@@ -44,137 +40,127 @@ fun TaskCreateDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая задача") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let {
-                    ErrorMessageCard(error = it)
-                }
+    ErpDialog(
+        title = "Новая задача",
+        subtitle = "Опишите работу, назначьте исполнителя и срок",
+        glyph = ErpIconGlyph.Tasks,
+        gradient = Gradients.Ocean,
+        onDismiss = onDismiss,
+        confirmText = "Создать задачу",
+        onConfirm = onCreate,
+        confirmGradient = Gradients.Ocean
+    ) {
+        error?.let {
+            ErrorMessageCard(error = it)
+        }
 
+        Text(
+            text = "Область задачи",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = form.area == TaskArea.PERSONAL,
+                onClick = { onFormChange(form.copy(area = TaskArea.PERSONAL, projectId = null)) },
+                label = { Text("Личная") }
+            )
+            FilterChip(
+                selected = form.area == TaskArea.PROJECT,
+                onClick = { onFormChange(form.copy(area = TaskArea.PROJECT)) },
+                label = { Text("Проектная") }
+            )
+        }
+
+        OutlinedTextField(
+            value = form.title,
+            onValueChange = { onFormChange(form.copy(title = it)) },
+            label = { Text("Название *") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = form.description,
+            onValueChange = { onFormChange(form.copy(description = it)) },
+            label = {
+                val required = form.area == TaskArea.PROJECT &&
+                    form.assigneeId != null && form.assigneeId != currentUser.id
+                Text(if (required) "Описание *" else "Описание")
+            },
+            minLines = 3,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        TaskWorkTypeDropdown(
+            selected = form.type,
+            onSelect = { onFormChange(form.copy(type = it)) },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        if (form.area == TaskArea.PROJECT) {
+            if (projects.isEmpty()) {
                 Text(
-                    text = "Область задачи",
-                    style = MaterialTheme.typography.labelLarge,
+                    text = "Нет доступных проектов для привязки задачи.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = form.area == TaskArea.PERSONAL,
-                        onClick = { onFormChange(form.copy(area = TaskArea.PERSONAL, projectId = null)) },
-                        label = { Text("Личная") }
-                    )
-                    FilterChip(
-                        selected = form.area == TaskArea.PROJECT,
-                        onClick = { onFormChange(form.copy(area = TaskArea.PROJECT)) },
-                        label = { Text("Проектная") }
-                    )
-                }
-
-                OutlinedTextField(
-                    value = form.title,
-                    onValueChange = { onFormChange(form.copy(title = it)) },
-                    label = { Text("Название *") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = form.description,
-                    onValueChange = { onFormChange(form.copy(description = it)) },
-                    label = {
-                        val required = form.area == TaskArea.PROJECT &&
-                            form.assigneeId != null && form.assigneeId != currentUser.id
-                        Text(if (required) "Описание *" else "Описание")
-                    },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                TaskWorkTypeDropdown(
-                    selected = form.type,
-                    onSelect = { onFormChange(form.copy(type = it)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                if (form.area == TaskArea.PROJECT) {
-                    if (projects.isEmpty()) {
-                        Text(
-                            text = "Нет доступных проектов для привязки задачи.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        ProjectDropdown(
-                            projects = projects,
-                            selected = projects.find { it.id == form.projectId },
-                            onSelect = { onFormChange(form.copy(projectId = it.id)) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    if (users.isEmpty()) {
-                        Text(
-                            text = "Справочник пользователей недоступен, исполнителя выбрать нельзя.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        UserDropdown(
-                            users = users,
-                            selected = users.find { it.id == form.assigneeId },
-                            onSelect = { onFormChange(form.copy(assigneeId = it.id)) },
-                            label = "Исполнитель *",
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                if (form.type == TaskWorkType.REVIEWED) {
-                    if (users.isNotEmpty()) {
-                        UserDropdown(
-                            users = users.filter { it.id != form.assigneeId },
-                            selected = users.find { it.id == form.reviewerId },
-                            onSelect = { onFormChange(form.copy(reviewerId = it.id)) },
-                            label = "Проверяющий *",
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    OutlinedTextField(
-                        value = form.acceptanceCriteria,
-                        onValueChange = { onFormChange(form.copy(acceptanceCriteria = it)) },
-                        label = { Text("Критерии приёмки *") },
-                        minLines = 2,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                OutlinedTextField(
-                    value = form.dueDate,
-                    onValueChange = { onFormChange(form.copy(dueDate = it)) },
-                    label = { Text("Срок выполнения (ГГГГ-ММ-ДД)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                TaskPriorityDropdown(
-                    selected = form.priority,
-                    onSelect = { onFormChange(form.copy(priority = it)) },
+            } else {
+                ProjectDropdown(
+                    projects = projects,
+                    selected = projects.find { it.id == form.projectId },
+                    onSelect = { onFormChange(form.copy(projectId = it.id)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        },
-        confirmButton = {
-            Button(onClick = onCreate) {
-                Text("Создать")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
+            if (users.isEmpty()) {
+                Text(
+                    text = "Справочник пользователей недоступен, исполнителя выбрать нельзя.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                UserDropdown(
+                    users = users,
+                    selected = users.find { it.id == form.assigneeId },
+                    onSelect = { onFormChange(form.copy(assigneeId = it.id)) },
+                    label = "Исполнитель *",
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
-    )
+
+        if (form.type == TaskWorkType.REVIEWED) {
+            if (users.isNotEmpty()) {
+                UserDropdown(
+                    users = users.filter { it.id != form.assigneeId },
+                    selected = users.find { it.id == form.reviewerId },
+                    onSelect = { onFormChange(form.copy(reviewerId = it.id)) },
+                    label = "Проверяющий *",
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            OutlinedTextField(
+                value = form.acceptanceCriteria,
+                onValueChange = { onFormChange(form.copy(acceptanceCriteria = it)) },
+                label = { Text("Критерии приёмки *") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        OutlinedTextField(
+            value = form.dueDate,
+            onValueChange = { onFormChange(form.copy(dueDate = it)) },
+            label = { Text("Срок выполнения (ГГГГ-ММ-ДД)") },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        TaskPriorityDropdown(
+            selected = form.priority,
+            onSelect = { onFormChange(form.copy(priority = it)) },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

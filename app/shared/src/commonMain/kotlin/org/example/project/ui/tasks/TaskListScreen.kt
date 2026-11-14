@@ -1,94 +1,416 @@
 package org.example.project.ui.tasks
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.example.project.dto.ApiError
 import org.example.project.dto.TaskDto
+import org.example.project.dto.TaskPriority
+import org.example.project.dto.TaskStatus
 import org.example.project.dto.UserDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.Avatar
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.EmptyState
+import org.example.project.ui.theme.ErpIcon
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.GradientButton
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.IconBadge
+import org.example.project.ui.theme.PillBadge
+import org.example.project.ui.theme.SkeletonLine
+import org.example.project.ui.theme.SoftButton
+
+private enum class TaskFilter(val label: String, val statuses: List<TaskStatus>) {
+    ALL("Все", emptyList()),
+    ACTIVE("В работе", listOf(TaskStatus.IN_PROGRESS, TaskStatus.ASSIGNED, TaskStatus.NEW)),
+    REVIEW("На приёмке", listOf(TaskStatus.ON_REVIEW)),
+    BLOCKED("Блок", listOf(TaskStatus.BLOCKED, TaskStatus.REWORK)),
+    DONE("Завершённые", listOf(TaskStatus.CLOSED, TaskStatus.CANCELLED))
+}
 
 @Composable
 fun TaskListScreen(
     tasks: List<TaskDto>,
     users: List<UserDto>,
     isLoading: Boolean,
-    error: org.example.project.dto.ApiError?,
+    error: ApiError?,
     onTaskClick: (TaskDto) -> Unit,
     onCreateClick: () -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var filter by remember { mutableStateOf(TaskFilter.ALL) }
+    val filtered = remember(tasks, filter) {
+        if (filter.statuses.isEmpty()) tasks else tasks.filter { it.status in filter.statuses }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 24.dp)
     ) {
+        // Шапка
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Мои задачи",
-                style = MaterialTheme.typography.headlineSmall
-            )
-            Row {
-                Button(onClick = onCreateClick) {
-                    Text("Создать")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconBadge(ErpIconGlyph.Tasks, gradient = Gradients.Ocean, size = 40.dp, iconSize = 20.dp)
+                Spacer(Modifier.width(13.dp))
+                Column {
+                    Text(
+                        text = "Задачи",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "Всего ${tasks.size} · в выборке ${filtered.size}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = onRefresh, enabled = !isLoading) {
-                    Text("Обновить")
-                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SoftButton(
+                    text = "Обновить",
+                    onClick = onRefresh,
+                    enabled = !isLoading,
+                    leadingIcon = ErpIconGlyph.Refresh
+                )
+                Spacer(Modifier.width(10.dp))
+                GradientButton(
+                    text = "Создать задачу",
+                    onClick = onCreateClick,
+                    leadingIcon = ErpIconGlyph.Plus
+                )
             }
         }
 
-        if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
+        // Фильтры
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TaskFilter.entries.forEach { item ->
+                FilterPill(
+                    label = item.label,
+                    count = if (item.statuses.isEmpty()) tasks.size
+                    else tasks.count { it.status in item.statuses },
+                    selected = filter == item,
+                    onClick = { filter = item }
+                )
             }
-            return
         }
 
         error?.let {
-            ErrorMessageCard(error = it, modifier = Modifier.padding(vertical = 8.dp))
+            ErrorMessageCard(error = it, modifier = Modifier.padding(bottom = 12.dp))
         }
 
-        if (tasks.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+        when {
+            isLoading && tasks.isEmpty() -> Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = "Нет доступных задач. Создайте первую задачу.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                repeat(5) { SkeletonLine(height = 74.dp) }
+            }
+            filtered.isEmpty() -> GlassCard(modifier = Modifier.fillMaxWidth()) {
+                EmptyState(
+                    title = if (tasks.isEmpty()) "Пока нет задач" else "В этой выборке пусто",
+                    text = if (tasks.isEmpty()) "Создайте первую задачу, чтобы начать работу"
+                    else "Попробуйте выбрать другой фильтр",
+                    glyph = ErpIconGlyph.Tasks,
+                    accent = Brand.Blue
                 )
             }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
+            ) {
+                items(filtered, key = { it.id }) { task ->
+                    TaskCard(
+                        task = task,
+                        users = users,
+                        currentUserId = null,
+                        onClick = { onTaskClick(task) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterPill(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (selected) Brush.linearGradient(Gradients.Primary)
+                else Brush.linearGradient(
+                    listOf(
+                        scheme.surfaceContainerHigh.copy(alpha = 0.9f),
+                        scheme.surfaceContainer.copy(alpha = 0.9f)
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                if (selected) Color.White.copy(alpha = 0.2f) else scheme.outlineVariant,
+                RoundedCornerShape(50)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) Color.White else scheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(7.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(
+                        if (selected) Color.White.copy(alpha = 0.22f)
+                        else scheme.onSurfaceVariant.copy(alpha = 0.10f)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 1.dp)
+            ) {
+                Text(
+                    text = count.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) Color.White else scheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TaskCard(
+    task: TaskDto,
+    users: List<UserDto>,
+    currentUserId: Long?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val lift by animateFloatAsState(
+        targetValue = if (hovered) 1f else 0f,
+        animationSpec = tween(200),
+        label = "taskCard"
+    )
+    val statusAccent = task.status.accentColor()
+    val assignee = task.assigneeId?.let { id -> users.find { it.id == id } }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        scheme.surfaceContainerLowest,
+                        statusAccent.copy(alpha = 0.04f + 0.05f * lift)
+                    )
+                )
+            )
+            .border(
+                1.dp,
+                Brush.linearGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.4f),
+                        statusAccent.copy(alpha = 0.18f + 0.20f * lift)
+                    )
+                ),
+                RoundedCornerShape(18.dp)
+            )
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(16.dp)
+    ) {
+        BoxWithConstraints {
+            val compact = maxWidth < 620.dp
+            if (compact) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TaskCardHeader(task, statusAccent)
+                    TaskCardMeta(task, assignee, currentUserId)
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 4.dp, height = 46.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(statusAccent, statusAccent.copy(alpha = 0.2f))
+                                )
+                            )
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TaskCardHeader(task, statusAccent)
+                        TaskCardMeta(task, assignee, currentUserId)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    ErpIcon(
+                        ErpIconGlyph.ChevronRight,
+                        scheme.onSurfaceVariant.copy(alpha = 0.6f + 0.4f * lift),
+                        Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskCardHeader(task: TaskDto, accent: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = task.number,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = accent,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(accent.copy(alpha = 0.12f))
+                .padding(horizontal = 7.dp, vertical = 2.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = task.title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(10.dp))
+        PillBadge(text = task.status.localizedName(), accent = accent)
+    }
+}
+
+@Composable
+private fun TaskCardMeta(task: TaskDto, assignee: UserDto?, currentUserId: Long?) {
+    val scheme = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        PriorityTag(task.priority)
+        Spacer(Modifier.width(12.dp))
+        if (assignee != null) {
+            Avatar(name = assignee.fullName, size = 22.dp)
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = if (assignee.id == currentUserId) "Вы" else assignee.fullName,
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         } else {
-            TasksTable(
-                tasks = tasks,
-                users = users,
-                onTaskClick = onTaskClick,
-                modifier = Modifier.padding(top = 8.dp)
+            Text(
+                text = "Без исполнителя",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        if (!task.dueDate.isNullOrBlank()) {
+            ErpIcon(
+                ErpIconGlyph.Clock,
+                scheme.onSurfaceVariant,
+                Modifier.size(13.dp)
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = task.dueDate.toShortDate(),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.onSurfaceVariant
             )
         }
     }
+}
+
+@Composable
+private fun PriorityTag(priority: TaskPriority) {
+    val color = priority.accentColor()
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 7.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = priority.localizedName(),
+            style = MaterialTheme.typography.labelSmall,
+            color = color
+        )
+    }
+}
+
+internal fun TaskStatus.accentColor(): Color = when (this) {
+    TaskStatus.NEW -> Brand.Blue
+    TaskStatus.ASSIGNED -> Brand.Indigo
+    TaskStatus.IN_PROGRESS -> Brand.Teal
+    TaskStatus.BLOCKED -> Brand.Crimson
+    TaskStatus.ON_REVIEW -> Brand.Amber
+    TaskStatus.REWORK -> Brand.Orange
+    TaskStatus.CLOSED -> Brand.Mint
+    TaskStatus.CANCELLED -> Brand.Slate
+}
+
+internal fun TaskPriority.accentColor(): Color = when (this) {
+    TaskPriority.LOW -> Brand.Mint
+    TaskPriority.NORMAL -> Brand.Blue
+    TaskPriority.HIGH -> Brand.Orange
+    TaskPriority.CRITICAL -> Brand.Crimson
 }

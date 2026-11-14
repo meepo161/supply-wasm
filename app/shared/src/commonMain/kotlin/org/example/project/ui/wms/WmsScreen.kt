@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +35,9 @@ import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.PageHeader
 
 @Composable
 fun WmsScreen(
@@ -43,6 +47,13 @@ fun WmsScreen(
     val state by viewModel.uiState.collectAsState()
 
     Column(modifier = modifier.fillMaxSize()) {
+        PageHeader(
+            title = "Склад",
+            glyph = ErpIconGlyph.Warehouse,
+            gradient = Gradients.Emerald,
+            subtitle = "Склады, ячейки, остатки, приёмка и резервы"
+        )
+        Spacer(Modifier.height(10.dp))
         ScrollableTabRow(
             selectedTabIndex = WmsTab.entries.indexOf(state.selectedTab)
         ) {
@@ -59,7 +70,7 @@ fun WmsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(16.dp)
+                .padding(horizontal = 24.dp, vertical = 12.dp)
         ) {
             when (state.selectedTab) {
                 WmsTab.WAREHOUSES -> WarehousesTab(state, viewModel)

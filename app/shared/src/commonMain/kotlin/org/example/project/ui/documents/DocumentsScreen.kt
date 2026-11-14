@@ -21,10 +21,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +38,9 @@ import org.example.project.dto.DocumentVersionStatus
 import org.example.project.ui.demand.ProjectDropdown
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.tasks.toShortDateTime
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.PageHeader
 
 @Composable
 fun DocumentsScreen(
@@ -48,24 +49,19 @@ fun DocumentsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(state.currentPage.title) },
-                navigationIcon = {
-                    if (state.currentPage != DocumentPage.LIST) {
-                        TextButton(onClick = viewModel::goBack) { Text("Назад") }
-                    }
-                }
-            )
-        },
-        modifier = modifier
-    ) { padding ->
+    Column(modifier = modifier.fillMaxSize()) {
+        PageHeader(
+            title = state.currentPage.title,
+            glyph = ErpIconGlyph.Documents,
+            gradient = Gradients.AmberGlow,
+            subtitle = "Файлы, версии и связи с объектами",
+            onBack = if (state.currentPage != DocumentPage.LIST) viewModel::goBack else null
+        )
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 20.dp)
         ) {
             when (state.currentPage) {
                 DocumentPage.LIST -> DocumentListPage(state, viewModel)
