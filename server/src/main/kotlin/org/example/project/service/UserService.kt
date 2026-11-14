@@ -3,6 +3,7 @@ package org.example.project.service
 import org.example.project.dto.CreateUserRequest
 import org.example.project.dto.UpdateUserRequest
 import org.example.project.dto.UserDto
+import org.example.project.dto.UserOptionDto
 import org.example.project.exception.ForbiddenException
 import org.example.project.exception.NotFoundException
 import org.example.project.exception.ValidationException
@@ -20,6 +21,12 @@ class UserService(
 
     fun list(): List<UserDto> {
         return userRepository.list().map { it.toDto() }
+    }
+
+    // Короткий справочник для комбобоксов: доступен любому авторизованному
+    // пользователю без users:read_any, отдаёт только id и ФИО активных.
+    fun listOptions(): List<UserOptionDto> {
+        return userRepository.listActive().map { UserOptionDto(id = it.id, fullName = it.fullName) }
     }
 
     fun create(request: CreateUserRequest, createdBy: CurrentUser): UserDto {

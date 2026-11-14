@@ -360,7 +360,7 @@ fun CreateReceiptDialog(
                     ReceiptLineRow(
                         line = line,
                         locations = locations,
-                        nomenclature = nomenclature,
+                        nomenclature = nomenclature.filterNot { it.archived },
                         onChange = { onUpdateLine(index, it) },
                         onRemove = { onRemoveLine(index) }
                     )
@@ -410,9 +410,19 @@ private fun ReceiptLineRow(
             singleLine = true
         )
         OutlinedTextField(
+            value = line.receivedQuantity,
+            onValueChange = { onChange(line.copy(receivedQuantity = it)) },
+            label = { Text("Фактическое количество") },
+            supportingText = { Text("Если пусто, принимается ожидаемое количество") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        OutlinedTextField(
             value = line.lotNumber,
             onValueChange = { onChange(line.copy(lotNumber = it)) },
-            label = { Text("Номер партии") },
+            label = {
+                Text(if (nomenclature.find { it.id == line.nomenclatureId }?.lotTracked == true) "Номер партии *" else "Номер партии")
+            },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )

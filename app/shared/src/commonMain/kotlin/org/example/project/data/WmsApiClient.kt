@@ -51,6 +51,7 @@ import org.example.project.dto.InventoryStatus
 import org.example.project.dto.SubmitInventoryCountsRequest
 import org.example.project.dto.PostReceiptRequest
 import org.example.project.dto.ReceiptDto
+import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
@@ -90,6 +91,15 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
 
     override suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto> =
         post("/api/wms/receipts", request)
+
+    override suspend fun listReceipts(warehouseId: Long?, status: ReceiptStatus?): ApiResult<List<ReceiptDto>> =
+        getWithParams(
+            path = "/api/wms/receipts",
+            params = buildMap {
+                warehouseId?.let { put("warehouseId", it.toString()) }
+                status?.let { put("status", it.name) }
+            }
+        )
 
     override suspend fun getReceipt(id: Long): ApiResult<ReceiptDto> = get("/api/wms/receipts/$id")
 

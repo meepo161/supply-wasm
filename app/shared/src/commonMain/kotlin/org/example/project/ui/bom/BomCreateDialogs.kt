@@ -22,12 +22,14 @@ import org.example.project.dto.BomLineDto
 import org.example.project.dto.BomRevisionSummaryDto
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ProductModelDto
+import org.example.project.dto.UserOptionDto
 import org.example.project.dto.WarehouseDto
 import org.example.project.ui.projects.ErrorMessageCard
 
 @Composable
 fun CreateProductModelDialog(
     form: CreateProductModelForm,
+    users: List<UserOptionDto>,
     error: ApiError?,
     onFormChange: (CreateProductModelForm) -> Unit,
     onCreate: () -> Unit,
@@ -42,7 +44,7 @@ fun CreateProductModelDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 error?.let { ErrorMessageCard(error = it) }
-                ModelFormFields(form, onFormChange)
+                ModelFormFields(form, users, onFormChange)
             }
         },
         confirmButton = { Button(onClick = onCreate) { Text("Создать") } },
@@ -54,6 +56,7 @@ fun CreateProductModelDialog(
 fun EditProductModelDialog(
     model: ProductModelDto,
     form: CreateProductModelForm,
+    users: List<UserOptionDto>,
     error: ApiError?,
     onFormChange: (CreateProductModelForm) -> Unit,
     onSave: () -> Unit,
@@ -68,15 +71,7 @@ fun EditProductModelDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 error?.let { ErrorMessageCard(error = it) }
-                OutlinedTextField(
-                    value = form.code,
-                    onValueChange = { onFormChange(form.copy(code = it)) },
-                    label = { Text("Код") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    readOnly = true
-                )
-                ModelFormFields(form, onFormChange, readOnlyCode = true)
+                ModelFormFields(form, users, onFormChange, readOnlyCode = true)
             }
         },
         confirmButton = { Button(onClick = onSave) { Text("Сохранить") } },
@@ -87,6 +82,7 @@ fun EditProductModelDialog(
 @Composable
 private fun ModelFormFields(
     form: CreateProductModelForm,
+    users: List<UserOptionDto>,
     onFormChange: (CreateProductModelForm) -> Unit,
     readOnlyCode: Boolean = false
 ) {
@@ -118,22 +114,29 @@ private fun ModelFormFields(
             onSelect = { onFormChange(form.copy(status = it)) },
             modifier = Modifier.fillMaxWidth()
         )
-        OutlinedTextField(
-            value = form.designerId,
-            onValueChange = { onFormChange(form.copy(designerId = it)) },
-            label = { Text("ID конструктора") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+        UserOptionDropdown(
+            users = users,
+            selected = selectedUser(users, form.designerId),
+            onSelect = { onFormChange(form.copy(designerId = it.id)) },
+            onClear = { onFormChange(form.copy(designerId = null)) },
+            label = "Конструктор",
+            modifier = Modifier.fillMaxWidth()
         )
-        OutlinedTextField(
-            value = form.technologistId,
-            onValueChange = { onFormChange(form.copy(technologistId = it)) },
-            label = { Text("ID технолога") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+        UserOptionDropdown(
+            users = users,
+            selected = selectedUser(users, form.technologistId),
+            onSelect = { onFormChange(form.copy(technologistId = it.id)) },
+            onClear = { onFormChange(form.copy(technologistId = null)) },
+            label = "Технолог",
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
+
+private fun selectedUser(users: List<UserOptionDto>, id: Long?): UserOptionDto? =
+    users.find { it.id == id } ?: id?.let {
+        UserOptionDto(id = it, fullName = "Ранее назначенный сотрудник")
+    }
 
 @Composable
 fun CreateRevisionDialog(

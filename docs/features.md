@@ -73,6 +73,12 @@ Relevant sources:
 - [`ProjectApiClient.kt`](../app/shared/src/commonMain/kotlin/org/example/project/data/ProjectApiClient.kt)
 - [`SharedModule.kt`](../app/shared/src/commonMain/kotlin/org/example/project/di/SharedModule.kt)
 
+## Reference selectors and receipt workflow
+
+The demand, product-model and receipt forms use searchable selectors instead of manual identifier entry. Product designers and technologists are selected from the authenticated `GET /api/users/options` directory, which exposes only the ID and full name of active users and does not require `users:read_any`.
+
+Demand creation provides searchable project, model, BOM revision and nomenclature selectors. Selecting nomenclature fills its unit of measure. Receipt creation provides warehouse, storage-location and nomenclature selectors, expected and received quantities, and lot validation for lot-tracked items. The receipt workspace loads documents through `GET /api/wms/receipts` with warehouse/status filters, opens a selected document without asking for its ID, and displays warehouse and nomenclature names. The list endpoint loads lines for all returned receipts in one query and retains the existing `wms:read` permission check.
+
 ## HTTP server
 
 The Ktor Netty server listens on `0.0.0.0:8080` and uses PostgreSQL with Flyway migrations, generated jOOQ classes and Koin.

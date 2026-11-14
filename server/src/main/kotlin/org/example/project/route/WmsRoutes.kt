@@ -70,6 +70,20 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             call.respond(HttpStatusCode.Created, ApiResponse.success(receipt))
         }
 
+        get("/receipts") {
+            val warehouseId = call.request.queryParameters["warehouseId"]?.let {
+                it.toLongOrNull() ?: throw ValidationException("Invalid warehouseId")
+            }
+            val status = call.request.queryParameters["status"]?.let {
+                try {
+                    ReceiptStatus.valueOf(it)
+                } catch (_: IllegalArgumentException) {
+                    throw ValidationException("Invalid receipt status")
+                }
+            }
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listReceipts(warehouseId, status, call.currentUser())))
+        }
+
         get("/receipts/{id}") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid receipt id")

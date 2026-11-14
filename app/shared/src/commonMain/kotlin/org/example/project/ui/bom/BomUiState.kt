@@ -9,6 +9,7 @@ import org.example.project.dto.BomRevisionSummaryDto
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ProductModelDto
 import org.example.project.dto.ProductModelStatus
+import org.example.project.dto.UserOptionDto
 import org.example.project.dto.WarehouseDto
 
 data class BomUiState(
@@ -20,6 +21,7 @@ data class BomUiState(
     val explodeReport: BomExplodeReportDto? = null,
     val nomenclature: List<NomenclatureDto> = emptyList(),
     val warehouses: List<WarehouseDto> = emptyList(),
+    val users: List<UserOptionDto> = emptyList(),
     val currentPage: BomPage = BomPage.MODELS,
     val isLoading: Boolean = false,
     val operationError: ApiError? = null,
@@ -55,8 +57,8 @@ data class CreateProductModelForm(
     val name: String = "",
     val description: String = "",
     val status: ProductModelStatus = ProductModelStatus.DEVELOPMENT,
-    val designerId: String = "",
-    val technologistId: String = ""
+    val designerId: Long? = null,
+    val technologistId: Long? = null
 )
 
 data class CreateRevisionForm(

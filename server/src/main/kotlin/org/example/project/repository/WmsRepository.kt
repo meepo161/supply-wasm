@@ -407,10 +407,29 @@ class WmsRepository(private val dsl: DSLContext) {
             .execute()
     }
 
+    fun listReceipts(warehouseId: Long?, status: String?): List<ReceiptsRecord> {
+        val conditions = mutableListOf<Condition>()
+        warehouseId?.let { conditions += RECEIPTS.WAREHOUSE_ID.eq(it) }
+        status?.let { conditions += RECEIPTS.STATUS.eq(it) }
+        return dsl.selectFrom(RECEIPTS)
+            .where(conditions)
+            .orderBy(RECEIPTS.ID.desc())
+            .limit(200)
+            .fetch()
+    }
+
     fun listReceiptLines(receiptId: Long): List<ReceiptLinesRecord> {
         return dsl.selectFrom(RECEIPT_LINES)
             .where(RECEIPT_LINES.RECEIPT_ID.eq(receiptId))
             .orderBy(RECEIPT_LINES.LINE_NO.asc())
+            .fetch()
+    }
+
+    fun listReceiptLinesFor(receiptIds: List<Long>): List<ReceiptLinesRecord> {
+        if (receiptIds.isEmpty()) return emptyList()
+        return dsl.selectFrom(RECEIPT_LINES)
+            .where(RECEIPT_LINES.RECEIPT_ID.`in`(receiptIds))
+            .orderBy(RECEIPT_LINES.RECEIPT_ID.asc(), RECEIPT_LINES.LINE_NO.asc())
             .fetch()
     }
 

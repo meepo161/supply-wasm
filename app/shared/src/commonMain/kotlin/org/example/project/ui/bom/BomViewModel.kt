@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.project.data.ApiResult
 import org.example.project.data.BomRepository
+import org.example.project.data.UserRepository
 import org.example.project.data.WmsRepository
 import org.example.project.dto.ApproveBomRevisionRequest
 import org.example.project.dto.BomExplodeRequest
@@ -26,6 +27,7 @@ import org.example.project.dto.hasPermission
 class BomViewModel(
     private val bomRepository: BomRepository,
     private val wmsRepository: WmsRepository,
+    private val userRepository: UserRepository,
     private val currentUser: UserDto
 ) : ViewModel() {
 
@@ -36,6 +38,7 @@ class BomViewModel(
         loadModels()
         loadNomenclature()
         loadWarehouses()
+        loadUsers()
     }
 
     fun dismissError() {
@@ -51,8 +54,8 @@ class BomViewModel(
                     name = dialog.model.name,
                     description = dialog.model.description ?: "",
                     status = dialog.model.status,
-                    designerId = dialog.model.designerId?.toString() ?: "",
-                    technologistId = dialog.model.technologistId?.toString() ?: ""
+                    designerId = dialog.model.designerId,
+                    technologistId = dialog.model.technologistId
                 ),
                 operationError = null
             )
@@ -177,6 +180,15 @@ class BomViewModel(
         }
     }
 
+    private fun loadUsers() {
+        viewModelScope.launch {
+            when (val result = userRepository.listOptions()) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(users = result.data)
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+            }
+        }
+    }
+
     private fun loadRevisions(modelId: Long) {
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
@@ -220,8 +232,8 @@ class BomViewModel(
                     name = form.name.trim(),
                     description = form.description.takeIf { it.isNotBlank() }?.trim(),
                     status = form.status,
-                    designerId = form.designerId.toLongOrNull(),
-                    technologistId = form.technologistId.toLongOrNull()
+                    designerId = form.designerId,
+                    technologistId = form.technologistId
                 )
             )) {
                 is ApiResult.Success -> {
@@ -258,8 +270,8 @@ class BomViewModel(
                     name = form.name.trim().takeIf { it.isNotBlank() },
                     description = form.description.takeIf { it.isNotBlank() }?.trim(),
                     status = form.status,
-                    designerId = form.designerId.toLongOrNull(),
-                    technologistId = form.technologistId.toLongOrNull(),
+                    designerId = form.designerId,
+                    technologistId = form.technologistId,
                     version = model.version
                 )
             )) {

@@ -292,6 +292,17 @@ class WmsService(
         return receipt.toDto(wmsRepository.listReceiptLines(id))
     }
 
+    fun listReceipts(
+        warehouseId: Long?,
+        status: ReceiptStatus?,
+        currentUser: CurrentUser
+    ): List<ReceiptDto> {
+        currentUser.requirePermission("wms", "read")
+        val receipts = wmsRepository.listReceipts(warehouseId, status?.name)
+        val linesByReceipt = wmsRepository.listReceiptLinesFor(receipts.map { it.id }).groupBy { it.receiptId }
+        return receipts.map { it.toDto(linesByReceipt[it.id] ?: emptyList()) }
+    }
+
     // Проведение атомарно: статус POSTED, движения RECEIPT и физический остаток
     // в одной транзакции. Повторное проведение отклоняется условным UPDATE
     // (инварианты 2 и 18 ТЗ), конкурентное изменение — проверкой версии (19).

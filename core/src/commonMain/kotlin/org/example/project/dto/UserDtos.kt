@@ -16,6 +16,12 @@ data class UserDto(
 )
 
 @Serializable
+data class UserOptionDto(
+    val id: Long,
+    val fullName: String
+)
+
+@Serializable
 data class CreateUserRequest(
     val login: String,
     val password: String,

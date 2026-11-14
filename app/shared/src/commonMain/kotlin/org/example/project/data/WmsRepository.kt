@@ -8,6 +8,7 @@ import org.example.project.dto.CreateWarehouseRequest
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.PostReceiptRequest
 import org.example.project.dto.ReceiptDto
+import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
@@ -60,6 +61,7 @@ interface WmsRepository {
     suspend fun getStock(warehouseId: Long?, nomenclatureId: Long?): ApiResult<List<StockBalanceDto>>
 
     suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto>
+    suspend fun listReceipts(warehouseId: Long?, status: ReceiptStatus?): ApiResult<List<ReceiptDto>>
     suspend fun getReceipt(id: Long): ApiResult<ReceiptDto>
     suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto>
 

@@ -63,6 +63,7 @@ fun BomScreen(
     when (val dialog = state.activeDialog) {
         BomDialog.CreateModel -> CreateProductModelDialog(
             form = state.createModelForm,
+            users = state.users,
             error = state.operationError,
             onFormChange = viewModel::updateCreateModelForm,
             onCreate = viewModel::createModel,
@@ -71,6 +72,7 @@ fun BomScreen(
         is BomDialog.EditModel -> EditProductModelDialog(
             model = dialog.model,
             form = state.editModelForm,
+            users = state.users,
             error = state.operationError,
             onFormChange = viewModel::updateEditModelForm,
             onSave = viewModel::updateModel,

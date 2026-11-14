@@ -30,10 +30,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReceiptStatus
+import org.example.project.dto.WarehouseDto
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
+import org.example.project.ui.components.SearchableDropdown
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.Gradients
@@ -437,17 +440,45 @@ private fun ReceiptsTab(
         if (state.currentReceipt == null) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SearchableDropdown(
+                    items = state.warehouses,
+                    selected = state.warehouses.find { it.id == state.receiptFilters.warehouseId },
+                    onSelect = { viewModel.updateReceiptWarehouseFilter(it.id) },
+                    onClear = { viewModel.updateReceiptWarehouseFilter(null) },
+                    clearText = "Все склады",
+                    label = "Склад",
+                    itemText = { "${it.code} — ${it.name}" },
+                    modifier = Modifier.weight(1f)
+                )
+                ReceiptStatusDropdown(
+                    selected = state.receiptFilters.status,
+                    onSelect = viewModel::updateReceiptStatusFilter,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = state.loadReceiptId,
-                    onValueChange = viewModel::updateLoadReceiptId,
-                    label = { Text("ID приёмки") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                ReceiptDropdown(
+                    receipts = state.receipts,
+                    selected = null,
+                    onSelect = viewModel::selectReceipt,
+                    label = "Открыть приёмку",
+                    modifier = Modifier.weight(1f)
                 )
-                Button(onClick = viewModel::loadReceiptById) { Text("Открыть") }
+                TextButton(onClick = viewModel::loadReceipts) { Text("Обновить") }
+            }
+            if (state.isLoading && state.receipts.isEmpty()) {
+                CircularProgressIndicator()
+            } else if (state.receipts.isEmpty()) {
+                Text(
+                    text = "Приёмки по выбранным фильтрам не найдены.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Button(onClick = { viewModel.showDialog(WmsDialog.CreateReceipt) }) {
                 Text("Создать приёмку")
@@ -455,6 +486,8 @@ private fun ReceiptsTab(
         } else {
             ReceiptDetailCard(
                 receipt = state.currentReceipt,
+                warehouse = state.warehouses.find { it.id == state.currentReceipt.warehouseId },
+                nomenclature = state.nomenclature,
                 onPost = viewModel::postReceipt,
                 onClose = viewModel::clearCurrentReceipt
             )
@@ -465,6 +498,8 @@ private fun ReceiptsTab(
 @Composable
 private fun ReceiptDetailCard(
     receipt: ReceiptDto,
+    warehouse: WarehouseDto?,
+    nomenclature: List<NomenclatureDto>,
     onPost: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -477,20 +512,25 @@ private fun ReceiptDetailCard(
             Text(text = "Приёмка ${receipt.number}", style = MaterialTheme.typography.titleMedium)
             Text(text = "Статус: ${receipt.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
             Text(text = "Источник: ${receipt.sourceType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-            Text(text = "Версия: ${receipt.version}", style = MaterialTheme.typography.bodyMedium)
+            warehouse?.let { Text(text = "Склад: ${it.code} — ${it.name}", style = MaterialTheme.typography.bodyMedium) }
+            receipt.sourceRef?.let { Text(text = "Основание: $it", style = MaterialTheme.typography.bodyMedium) }
+            receipt.expectedAt?.let { Text(text = "Ожидается: $it", style = MaterialTheme.typography.bodyMedium) }
             HorizontalDivider()
             Text("Строки:", style = MaterialTheme.typography.labelLarge)
             receipt.lines.forEach { line ->
+                val item = nomenclature.find { it.id == line.nomenclatureId }
                 Text(
-                    text = "№${line.lineNo}: номенклатура ${line.nomenclatureId}, ожидалось ${line.expectedQuantity}, принято ${line.receivedQuantity}",
+                    text = "№${line.lineNo}: ${item?.let { "${it.code} — ${it.name}" } ?: "Номенклатура недоступна"}\n" +
+                        "Ожидалось ${line.expectedQuantity} ${item?.unit.orEmpty()}, принято ${line.receivedQuantity} ${item?.unit.orEmpty()}",
                     style = MaterialTheme.typography.bodySmall
                 )
+                line.note?.let { Text(text = it, style = MaterialTheme.typography.bodySmall) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (receipt.status == ReceiptStatus.DRAFT) {
                     Button(onClick = onPost) { Text("Провести") }
                 }
-                TextButton(onClick = onClose) { Text("Закрыть") }
+                TextButton(onClick = onClose) { Text("К списку") }
             }
         }
     }

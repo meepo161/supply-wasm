@@ -451,6 +451,95 @@ class WmsRoutesTest {
         assertEquals(HttpStatusCode.Forbidden, readDenied.status)
     }
 
+    @Test
+    fun `receipts list returns created receipts with lines ordered by id desc`() = testApp {
+        val admin = jsonClient()
+        createUserWithRole(admin, "keeper", "password", "Keeper User", wmsPermissions())
+        val client = loginClient("keeper", "password")
+
+        val warehouse = createWarehouse(client, "WH-1")
+        val location = createLocation(client, warehouse.id, "A-01")
+        val nomenclature = createNomenclature(client, "MAT-1")
+
+        val first = createReceipt(client, warehouse.id, location.id, nomenclature.id, expected = "10")
+        val second = createReceipt(client, warehouse.id, location.id, nomenclature.id, expected = "5", received = "4")
+
+        val response = client.get("/api/wms/receipts")
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        val list = response.bodyAs<ApiResponse<List<ReceiptDto>>>().data!!
+        assertEquals(listOf(second.id, first.id), list.map { it.id })
+        assertEquals(1, list[0].lines.size)
+        assertQty("5", list[0].lines[0].expectedQuantity)
+        assertQty("4", list[0].lines[0].receivedQuantity)
+    }
+
+    @Test
+    fun `receipts list filters by warehouse and status`() = testApp {
+        val admin = jsonClient()
+        createUserWithRole(admin, "keeper", "password", "Keeper User", wmsPermissions())
+        val client = loginClient("keeper", "password")
+
+        val warehouse1 = createWarehouse(client, "WH-1")
+        val warehouse2 = createWarehouse(client, "WH-2")
+        val location1 = createLocation(client, warehouse1.id, "A-01")
+        val location2 = createLocation(client, warehouse2.id, "B-01")
+        val nomenclature = createNomenclature(client, "MAT-1")
+
+        val postedReceipt = createReceipt(client, warehouse1.id, location1.id, nomenclature.id, expected = "10")
+        val postResponse = client.post("/api/wms/receipts/${postedReceipt.id}/post") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(PostReceiptRequest(postedReceipt.version)))
+        }
+        assertEquals(HttpStatusCode.OK, postResponse.status, postResponse.bodyAsText())
+        val draftReceipt = createReceipt(client, warehouse2.id, location2.id, nomenclature.id, expected = "3")
+
+        val byWarehouse = client.get("/api/wms/receipts?warehouseId=${warehouse1.id}")
+            .bodyAs<ApiResponse<List<ReceiptDto>>>().data!!
+        assertEquals(listOf(postedReceipt.id), byWarehouse.map { it.id })
+
+        val posted = client.get("/api/wms/receipts?status=POSTED")
+            .bodyAs<ApiResponse<List<ReceiptDto>>>().data!!
+        assertEquals(listOf(postedReceipt.id), posted.map { it.id })
+
+        val draft = client.get("/api/wms/receipts?status=DRAFT")
+            .bodyAs<ApiResponse<List<ReceiptDto>>>().data!!
+        assertEquals(listOf(draftReceipt.id), draft.map { it.id })
+
+        val combined = client.get("/api/wms/receipts?warehouseId=${warehouse2.id}&status=POSTED")
+            .bodyAs<ApiResponse<List<ReceiptDto>>>().data!!
+        assertTrue(combined.isEmpty())
+
+        val invalidStatus = client.get("/api/wms/receipts?status=UNKNOWN")
+        assertEquals(HttpStatusCode.BadRequest, invalidStatus.status)
+    }
+
+    @Test
+    fun `receipts list requires wms read permission`() = testApp {
+        val admin = jsonClient()
+        createUserWithRole(admin, "keeper", "password", "Keeper User", wmsPermissions())
+        createUserWithRole(
+            admin, "reader", "password", "Reader User",
+            listOf(CreatePermissionRequest("wms", "read"))
+        )
+        createUserWithRole(admin, "nobody", "password", "No Rights", emptyList())
+
+        val keeperClient = loginClient("keeper", "password")
+        val readerClient = loginClient("reader", "password")
+        val nobodyClient = loginClient("nobody", "password")
+
+        val warehouse = createWarehouse(keeperClient, "WH-1")
+        val location = createLocation(keeperClient, warehouse.id, "A-01")
+        val nomenclature = createNomenclature(keeperClient, "MAT-1")
+        createReceipt(keeperClient, warehouse.id, location.id, nomenclature.id, expected = "1")
+
+        val readAllowed = readerClient.get("/api/wms/receipts")
+        assertEquals(HttpStatusCode.OK, readAllowed.status, readAllowed.bodyAsText())
+        assertEquals(1, readAllowed.bodyAs<ApiResponse<List<ReceiptDto>>>().data!!.size)
+
+        val readDenied = nobodyClient.get("/api/wms/receipts")
+        assertEquals(HttpStatusCode.Forbidden, readDenied.status)
+    }
+
     private fun wmsPermissions() = listOf(
         CreatePermissionRequest("wms", "manage"),
         CreatePermissionRequest("wms", "post"),

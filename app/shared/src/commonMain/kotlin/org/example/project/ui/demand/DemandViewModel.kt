@@ -334,11 +334,9 @@ class DemandViewModel(
     fun onSourceTypeChanged(sourceType: DemandSourceType) {
         _uiState.value = _uiState.value.copy(
             createDemandForm = CreateDemandForm(sourceType = sourceType),
+            revisions = emptyList(),
             operationError = null
         )
-        if (sourceType == DemandSourceType.PROJECT) {
-            _uiState.value.models.firstOrNull()?.let { onModelSelected(it.id) }
-        }
     }
 
     fun onProjectSelected(projectId: Long?) {
@@ -364,8 +362,12 @@ class DemandViewModel(
     private fun loadRevisions(modelId: Long) {
         viewModelScope.launch {
             when (val result = bomRepository.listRevisions(modelId)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(revisions = result.data)
-                is ApiResult.Error -> { }
+                is ApiResult.Success -> if (_uiState.value.createDemandForm.modelId == modelId) {
+                    _uiState.value = _uiState.value.copy(revisions = result.data)
+                }
+                is ApiResult.Error -> if (_uiState.value.createDemandForm.modelId == modelId) {
+                    _uiState.value = _uiState.value.copy(operationError = result.error)
+                }
             }
         }
     }

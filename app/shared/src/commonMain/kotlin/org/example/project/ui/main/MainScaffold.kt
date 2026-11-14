@@ -126,7 +126,7 @@ fun MainScaffold(
         null
     }
     val bomViewModel = if (NavigationDestination.BOM in destinations) {
-        remember(user) { BomViewModel(bomRepository, wmsRepository, user) }
+        remember(user) { BomViewModel(bomRepository, wmsRepository, userRepository, user) }
     } else {
         null
     }

@@ -216,10 +216,12 @@ private fun DemandLineRow(
         )
         OutlinedTextField(
             value = line.unit,
-            onValueChange = { onChange(line.copy(unit = it)) },
-            label = { Text("Единица измерения *") },
+            onValueChange = {},
+            label = { Text("Единица измерения") },
+            supportingText = { Text("Подставляется из выбранной номенклатуры") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            readOnly = true
         )
         TextButton(onClick = onRemove) { Text("Удалить строку") }
     }
