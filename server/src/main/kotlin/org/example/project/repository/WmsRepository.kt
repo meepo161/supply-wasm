@@ -494,9 +494,9 @@ class WmsRepository(private val dsl: DSLContext) {
         if (orderId != null) sql.append(" WHERE order_id = ?")
         sql.append(" ORDER BY order_id, line_no")
         return if (orderId != null) {
-            dsl.fetch(sql.toString(), orderId).intoList()
+            dsl.fetch(sql.toString(), orderId).toList()
         } else {
-            dsl.fetch(sql.toString()).intoList()
+            dsl.fetch(sql.toString()).toList()
         }
     }
 
@@ -505,18 +505,25 @@ class WmsRepository(private val dsl: DSLContext) {
      * `excludeReceiptId` исключает текущий документ — так пересчитывается
      * остаток при проведении, не считая приёмку дважды.
      */
-    fun acceptedQuantityForOrderLine(orderLineId: Long, excludeReceiptId: Long? = null): BigDecimal =
-        dsl.fetchOne(
+    fun acceptedQuantityForOrderLine(orderLineId: Long, excludeReceiptId: Long? = null): BigDecimal {
+        val exclusion = if (excludeReceiptId == null) "" else " AND r.id <> ?"
+        val parameters = if (excludeReceiptId == null) {
+            arrayOf(orderLineId)
+        } else {
+            arrayOf(orderLineId, excludeReceiptId)
+        }
+        return dsl.fetchOne(
             """
             SELECT COALESCE(SUM(rl.received_quantity), 0) AS total
             FROM receipt_lines rl
                      JOIN receipts r ON r.id = rl.receipt_id
             WHERE rl.purchase_order_line_id = ?
               AND r.status = 'POSTED'
-              AND (? IS NULL OR r.id <> ?)
+              $exclusion
             """.trimIndent(),
-            orderLineId, excludeReceiptId, excludeReceiptId
+            *parameters
         )?.get("total", BigDecimal::class.java) ?: BigDecimal.ZERO
+    }
 
     /** Принято по позициям поставки: позиция заказа → количество. */
     fun acceptedQuantitiesForDelivery(deliveryId: Long): Map<Long, BigDecimal> =

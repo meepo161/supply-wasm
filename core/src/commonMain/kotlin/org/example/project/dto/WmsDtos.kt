@@ -257,8 +257,7 @@ data class LinkReceiptRequest(
     val purchaseDeliveryId: Long? = null,
     val sourceDocumentNo: String? = null,
     val reason: String,
-    val version: Long,
-    val idempotencyKey: String? = null
+    val version: Long
 )
 
 @Serializable

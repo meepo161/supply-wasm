@@ -33,8 +33,8 @@ import java.time.format.DateTimeParseException
  *   (вид, номер документа) не даёт принять одну накладную дважды;
  * - приёмка по заказу уменьшает ожидаемый остаток и может быть частичной;
  *   несколько приёмок по одному заказу разрешены, остаток считает база;
- * - расхождения фиксируются по строке: недопоставка остаётся видимой,
- *   излишек не попадает в свободный остаток без отдельного решения;
+ * - расхождения фиксируются по строке: недопоставка и излишек остаются
+ *   видимыми; дальнейшее разбирательство по излишку — отдельный процесс;
  * - остаток меняется только при проведении и только в одной транзакции, после
  *   которого документ неизменяем (триггер `wms_guard_receipt_mutation`);
  * - уже проведённую приёмку можно связать с заказом или накладной, пришедшими
@@ -110,7 +110,9 @@ class ReceiptService(
                 mapOf("sourceDocumentNo" to "required")
             )
         }
-        if (request.purchaseOrderId != null && request.sourceType !in purchaseSourceTypes) {
+        if ((request.purchaseOrderId != null || request.purchaseDeliveryId != null) &&
+            request.sourceType !in purchaseSourceTypes
+        ) {
             throw ValidationException(
                 "Purchase order can be referenced only by order, delivery note or invoice receipt",
                 mapOf("sourceType" to "incompatible_with_order")
@@ -128,25 +130,25 @@ class ReceiptService(
         val documentDate = request.sourceDocumentDate?.let { parseDate(it, "sourceDocumentDate") }
 
         return dsl.transactionResult(TransactionalCallable {
-            val order = request.purchaseOrderId?.let { orderId ->
-                val found = purchaseRepository.lockOrderById(orderId)
-                    ?: throw NotFoundException("purchase_order", orderId)
-                validateOrderAcceptsReceipt(found)
-                found
-            }
             val delivery = request.purchaseDeliveryId?.let { deliveryId ->
                 val found = purchaseRepository.findDeliveryById(deliveryId)
                     ?: throw NotFoundException("purchase_delivery", deliveryId)
                 if (found.status != "REGISTERED") {
                     throw ConflictException("Delivery ${found.number} is cancelled")
                 }
-                if (order != null && found.orderId != order.id) {
-                    throw ValidationException(
-                        "Delivery belongs to another purchase order",
-                        mapOf("purchaseDeliveryId" to "other_order")
-                    )
-                }
                 found
+            }
+            val order = (request.purchaseOrderId ?: delivery?.orderId)?.let { orderId ->
+                val found = purchaseRepository.lockOrderById(orderId)
+                    ?: throw NotFoundException("purchase_order", orderId)
+                validateOrderAcceptsReceipt(found)
+                found
+            }
+            if (delivery != null && delivery.orderId != order?.id) {
+                throw ValidationException(
+                    "Delivery belongs to another purchase order",
+                    mapOf("purchaseDeliveryId" to "other_order")
+                )
             }
             if (sourceDocumentNo != null) {
                 wmsRepository.findReceiptBySourceDocument(request.sourceType.name, sourceDocumentNo)
@@ -176,19 +178,26 @@ class ReceiptService(
             }
 
             val number = wmsRepository.generateReceiptNumber()
-            val receipt = wmsRepository.createReceipt(
-                number = number,
-                sourceType = request.sourceType.name,
-                sourceRef = request.sourceRef?.trim(),
-                sourceDocumentNo = sourceDocumentNo,
-                sourceDocumentDate = documentDate,
-                purchaseOrderId = order?.id,
-                purchaseDeliveryId = delivery?.id,
-                warehouseId = request.warehouseId,
-                expectedAt = expectedAt,
-                note = request.note?.trim(),
-                createdBy = currentUser.userId
-            )
+            val receipt = try {
+                wmsRepository.createReceipt(
+                    number = number,
+                    sourceType = request.sourceType.name,
+                    sourceRef = request.sourceRef?.trim(),
+                    sourceDocumentNo = sourceDocumentNo,
+                    sourceDocumentDate = documentDate,
+                    purchaseOrderId = order?.id,
+                    purchaseDeliveryId = delivery?.id,
+                    warehouseId = request.warehouseId,
+                    expectedAt = expectedAt,
+                    note = request.note?.trim(),
+                    createdBy = currentUser.userId
+                )
+            } catch (e: org.jooq.exception.DataAccessException) {
+                if (e.sqlState() == "23505" && e.message?.contains("uq_receipts_source_document") == true) {
+                    throw ConflictException("Receipt is already registered for document $sourceDocumentNo")
+                }
+                throw e
+            }
             prepared.forEach { line ->
                 wmsRepository.insertReceiptLine(
                     receiptId = receipt.id,
@@ -271,31 +280,35 @@ class ReceiptService(
                 // Единственная позиция заказа — связываем без лишнего ввода.
                 purchaseOrderLineId = orderLines.first().id
             }
-            if (purchaseOrderLineId != null) {
-                val orderLine = orderLines.firstOrNull { it.id == purchaseOrderLineId }
-                    ?: throw ValidationException(
-                        "Order line does not belong to the receipt order",
-                        mapOf("lines[$index].purchaseOrderLineId" to "not_in_order")
-                    )
-                if (orderLine.nomenclatureId != nomenclature.id) {
-                    throw ValidationException(
-                        "Order line contains another nomenclature",
-                        mapOf("lines[$index].purchaseOrderLineId" to "nomenclature_mismatch")
-                    )
-                }
-                // Ожидаемое количество по заказу не придумывается клиентом:
-                // берётся остаток заказа и принятые ранее приёмки.
-                val accepted = wmsRepository.acceptedQuantityForOrderLine(orderLine.id)
-                val declared = orderLine.quantity
-                val remaining = (declared - accepted).max(BigDecimal.ZERO)
-                effectiveExpected = remaining
-                if (received > remaining) {
-                    throw ConflictException(
-                        "Received quantity ${received.toPlainString()} exceeds the order line remainder " +
-                            "${remaining.toPlainString()} (ordered ${declared.toPlainString()}, " +
-                            "accepted ${accepted.toPlainString()})"
-                    )
-                }
+            if (purchaseOrderLineId == null) {
+                throw ValidationException(
+                    "Purchase order line is required for an order receipt",
+                    mapOf("lines[$index].purchaseOrderLineId" to "required")
+                )
+            }
+            val orderLine = orderLines.firstOrNull { it.id == purchaseOrderLineId }
+                ?: throw ValidationException(
+                    "Order line does not belong to the receipt order",
+                    mapOf("lines[$index].purchaseOrderLineId" to "not_in_order")
+                )
+            if (orderLine.nomenclatureId != nomenclature.id) {
+                throw ValidationException(
+                    "Order line contains another nomenclature",
+                    mapOf("lines[$index].purchaseOrderLineId" to "nomenclature_mismatch")
+                )
+            }
+            // Ожидаемое количество по заказу не придумывается клиентом:
+            // берётся остаток заказа и принятые ранее приёмки.
+            val accepted = wmsRepository.acceptedQuantityForOrderLine(orderLine.id)
+            val declared = orderLine.quantity
+            val remaining = (declared - accepted).max(BigDecimal.ZERO)
+            effectiveExpected = remaining
+            if (received > remaining) {
+                throw ConflictException(
+                    "Received quantity ${received.toPlainString()} exceeds the order line remainder " +
+                        "${remaining.toPlainString()} (ordered ${declared.toPlainString()}, " +
+                        "accepted ${accepted.toPlainString()})"
+                )
             }
         }
 
@@ -464,7 +477,7 @@ class ReceiptService(
             .filter { it.purchaseOrderLineId != null && it.receivedQuantity.signum() > 0 }
             .groupBy { it.purchaseOrderLineId!! }
         byOrderLine.forEach { (orderLineId, receiptLines) ->
-            val orderLine = wmsRepository.findPurchaseOrderLineById(orderLineId)
+            val orderLine = purchaseRepository.lockOrderLineById(orderLineId)
                 ?: throw NotFoundException("purchase_order_line", orderLineId)
             val currentReceiptId = receipt.id
             val acceptedBefore = wmsRepository.acceptedQuantityForOrderLine(orderLineId, currentReceiptId)
@@ -489,7 +502,7 @@ class ReceiptService(
      * переходит в DELIVERED/PARTIALLY_DELIVERED по фактически принятому.
      */
     private fun recalculateDeliveryAcceptance(deliveryId: Long, currentUser: CurrentUser) {
-        val delivery: PurchaseDeliveriesRecord = purchaseRepository.findDeliveryById(deliveryId)
+        val delivery: PurchaseDeliveriesRecord = purchaseRepository.lockDeliveryById(deliveryId)
             ?: throw NotFoundException("purchase_delivery", deliveryId)
         if (!deliveryAcceptedWithinLimits(delivery)) {
             throw ConflictException(
@@ -561,6 +574,15 @@ class ReceiptService(
             }
             if (alreadyLinked) {
                 throw ConflictException("Receipt is already linked to these documents")
+            }
+            if (receipt.purchaseOrderId != null && request.purchaseOrderId != null) {
+                throw ConflictException("Receipt already has a purchase order link")
+            }
+            if (receipt.purchaseDeliveryId != null && request.purchaseDeliveryId != null) {
+                throw ConflictException("Receipt already has a delivery link")
+            }
+            if (receipt.sourceDocumentNo != null && !request.sourceDocumentNo.isNullOrBlank()) {
+                throw ConflictException("Receipt already has a source document number")
             }
             val order = request.purchaseOrderId?.let { orderId ->
                 purchaseRepository.findOrderById(orderId)

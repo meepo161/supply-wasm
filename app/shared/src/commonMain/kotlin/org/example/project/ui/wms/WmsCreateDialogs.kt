@@ -398,6 +398,7 @@ fun CreateReceiptDialog(
                         line = line,
                         locations = locations,
                         nomenclature = nomenclature,
+                        showPurchaseOrderLine = form.purchaseOrderId != null,
                         onChange = { onUpdateLine(index, it) },
                         onRemove = { onRemoveLine(index) }
                     )
@@ -417,6 +418,7 @@ private fun ReceiptLineRow(
     line: CreateReceiptLineForm,
     locations: List<StorageLocationDto>,
     nomenclature: List<NomenclatureDto>,
+    showPurchaseOrderLine: Boolean,
     onChange: (CreateReceiptLineForm) -> Unit,
     onRemove: () -> Unit
 ) {
@@ -446,6 +448,18 @@ private fun ReceiptLineRow(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+        if (showPurchaseOrderLine) {
+            OutlinedTextField(
+                value = line.purchaseOrderLineId?.toString().orEmpty(),
+                onValueChange = { value ->
+                    onChange(line.copy(purchaseOrderLineId = value.trim().toLongOrNull()))
+                },
+                label = { Text("ID позиции заказа") },
+                supportingText = { Text("Обязателен для заказа с несколькими позициями") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
         OutlinedTextField(
             value = line.receivedQuantity,
             onValueChange = { onChange(line.copy(receivedQuantity = it)) },

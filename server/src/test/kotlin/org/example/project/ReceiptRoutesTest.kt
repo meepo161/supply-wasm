@@ -160,6 +160,62 @@ class ReceiptRoutesTest {
     }
 
     @Test
+    fun `delivery receipt derives order and enforces ordered quantity`() = testApp {
+        val ctx = bootstrap()
+        val order = sentOrder(ctx, quantity = "10")
+        val orderLine = order.lines.first()
+        val delivery = postCreated<PurchaseDeliveryDto, CreatePurchaseDeliveryRequest>(
+            ctx.keeper,
+            "/api/purchase-orders/${order.id}/deliveries",
+            CreatePurchaseDeliveryRequest(
+                deliveredAt = java.time.LocalDate.now().toString(),
+                lines = listOf(CreatePurchaseDeliveryLineInput(orderLine.id, "4")),
+                idempotencyKey = "delivery-receipt-${UUID.randomUUID()}"
+            )
+        )
+        val receipt = createReceipt(
+            ctx.keeper,
+            sourceType = ReceiptSourceType.DELIVERY_NOTE,
+            sourceDocumentNo = "UPD-DELIVERY-${UUID.randomUUID()}",
+            warehouseId = ctx.warehouseId,
+            purchaseDeliveryId = delivery.id,
+            lines = listOf(
+                line(
+                    ctx.nomenclatureId,
+                    ctx.locationId,
+                    expected = "4",
+                    orderLineId = orderLine.id,
+                    discrepancyReason = "Принята первая часть поставки"
+                )
+            )
+        )
+        assertEquals(order.id, receipt.purchaseOrderId)
+        postReceipt(ctx.keeper, receipt)
+        assertQty("4", stockQuantity(ctx.keeper, ctx.warehouseId, ctx.nomenclatureId))
+
+        val overflow = postStatus(
+            ctx.keeper,
+            "/api/wms/receipts",
+            CreateReceiptRequest(
+                sourceType = ReceiptSourceType.DELIVERY_NOTE,
+                sourceDocumentNo = "UPD-DELIVERY-OVER-${UUID.randomUUID()}",
+                purchaseDeliveryId = delivery.id,
+                warehouseId = ctx.warehouseId,
+                lines = listOf(
+                    line(
+                        ctx.nomenclatureId,
+                        ctx.locationId,
+                        expected = "7",
+                        received = "7",
+                        orderLineId = orderLine.id
+                    )
+                )
+            )
+        )
+        assertEquals(HttpStatusCode.Conflict, overflow.status, overflow.bodyAsText())
+    }
+
+    @Test
     fun `receipt without source document is rejected for order and invoice`() = testApp {
         val ctx = bootstrap()
         val order = sentOrder(ctx, quantity = "5")
@@ -257,8 +313,7 @@ class ReceiptRoutesTest {
             LinkReceiptRequest(
                 purchaseOrderId = order.id,
                 reason = "Заказ оформлен после фактической приёмки",
-                version = posted.version,
-                idempotencyKey = "link-${UUID.randomUUID()}"
+                version = posted.version
             )
         )
         assertEquals(HttpStatusCode.OK, linkResponse.status, linkResponse.bodyAsText())
@@ -277,8 +332,7 @@ class ReceiptRoutesTest {
             LinkReceiptRequest(
                 purchaseOrderId = order.id,
                 reason = "Повторная привязка того же заказа",
-                version = linked.version,
-                idempotencyKey = "link-again-${UUID.randomUUID()}"
+                version = linked.version
             )
         )
         assertEquals(HttpStatusCode.Conflict, again.status, again.bodyAsText())
@@ -297,8 +351,7 @@ class ReceiptRoutesTest {
             LinkReceiptRequest(
                 purchaseOrderId = order.id,
                 reason = "Связь до проведения",
-                version = draft.version,
-                idempotencyKey = "link-draft-${UUID.randomUUID()}"
+                version = draft.version
             )
         )
         assertEquals(HttpStatusCode.Conflict, tooEarly.status, tooEarly.bodyAsText())
@@ -317,8 +370,7 @@ class ReceiptRoutesTest {
             LinkReceiptRequest(
                 purchaseOrderId = order.id,
                 reason = "Начальный остаток к заказу не относится",
-                version = initialPosted.version,
-                idempotencyKey = "link-initial-${UUID.randomUUID()}"
+                version = initialPosted.version
             )
         )
         assertEquals(HttpStatusCode.BadRequest, wrongSource.status, wrongSource.bodyAsText())
@@ -385,12 +437,12 @@ class ReceiptRoutesTest {
         val initiator = loginClient("initiator", "password")
         val approver = loginClient("approver", "password")
 
-        val warehouse = postCreated(
+        val warehouse = postCreated<WarehouseDto, CreateWarehouseRequest>(
             keeper,
             "/api/wms/warehouses",
             CreateWarehouseRequest(code = "WH-1", name = "Основной склад")
         )
-        val location = postCreated(
+        val location = postCreated<StorageLocationDto, CreateStorageLocationRequest>(
             keeper,
             "/api/wms/locations",
             CreateStorageLocationRequest(
@@ -400,7 +452,7 @@ class ReceiptRoutesTest {
                 kind = StorageLocationKind.CELL
             )
         )
-        val nomenclature = postCreated(
+        val nomenclature = postCreated<NomenclatureDto, CreateNomenclatureRequest>(
             admin,
             "/api/wms/nomenclature",
             CreateNomenclatureRequest(
@@ -410,7 +462,7 @@ class ReceiptRoutesTest {
                 unit = "pcs"
             )
         )
-        val demand = postCreated(
+        val demand = postCreated<DemandDetailDto, CreateDemandRequest>(
             initiator,
             "/api/demands",
             CreateDemandRequest(
@@ -420,7 +472,7 @@ class ReceiptRoutesTest {
                 lines = listOf(DemandLineInput(1, nomenclature.id, "20", "pcs"))
             )
         )
-        val supplier = postCreated(
+        val supplier = postCreated<SupplierCardDto, CreateSupplierRequest>(
             keeper,
             "/api/suppliers",
             CreateSupplierRequest(
@@ -540,6 +592,7 @@ class ReceiptRoutesTest {
         warehouseId: Long,
         lines: List<ReceiptLineInput>,
         purchaseOrderId: Long? = null,
+        purchaseDeliveryId: Long? = null,
         sourceDocumentNo: String? = null
     ): ReceiptDto = postCreated<ReceiptDto, CreateReceiptRequest>(
         client,
@@ -548,10 +601,41 @@ class ReceiptRoutesTest {
             sourceType = sourceType,
             sourceDocumentNo = sourceDocumentNo,
             purchaseOrderId = purchaseOrderId,
+            purchaseDeliveryId = purchaseDeliveryId,
             warehouseId = warehouseId,
             lines = lines
         )
     )
+
+    private suspend fun createReceiptAtServer(
+        client: HttpClient,
+        ctx: Ctx,
+        orderId: Long,
+        quantity: String
+    ): HttpResponse {
+        val response = client.get("/api/purchase-orders/$orderId")
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        val order = response.bodyAs<ApiResponse<PurchaseOrderDto>>().data!!
+        return postStatus(
+            client,
+            "/api/wms/receipts",
+            CreateReceiptRequest(
+                sourceType = ReceiptSourceType.PURCHASE_ORDER,
+                sourceDocumentNo = "PO-OVER-${UUID.randomUUID()}",
+                purchaseOrderId = orderId,
+                warehouseId = ctx.warehouseId,
+                lines = listOf(
+                    line(
+                        ctx.nomenclatureId,
+                        ctx.locationId,
+                        expected = quantity,
+                        received = quantity,
+                        orderLineId = order.lines.first().id
+                    )
+                )
+            )
+        )
+    }
 
     private suspend fun postReceipt(client: HttpClient, receipt: ReceiptDto): ReceiptDto {
         val response = postStatus(
@@ -595,7 +679,7 @@ class ReceiptRoutesTest {
     }
 
     /** Создание ресурса: 201 и тело в `ApiResponse`. */
-    private suspend inline fun <reified Req : Any, reified Res> postCreated(
+    private suspend inline fun <reified Res, reified Req : Any> postCreated(
         client: HttpClient,
         path: String,
         request: Req

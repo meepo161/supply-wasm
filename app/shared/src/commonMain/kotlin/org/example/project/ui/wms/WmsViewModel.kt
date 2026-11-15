@@ -521,8 +521,7 @@ class WmsViewModel(
                     purchaseDeliveryId = null,
                     sourceDocumentNo = documentNo,
                     reason = reason,
-                    version = receipt.version,
-                    idempotencyKey = "receipt-link-${receipt.id}-${Random.nextLong().toString(16)}"
+                    version = receipt.version
                 )
             )) {
                 is ApiResult.Success -> {
