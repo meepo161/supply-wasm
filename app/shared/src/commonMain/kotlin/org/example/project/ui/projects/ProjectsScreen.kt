@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import org.example.project.dto.hasPermission
 
 @Composable
 fun ProjectsScreen(
@@ -48,7 +49,28 @@ fun ProjectsScreen(
             onTabSelected = viewModel::selectTab,
             onTabRefresh = { viewModel.loadTab() },
             onTaskStatusFilter = viewModel::filterTasks,
-            onTaskOpen = onTaskOpen
+            onTaskOpen = onTaskOpen,
+            // План может менять владелец проекта или держатель projects:manage_plan;
+            // сервер проверяет это повторно, здесь решается только видимость кнопок.
+            canManagePlan = selected.ownerId == currentUser.id ||
+                currentUser.hasPermission("projects", "manage_plan"),
+            onRiskFilter = viewModel::filterRisks,
+            planActions = ProjectPlanActions(
+                onCreateStage = viewModel::createStage,
+                onStartStage = viewModel::startStage,
+                onCompleteStage = viewModel::completeStage,
+                onCancelStage = viewModel::cancelStage,
+                onDeleteStage = viewModel::deleteStage,
+                onCreateMilestone = viewModel::createMilestone,
+                onReachMilestone = viewModel::reachMilestone,
+                onMissMilestone = viewModel::missMilestone,
+                onCreateRisk = viewModel::createRisk,
+                onMitigateRisk = viewModel::mitigateRisk,
+                onReopenRisk = viewModel::reopenRisk,
+                onCloseRisk = viewModel::closeRisk,
+                onDeleteRisk = viewModel::deleteRisk,
+                onDismissError = viewModel::dismissPlanError
+            )
         )
     } else {
         ProjectListScreen(

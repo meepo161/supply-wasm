@@ -51,6 +51,8 @@ Task and project cards contain a real attachment section: the user picks a brows
 
 The demand card contains a reusable approval panel (`ApprovalsSection`): route list for the selected demand (`targetType=DEMAND`), route card with stages, ALL/ANY policy, assignees and decision history (author/time/comment), start of a route by template for a `PENDING_APPROVAL` demand with `approvals:start` and a per-attempt idempotency key, APPROVE/REJECT/RETURN decisions for the current stage (comment required for REJECT/RETURN on client and server) and route cancellation with a mandatory reason under `approvals:cancel`. After an action the panel reloads the route and the demand card refreshes so the final APPROVED status is visible. There is no global approval queue and no template editor in this increment.
 
+The project card also contains real planning tabs. «Этапы» lists project stages with sequence, planned and actual dates, responsible and completion criteria; a stage goes `PLANNED → IN_PROGRESS → COMPLETED`, cancellation requires a reason and only a planned stage can be deleted. Milestones are nested under their stage with planned and actual dates and `reach`/`miss` commands. «Риски» lists project risks with category, probability, impact, criticality, responsible, response plan, due date and links to a stage and a project task; closing or accepting a risk requires an outcome text. There are no readiness percentages in any of these tabs — the calculation method is not approved (M.4, PRJ-18) — and criticality is entered explicitly instead of being derived from probability and impact (D-51). The plan is read by project members and changed by the owner or a holder of `projects:manage_plan`; the overview tab shows real plan counters (completed stages, reached milestones, open and critical risks).
+
 All project tab endpoints enforce server-side access: a non-member without `projects:read_any` receives `403`, an unknown project `404`. The same project permission also opens an individual project task from the tab. Documents and their overview counter respect confidentiality and `documents:read_any`.
 
 Relevant sources:
@@ -60,6 +62,7 @@ Relevant sources:
 - [`ProjectsScreen.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/projects/ProjectsScreen.kt)
 - [`ProjectViewModel.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/projects/ProjectViewModel.kt)
 - [`ProjectTabs.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/projects/ProjectTabs.kt)
+- [`ProjectPlanTabs.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/projects/ProjectPlanTabs.kt)
 
 ## HTTP client and data layer
 

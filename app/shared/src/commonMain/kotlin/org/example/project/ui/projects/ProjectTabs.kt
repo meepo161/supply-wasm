@@ -24,6 +24,13 @@ import org.example.project.dto.ApiError
 import org.example.project.dto.DemandHeaderDto
 import org.example.project.dto.DocumentDto
 import org.example.project.dto.ProjectHistoryEntryDto
+import org.example.project.dto.ProjectMilestoneDto
+import org.example.project.dto.ProjectRiskCategory
+import org.example.project.dto.ProjectRiskCriticality
+import org.example.project.dto.ProjectRiskDto
+import org.example.project.dto.ProjectRiskLevel
+import org.example.project.dto.ProjectRiskStatus
+import org.example.project.dto.ProjectStageDto
 import org.example.project.dto.ProjectSummaryDto
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
@@ -46,6 +53,39 @@ import org.example.project.ui.theme.SoftButton
  * потребности, документы, история. Этапы, риски и проценты готовности не
  * показываются — их методика не утверждена (M.1/M.4).
  */
+/**
+ * Колбэки действий плана. Передаются одним объектом: иначе сигнатура секции
+ * разрастается на полтора десятка параметров, и вызывающий код становится
+ * нечитаемым.
+ */
+data class ProjectPlanActions(
+    val onCreateStage: (String, String?, String?) -> Unit = { _, _, _ -> },
+    val onStartStage: (ProjectStageDto) -> Unit = {},
+    val onCompleteStage: (ProjectStageDto) -> Unit = {},
+    val onCancelStage: (ProjectStageDto, String) -> Unit = { _, _ -> },
+    val onDeleteStage: (ProjectStageDto) -> Unit = {},
+    val onCreateMilestone: (String, Long?, String?) -> Unit = { _, _, _ -> },
+    val onReachMilestone: (ProjectMilestoneDto) -> Unit = {},
+    val onMissMilestone: (ProjectMilestoneDto, String) -> Unit = { _, _ -> },
+    val onCreateRisk: (
+        title: String,
+        description: String?,
+        category: ProjectRiskCategory,
+        probability: ProjectRiskLevel,
+        impact: ProjectRiskLevel,
+        criticality: ProjectRiskCriticality,
+        responsePlan: String?,
+        dueDate: String?,
+        stageId: Long?,
+        taskId: Long?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _ -> },
+    val onMitigateRisk: (ProjectRiskDto) -> Unit = {},
+    val onReopenRisk: (ProjectRiskDto) -> Unit = {},
+    val onCloseRisk: (ProjectRiskDto, String, Boolean) -> Unit = { _, _, _ -> },
+    val onDeleteRisk: (ProjectRiskDto) -> Unit = {},
+    val onDismissError: () -> Unit = {}
+)
+
 @Composable
 fun ProjectTabsSection(
     state: ProjectsUiState,
@@ -54,6 +94,9 @@ fun ProjectTabsSection(
     onRefresh: () -> Unit,
     onTaskStatusFilter: (TaskStatus?) -> Unit,
     onTaskClick: (Long) -> Unit,
+    canManagePlan: Boolean,
+    onRiskFilter: (ProjectRiskStatus?) -> Unit,
+    planActions: ProjectPlanActions,
     modifier: Modifier = Modifier
 ) {
     val project = state.selectedProject ?: return
@@ -98,9 +141,37 @@ fun ProjectTabsSection(
         }
 
         state.tabError?.let { TabErrorCard(it) }
+        state.planError?.let { TabErrorCard(it, onDismiss = planActions.onDismissError) }
 
         when (state.selectedTab) {
-            ProjectTab.OVERVIEW -> OverviewTab(state.summary)
+            ProjectTab.OVERVIEW -> OverviewTab(state.summary, state.planSummary)
+            ProjectTab.STAGES -> StagesTab(
+                stages = state.stages,
+                canManage = canManagePlan,
+                busy = state.planBusy,
+                onCreate = planActions.onCreateStage,
+                onStart = planActions.onStartStage,
+                onComplete = planActions.onCompleteStage,
+                onCancel = planActions.onCancelStage,
+                onDelete = planActions.onDeleteStage,
+                onCreateMilestone = planActions.onCreateMilestone,
+                onReachMilestone = planActions.onReachMilestone,
+                onMissMilestone = planActions.onMissMilestone
+            )
+            ProjectTab.RISKS -> RisksTab(
+                risks = state.risks,
+                stages = state.stages,
+                tasks = state.tasks,
+                statusFilter = state.riskStatusFilter,
+                canManage = canManagePlan,
+                busy = state.planBusy,
+                onFilter = onRiskFilter,
+                onCreate = planActions.onCreateRisk,
+                onMitigate = planActions.onMitigateRisk,
+                onReopen = planActions.onReopenRisk,
+                onClose = planActions.onCloseRisk,
+                onDelete = planActions.onDeleteRisk
+            )
             ProjectTab.TASKS -> TasksTab(
                 tasks = state.tasks,
                 users = state.users,
@@ -116,24 +187,40 @@ fun ProjectTabsSection(
 }
 
 @Composable
-private fun TabErrorCard(error: ApiError, modifier: Modifier = Modifier) {
+private fun TabErrorCard(
+    error: ApiError,
+    modifier: Modifier = Modifier,
+    onDismiss: (() -> Unit)? = null
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.errorContainer
         )
     ) {
-        Text(
-            text = error.message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(12.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = error.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.weight(1f)
+            )
+            if (onDismiss != null) {
+                TextButton(onClick = onDismiss) { Text("Скрыть") }
+            }
+        }
     }
 }
 
 @Composable
-private fun OverviewTab(summary: ProjectSummaryDto?, modifier: Modifier = Modifier) {
+private fun OverviewTab(
+    summary: ProjectSummaryDto?,
+    planSummary: org.example.project.dto.ProjectPlanSummaryDto?,
+    modifier: Modifier = Modifier
+) {
     if (summary == null) {
         EmptyState(title = "Сводка недоступна", text = "Проверьте права на проект и обновите вкладку.")
         return
@@ -156,6 +243,29 @@ private fun OverviewTab(summary: ProjectSummaryDto?, modifier: Modifier = Modifi
             DetailLine("Потребностей", summary.demandCount.toString())
             DetailLine("Документов", summary.documentCount.toString())
             DetailLine("Участников", summary.memberCount.toString())
+            // Показатели плана — реальные значения; процентов здесь нет.
+            planSummary?.let { plan ->
+                HorizontalDivider()
+                DetailLine(
+                    "Этапов завершено",
+                    "${plan.completedStageCount} из ${plan.stageCount}"
+                )
+                plan.currentStageName?.let { DetailLine("Текущий этап", it) }
+                DetailLine(
+                    "Контрольных точек достигнуто",
+                    "${plan.reachedMilestoneCount} из ${plan.milestoneCount}"
+                )
+                plan.nextMilestoneName?.let {
+                    DetailLine(
+                        "Ближайшая точка",
+                        "$it · ${plan.nextMilestonePlannedAt.toShortDate()}"
+                    )
+                }
+                DetailLine("Открытых рисков", plan.openRiskCount.toString())
+                if (plan.criticalRiskCount > 0) {
+                    DetailLine("Критичных рисков", plan.criticalRiskCount.toString())
+                }
+            }
         }
     }
 }
@@ -245,7 +355,7 @@ private fun TasksTab(
 }
 
 @Composable
-private fun FilterChipButton(
+internal fun FilterChipButton(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,

@@ -8,14 +8,31 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.project.data.ApiResult
 import org.example.project.data.ProjectRepository
+import org.example.project.data.ProjectMilestoneCommand
+import org.example.project.data.ProjectStageCommand
 import org.example.project.data.UserRepository
 import org.example.project.dto.AddProjectMemberRequest
+import org.example.project.dto.ApiError
 import org.example.project.dto.DemandHeaderDto
 import org.example.project.dto.DocumentDto
 import org.example.project.dto.ProjectHistoryEntryDto
 import org.example.project.dto.ProjectSummaryDto
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
+import org.example.project.dto.CloseProjectRiskRequest
+import org.example.project.dto.CreateProjectMilestoneRequest
+import org.example.project.dto.CreateProjectRiskRequest
+import org.example.project.dto.CreateProjectStageRequest
+import org.example.project.dto.ProjectMilestoneDto
+import org.example.project.dto.ProjectPlanSummaryDto
+import org.example.project.dto.ProjectRiskCategory
+import org.example.project.dto.ProjectRiskCriticality
+import org.example.project.dto.ProjectRiskDto
+import org.example.project.dto.ProjectRiskLevel
+import org.example.project.dto.ProjectRiskStatus
+import org.example.project.dto.ProjectStageCommandRequest
+import org.example.project.dto.ProjectStageDto
+import org.example.project.dto.UpdateProjectStageRequest
 import org.example.project.dto.CloseProjectRequest
 import org.example.project.dto.CreateProjectRequest
 import org.example.project.dto.OpenProjectRequest
@@ -78,7 +95,12 @@ class ProjectViewModel(
             documents = emptyList(),
             history = emptyList(),
             loadedTabs = emptySet(),
-            taskStatusFilter = null
+            taskStatusFilter = null,
+            stages = emptyList(),
+            risks = emptyList(),
+            planSummary = null,
+            riskStatusFilter = null,
+            planError = null
         )
         viewModelScope.launch {
             refreshSelectedProject(project.id)
@@ -115,12 +137,16 @@ class ProjectViewModel(
                             tabLoading = false,
                             loadedTabs = _uiState.value.loadedTabs + tab
                         )
+                        // Сводка плана необязательна: её сбой не ломает обзор.
+                        loadPlanSummary(id)
                     }
                     is ApiResult.Error -> {
                         if (_uiState.value.selectedProject?.id != id) return@launch
                         _uiState.value = _uiState.value.copy(tabLoading = false, tabError = result.error)
                     }
                 }
+                ProjectTab.STAGES -> loadStages(id)
+                ProjectTab.RISKS -> loadRisks(id, _uiState.value.riskStatusFilter)
                 ProjectTab.TASKS -> loadTasks(id, _uiState.value.taskStatusFilter)
                 ProjectTab.DEMANDS -> when (val result = projectRepository.demands(id)) {
                     is ApiResult.Success -> {
@@ -198,6 +224,299 @@ class ProjectViewModel(
         }
     }
 
+    // -----------------------------------------------------------------------
+    // План проекта: этапы, контрольные точки, риски (PRJ-08/09/10)
+    // -----------------------------------------------------------------------
+
+    private fun loadStages(projectId: Long) {
+        viewModelScope.launch {
+            val result = projectRepository.stages(projectId)
+            if (_uiState.value.selectedProject?.id != projectId) return@launch
+            when (result) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    stages = result.data,
+                    tabLoading = false,
+                    loadedTabs = _uiState.value.loadedTabs + ProjectTab.STAGES
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    tabLoading = false,
+                    tabError = result.error
+                )
+            }
+        }
+    }
+
+    private fun loadRisks(projectId: Long, status: ProjectRiskStatus?) {
+        viewModelScope.launch {
+            val result = projectRepository.risks(projectId, status)
+            if (_uiState.value.selectedProject?.id != projectId ||
+                _uiState.value.riskStatusFilter != status
+            ) {
+                return@launch
+            }
+            when (result) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    risks = result.data,
+                    tabLoading = false,
+                    loadedTabs = _uiState.value.loadedTabs + ProjectTab.RISKS
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    tabLoading = false,
+                    tabError = result.error
+                )
+            }
+        }
+    }
+
+    private fun loadPlanSummary(projectId: Long) {
+        viewModelScope.launch {
+            when (val result = projectRepository.planSummary(projectId)) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.selectedProject?.id != projectId) return@launch
+                    _uiState.value = _uiState.value.copy(planSummary = result.data)
+                }
+                // Ошибка сводки плана не заменяет сводку связанных записей.
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    /** Фильтр рисков по статусу выполняется на сервере. */
+    fun filterRisks(status: ProjectRiskStatus?) {
+        val project = _uiState.value.selectedProject ?: return
+        _uiState.value = _uiState.value.copy(riskStatusFilter = status)
+        loadRisks(project.id, status)
+    }
+
+    fun dismissPlanError() {
+        _uiState.value = _uiState.value.copy(planError = null)
+    }
+
+    fun createStage(name: String, plannedStartAt: String?, plannedEndAt: String?) {
+        val project = _uiState.value.selectedProject ?: return
+        if (name.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                planError = ApiError("VALIDATION_ERROR", "Укажите название этапа")
+            )
+            return
+        }
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.createStage(
+                project.id,
+                CreateProjectStageRequest(
+                    name = name,
+                    plannedStartAt = plannedStartAt?.takeIf { it.isNotBlank() },
+                    plannedEndAt = plannedEndAt?.takeIf { it.isNotBlank() }
+                )
+            )
+        }
+    }
+
+    fun startStage(stage: ProjectStageDto) = stageCommand(stage, ProjectStageCommand.START)
+
+    fun completeStage(stage: ProjectStageDto) = stageCommand(stage, ProjectStageCommand.COMPLETE)
+
+    fun cancelStage(stage: ProjectStageDto, reason: String) {
+        val project = _uiState.value.selectedProject ?: return
+        if (reason.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                planError = ApiError("VALIDATION_ERROR", "Укажите причину отмены этапа")
+            )
+            return
+        }
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.stageCommand(
+                stage.id,
+                ProjectStageCommand.CANCEL,
+                ProjectStageCommandRequest(stage.version, reason)
+            )
+        }
+    }
+
+    fun renameStage(stage: ProjectStageDto, name: String, plannedStartAt: String?, plannedEndAt: String?) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.updateStage(
+                stage.id,
+                UpdateProjectStageRequest(
+                    name = name.takeIf { it.isNotBlank() },
+                    plannedStartAt = plannedStartAt?.takeIf { it.isNotBlank() },
+                    plannedEndAt = plannedEndAt?.takeIf { it.isNotBlank() },
+                    version = stage.version
+                )
+            )
+        }
+    }
+
+    fun deleteStage(stage: ProjectStageDto) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.deleteStage(stage.id, stage.version)
+        }
+    }
+
+    private fun stageCommand(stage: ProjectStageDto, command: ProjectStageCommand) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.stageCommand(stage.id, command, ProjectStageCommandRequest(stage.version))
+        }
+    }
+
+    fun createMilestone(name: String, stageId: Long?, plannedAt: String?) {
+        val project = _uiState.value.selectedProject ?: return
+        if (name.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                planError = ApiError("VALIDATION_ERROR", "Укажите название контрольной точки")
+            )
+            return
+        }
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.createMilestone(
+                project.id,
+                CreateProjectMilestoneRequest(
+                    name = name,
+                    stageId = stageId,
+                    plannedAt = plannedAt?.takeIf { it.isNotBlank() }
+                )
+            )
+        }
+    }
+
+    fun reachMilestone(milestone: ProjectMilestoneDto) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.milestoneCommand(
+                milestone.id,
+                ProjectMilestoneCommand.REACH,
+                ProjectMilestoneCommandRequest(milestone.version)
+            )
+        }
+    }
+
+    fun missMilestone(milestone: ProjectMilestoneDto, note: String) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.milestoneCommand(
+                milestone.id,
+                ProjectMilestoneCommand.MISS,
+                ProjectMilestoneCommandRequest(milestone.version, note.takeIf { it.isNotBlank() })
+            )
+        }
+    }
+
+    fun createRisk(
+        title: String,
+        description: String?,
+        category: ProjectRiskCategory,
+        probability: ProjectRiskLevel,
+        impact: ProjectRiskLevel,
+        criticality: ProjectRiskCriticality,
+        responsePlan: String?,
+        dueDate: String?,
+        stageId: Long?,
+        taskId: Long?
+    ) {
+        val project = _uiState.value.selectedProject ?: return
+        if (title.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                planError = ApiError("VALIDATION_ERROR", "Укажите название риска")
+            )
+            return
+        }
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.createRisk(
+                project.id,
+                CreateProjectRiskRequest(
+                    title = title,
+                    description = description?.takeIf { it.isNotBlank() },
+                    category = category,
+                    probability = probability,
+                    impact = impact,
+                    criticality = criticality,
+                    responsePlan = responsePlan?.takeIf { it.isNotBlank() },
+                    dueDate = dueDate?.takeIf { it.isNotBlank() },
+                    stageId = stageId,
+                    taskId = taskId
+                )
+            )
+        }
+    }
+
+    fun mitigateRisk(risk: ProjectRiskDto) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.mitigateRisk(risk.id, risk.version)
+        }
+    }
+
+    fun reopenRisk(risk: ProjectRiskDto) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.reopenRisk(risk.id, risk.version)
+        }
+    }
+
+    fun closeRisk(risk: ProjectRiskDto, outcome: String, accepted: Boolean) {
+        val project = _uiState.value.selectedProject ?: return
+        if (outcome.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                planError = ApiError("VALIDATION_ERROR", "Укажите исход риска")
+            )
+            return
+        }
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.closeRisk(
+                risk.id,
+                CloseProjectRiskRequest(
+                    version = risk.version,
+                    outcome = outcome,
+                    status = if (accepted) ProjectRiskStatus.ACCEPTED else ProjectRiskStatus.CLOSED
+                )
+            )
+        }
+    }
+
+    fun deleteRisk(risk: ProjectRiskDto) {
+        val project = _uiState.value.selectedProject ?: return
+        runPlanAction(onSuccess = { refreshPlan(project.id) }) {
+            projectRepository.deleteRisk(risk.id, risk.version)
+        }
+    }
+
+    /**
+     * Изменение плана меняет и сводку: этапы, точки и риски считаются на сервере,
+     * поэтому после успешной команды перезапрашиваются и вкладка, и сводка.
+     */
+    private fun refreshPlan(projectId: Long) {
+        loadStages(projectId)
+        loadRisks(projectId, _uiState.value.riskStatusFilter)
+        loadPlanSummary(projectId)
+    }
+
+    /**
+     * Обёртка над действием плана: единая обработка ошибок и признак занятости.
+     * [onSuccess] вызывается только при успехе — списки не перезапрашиваются
+     * после неудачной команды.
+     */
+    private fun runPlanAction(
+        onSuccess: () -> Unit = {},
+        block: suspend () -> ApiResult<*>
+    ) {
+        _uiState.value = _uiState.value.copy(planBusy = true, planError = null)
+        viewModelScope.launch {
+            when (val result = block()) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(planBusy = false)
+                    onSuccess()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    planBusy = false,
+                    planError = result.error
+                )
+            }
+        }
+    }
+
     fun dismissTabError() {
         _uiState.value = _uiState.value.copy(tabError = null)
     }
@@ -220,7 +539,12 @@ class ProjectViewModel(
             documents = emptyList(),
             history = emptyList(),
             taskStatusFilter = null,
-            loadedTabs = emptySet()
+            loadedTabs = emptySet(),
+            stages = emptyList(),
+            risks = emptyList(),
+            planSummary = null,
+            riskStatusFilter = null,
+            planError = null
         )
         viewModelScope.launch {
             when (val result = projectRepository.get(projectId)) {
@@ -253,7 +577,12 @@ class ProjectViewModel(
             documents = emptyList(),
             history = emptyList(),
             taskStatusFilter = null,
-            loadedTabs = emptySet()
+            loadedTabs = emptySet(),
+            stages = emptyList(),
+            risks = emptyList(),
+            planSummary = null,
+            riskStatusFilter = null,
+            planError = null
         )
     }
 
@@ -437,6 +766,15 @@ data class ProjectsUiState(
     val documents: List<DocumentDto> = emptyList(),
     val history: List<ProjectHistoryEntryDto> = emptyList(),
     val taskStatusFilter: TaskStatus? = null,
+
+    // План проекта (PRJ-08/09/10). Контрольные точки приходят вложенными в
+    // этапы (GET /stages), поэтому отдельного списка здесь нет.
+    val stages: List<ProjectStageDto> = emptyList(),
+    val risks: List<ProjectRiskDto> = emptyList(),
+    val planSummary: ProjectPlanSummaryDto? = null,
+    val riskStatusFilter: ProjectRiskStatus? = null,
+    val planError: ApiError? = null,
+    val planBusy: Boolean = false,
     /** Вкладки, данные которых уже получены с сервера (включая пустые ответы). */
     val loadedTabs: Set<ProjectTab> = emptySet()
 )
@@ -447,7 +785,9 @@ data class ProjectsUiState(
  */
 enum class ProjectTab(val title: String) {
     OVERVIEW("Обзор"),
+    STAGES("Этапы"),
     TASKS("Задачи"),
+    RISKS("Риски"),
     DEMANDS("Потребности"),
     DOCUMENTS("Документы"),
     HISTORY("История")

@@ -13,11 +13,6 @@ import org.example.project.service.DocumentService
 import org.example.project.service.ProjectService
 import org.example.project.service.TaskService
 
-/** Числовой параметр пути; текст ошибки совпадает с остальными маршрутами проекта. */
-private fun ApplicationCall.longParamOrThrow(name: String): Long =
-    parameters[name]?.toLongOrNull()
-        ?: throw org.example.project.exception.ValidationException("Invalid $name")
-
 fun Route.projectRoutes(
     projectService: ProjectService,
     taskService: TaskService,

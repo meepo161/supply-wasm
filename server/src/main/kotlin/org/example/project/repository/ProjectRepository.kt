@@ -26,6 +26,9 @@ class ProjectRepository(private val dsl: DSLContext) {
             .fetchOne()
     }
 
+    fun userExists(userId: Long): Boolean =
+        dsl.fetchExists(dsl.selectOne().from(USERS).where(USERS.ID.eq(userId)))
+
     fun listForUser(userId: Long): List<ProjectsRecord> {
         return dsl.select(PROJECTS.asterisk())
             .from(PROJECTS)

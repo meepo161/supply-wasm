@@ -64,7 +64,11 @@ fun ProjectDetailScreen(
     onTabSelected: (ProjectTab) -> Unit = {},
     onTabRefresh: () -> Unit = {},
     onTaskStatusFilter: (org.example.project.dto.TaskStatus?) -> Unit = {},
-    onTaskOpen: (Long) -> Unit = {}
+    onTaskOpen: (Long) -> Unit = {},
+    // План проекта (PRJ-08/09/10): этапы и риски.
+    canManagePlan: Boolean = false,
+    onRiskFilter: (org.example.project.dto.ProjectRiskStatus?) -> Unit = {},
+    planActions: ProjectPlanActions = ProjectPlanActions()
 ) {
     val isOwner = project.ownerId == currentUser.id
     val canManageMembers = isOwner
@@ -144,7 +148,10 @@ fun ProjectDetailScreen(
                 onTabSelected = onTabSelected,
                 onRefresh = onTabRefresh,
                 onTaskStatusFilter = onTaskStatusFilter,
-                onTaskClick = onTaskOpen
+                onTaskClick = onTaskOpen,
+                canManagePlan = canManagePlan,
+                onRiskFilter = onRiskFilter,
+                planActions = planActions
             )
         }
 
