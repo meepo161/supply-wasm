@@ -9,6 +9,7 @@ import org.example.project.generated.jooq.tables.PurchaseOrderDemands.PURCHASE_O
 import org.example.project.generated.jooq.tables.PurchaseOrderHistory.PURCHASE_ORDER_HISTORY
 import org.example.project.generated.jooq.tables.PurchaseOrderLines.PURCHASE_ORDER_LINES
 import org.example.project.generated.jooq.tables.PurchaseOrders.PURCHASE_ORDERS
+import org.example.project.generated.jooq.tables.SupplierOfferLines.SUPPLIER_OFFER_LINES
 import org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS
 import org.example.project.generated.jooq.tables.Suppliers.SUPPLIERS
 import org.example.project.generated.jooq.tables.records.PurchaseDeliveriesRecord
@@ -113,7 +114,7 @@ class PurchaseOrderRepository(private val dsl: DSLContext) {
         record.expectedAt = expectedAt
         record.createdBy = createdBy
         record.store()
-        return record
+        return findOrderById(record.id)!!
     }
 
     fun insertOrderLines(orderId: Long, lines: List<NewOrderLine>, createdBy: Long) {
@@ -148,6 +149,9 @@ class PurchaseOrderRepository(private val dsl: DSLContext) {
 
     fun findOrderLineById(id: Long): PurchaseOrderLinesRecord? =
         dsl.selectFrom(PURCHASE_ORDER_LINES).where(PURCHASE_ORDER_LINES.ID.eq(id)).fetchOne()
+
+    fun findOfferLineById(id: Long) =
+        dsl.selectFrom(SUPPLIER_OFFER_LINES).where(SUPPLIER_OFFER_LINES.ID.eq(id)).fetchOne()
 
     fun lockOrderLineById(id: Long): PurchaseOrderLinesRecord? =
         dsl.selectFrom(PURCHASE_ORDER_LINES).where(PURCHASE_ORDER_LINES.ID.eq(id)).forUpdate().fetchOne()
@@ -371,7 +375,7 @@ class PurchaseOrderRepository(private val dsl: DSLContext) {
         record.note = note
         record.createdBy = createdBy
         record.store()
-        return record
+        return findDeliveryById(record.id)!!
     }
 
     fun insertDeliveryLines(deliveryId: Long, lines: List<NewDeliveryLine>, createdBy: Long) {

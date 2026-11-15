@@ -228,7 +228,7 @@ class PurchaseOrderRoutesTest {
                 stringify(
                     UpdatePurchaseOrderRequest(
                         expectedAt = java.time.LocalDate.now().plusDays(30).toString(),
-                        lines = listOf(CreatePurchaseOrderLineInput(approved.lines.first().id, "3")),
+                        lines = listOf(UpdatePurchaseOrderLineInput(approved.lines.first().id, "3")),
                         version = approved.version
                     )
                 )
@@ -243,7 +243,7 @@ class PurchaseOrderRoutesTest {
                 stringify(
                     UpdatePurchaseOrderRequest(
                         expectedAt = java.time.LocalDate.now().plusDays(30).toString(),
-                        lines = listOf(CreatePurchaseOrderLineInput(approved.lines.first().id, "3")),
+                        lines = listOf(UpdatePurchaseOrderLineInput(approved.lines.first().id, "3")),
                         changeReason = "Поставщик подтвердил меньшую партию",
                         version = approved.version
                     )
@@ -255,6 +255,21 @@ class PurchaseOrderRoutesTest {
         assertEquals(PurchaseOrderStatus.PENDING_APPROVAL, changed.status)
         assertTrue(changed.reapprovalRequired)
         assertEquals("3.0000", changed.lines.first().quantity)
+
+        val aboveOffer = ctx.buyer.put("/api/purchase-orders/${order.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                stringify(
+                    UpdatePurchaseOrderRequest(
+                        lines = listOf(UpdatePurchaseOrderLineInput(approved.lines.first().id, "10")),
+                        changeReason = "Попытка увеличить количество сверх предложения",
+                        version = changed.version
+                    )
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, aboveOffer.status, aboveOffer.bodyAsText())
+        assertTrue(aboveOffer.bodyAsText().contains("exceeds_offer"), aboveOffer.bodyAsText())
 
         // Отправка заблокирована до повторного согласования.
         val sendBlocked = ctx.buyer.post("/api/purchase-orders/${order.id}/send") {

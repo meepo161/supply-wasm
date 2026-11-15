@@ -635,7 +635,7 @@ class PurchaseOrderService(
 
     private fun applyLineChanges(
         order: PurchaseOrdersRecord,
-        lines: List<CreatePurchaseOrderLineInput>,
+        lines: List<UpdatePurchaseOrderLineInput>,
         reasons: MutableList<String>
     ) {
         if (lines.isEmpty()) {
@@ -660,6 +660,16 @@ class PurchaseOrderService(
                 throw ConflictException(
                     "Ordered quantity cannot be less than already delivered " +
                         orderLine.deliveredQuantity.toPlainString()
+                )
+            }
+            val offerLineId = orderLine.offerLineId
+                ?: throw ConflictException("Order line has no source offer line")
+            val offerLine = purchaseRepository.findOfferLineById(offerLineId)
+                ?: throw NotFoundException("supplier_offer_line", offerLineId)
+            if (quantity > offerLine.quantity) {
+                throw ValidationException(
+                    "Ordered quantity exceeds the selected offer",
+                    mapOf("lines[$index].quantity" to "exceeds_offer")
                 )
             }
             if (quantity != orderLine.quantity) {
@@ -774,25 +784,36 @@ class PurchaseOrderService(
                 mapOf("idempotencyKey" to "required")
             )
         val requestHash = sha256("$operation|$requestPayload")
-        return dsl.transactionResult(TransactionalCallable {
-            val existing = purchaseRepository.findIdempotency(currentUser.userId, operation, key)
-            if (existing != null) {
-                if (existing.requestHash != requestHash) {
-                    throw ConflictException("Idempotency key was already used with a different request")
+        try {
+            return dsl.transactionResult(TransactionalCallable {
+                val existing = purchaseRepository.findIdempotency(currentUser.userId, operation, key)
+                if (existing != null) {
+                    if (existing.requestHash != requestHash) {
+                        throw ConflictException("Idempotency key was already used with a different request")
+                    }
+                    return@TransactionalCallable CommandResponse(
+                        HttpStatusCode.fromValue(existing.responseStatus),
+                        existing.responseBody
+                    )
                 }
-                return@TransactionalCallable CommandResponse(
-                    HttpStatusCode.fromValue(existing.responseStatus),
-                    existing.responseBody
+                val (entityId, dataJson) = work()
+                val body = """{"success":true,"data":$dataJson}"""
+                purchaseRepository.insertIdempotency(
+                    currentUser.userId, operation, key, requestHash,
+                    "PURCHASE_ORDER", entityId, successStatus.value, body
                 )
+                CommandResponse(successStatus, body)
+            })
+        } catch (e: org.jooq.exception.DataAccessException) {
+            if (e.sqlState() == "23505" && e.message?.contains("uq_purchase_idempotency") == true) {
+                val existing = purchaseRepository.findIdempotency(currentUser.userId, operation, key)
+                if (existing != null && existing.requestHash == requestHash) {
+                    return CommandResponse(HttpStatusCode.fromValue(existing.responseStatus), existing.responseBody)
+                }
+                throw ConflictException("Idempotency key was already used with a different request")
             }
-            val (entityId, dataJson) = work()
-            val body = """{"success":true,"data":$dataJson}"""
-            purchaseRepository.insertIdempotency(
-                currentUser.userId, operation, key, requestHash,
-                "PURCHASE_ORDER", entityId, successStatus.value, body
-            )
-            CommandResponse(successStatus, body)
-        })
+            throw e
+        }
     }
 
     private fun sha256(value: String): String =

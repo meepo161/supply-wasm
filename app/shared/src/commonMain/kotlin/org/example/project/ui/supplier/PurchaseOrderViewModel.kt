@@ -21,6 +21,7 @@ import org.example.project.dto.PurchaseOrderActionRequest
 import org.example.project.dto.PurchaseOrderDto
 import org.example.project.dto.PurchaseOrderStatus
 import org.example.project.dto.SupplierOfferStatus
+import org.example.project.dto.UpdatePurchaseOrderLineInput
 import org.example.project.dto.UpdatePurchaseOrderRequest
 import org.example.project.dto.UserDto
 import org.example.project.dto.hasPermission
@@ -297,13 +298,13 @@ class PurchaseOrderViewModel(
 
     fun saveEdit() {
         val form = _uiState.value.editForm ?: return
-        val lineInputs = mutableListOf<CreatePurchaseOrderLineInput>()
+        val lineInputs = mutableListOf<UpdatePurchaseOrderLineInput>()
         form.lines.forEachIndexed { index, line ->
             if (!line.quantity.isPositiveDecimal()) {
                 fail("Количество в позиции ${index + 1} должно быть положительным числом")
                 return
             }
-            lineInputs += CreatePurchaseOrderLineInput(line.orderLineId, line.quantity.trim())
+            lineInputs += UpdatePurchaseOrderLineInput(line.orderLineId, line.quantity.trim())
         }
         update { it.copy(isActionRunning = true, operationError = null) }
         viewModelScope.launch {

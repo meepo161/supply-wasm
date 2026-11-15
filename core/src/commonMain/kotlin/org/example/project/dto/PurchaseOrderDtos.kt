@@ -105,6 +105,12 @@ data class CreatePurchaseOrderLineInput(
 )
 
 @Serializable
+data class UpdatePurchaseOrderLineInput(
+    val orderLineId: Long,
+    val quantity: String
+)
+
+@Serializable
 data class UpdatePurchaseOrderRequest(
     val deliveryAddress: String? = null,
     val paymentTerms: String? = null,
@@ -113,7 +119,7 @@ data class UpdatePurchaseOrderRequest(
     val expectedAt: String? = null,
     val note: String? = null,
     val responsibleId: Long? = null,
-    val lines: List<CreatePurchaseOrderLineInput>? = null,
+    val lines: List<UpdatePurchaseOrderLineInput>? = null,
     /** Обязательно, если изменение существенное: условие повторного согласования. */
     val changeReason: String? = null,
     val version: Long
