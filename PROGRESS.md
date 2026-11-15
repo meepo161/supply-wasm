@@ -890,10 +890,10 @@ UI/UX .......................... 73%
 | PRJ-13 | История проекта читается из `audit_log` (`entity_type='PROJECT'`), подписи событий формирует сервер; `limit` ограничен 1..500 | `repository/ProjectHistoryRepository.kt` |
 | PRJ-13 | Обзор отдаёт только реальные счётчики (задачи, открытые/завершённые, потребности, документы, участники). Процентов готовности нет — методика не утверждена | `dto/ProjectDtos.kt` (`ProjectSummaryDto`), `ProjectTabs.kt` |
 | PRJ-13 | Клиент: 5 методов `ProjectRepository`/`ProjectApiClient` (`getWithParams` для query-параметров) | `data/ProjectRepository.kt`, `data/ProjectApiClient.kt` |
-| PRJ-13 | UI: `ProjectViewModel` (ленивая загрузка вкладок, явный набор загруженных вкладок, сброс при смене проекта), `ProjectTabs.kt` (5 вкладок), вставка в карточку | `ui/projects/ProjectViewModel.kt`, `ui/projects/ProjectTabs.kt`, `ui/projects/ProjectDetailScreen.kt`, `ui/projects/ProjectsScreen.kt`, `ui/main/MainScaffold.kt` |
+| PRJ-13 | UI: `ProjectViewModel` (ленивая загрузка вкладок, явный набор загруженных вкладок, сброс при смене проекта, защита от запоздалого ответа другого проекта, инвалидация после изменений), `ProjectTabs.kt` (5 вкладок), вставка в карточку | `ui/projects/ProjectViewModel.kt`, `ui/projects/ProjectTabs.kt`, `ui/projects/ProjectDetailScreen.kt`, `ui/projects/ProjectsScreen.kt`, `ui/main/MainScaffold.kt` |
 | PRJ-14 | Список задач проекта с фильтром по статусу **на сервере**; клик «Открыть» переходит в карточку задачи | `route/ProjectRoutes.kt`, `ui/projects/ProjectTabs.kt`, `ui/main/MainScaffold.kt` |
-| PRJ-15/16 | Вкладки потребностей и документов проекта; документы с учётом конфиденциальности (`documents:read_any`), при отсутствии права — только `PUBLIC`/`INTERNAL` и свои | `service/DemandService.kt`, `repository/DocumentRepository.kt` |
-| TST | `ProjectTabsRoutesTest`: сводка по реальным записям, фильтрация задач по проекту и статусу, 403 для неучастника по всем вкладкам, история из аудита, потребности только своего проекта, документы по `document_links` | `server/src/test/kotlin/org/example/project/ProjectTabsRoutesTest.kt` |
+| PRJ-15/16 | Вкладки потребностей и документов проекта; документы и их счётчик в обзоре учитывают конфиденциальность (`documents:read_any`), при отсутствии права — только `PUBLIC`/`INTERNAL` и свои | `service/DemandService.kt`, `service/ProjectService.kt`, `repository/DocumentRepository.kt` |
+| TST | `ProjectTabsRoutesTest`: 7 сценариев — сводка по реальным записям, фильтрация задач по проекту и статусу, 403 для неучастника по всем вкладкам даже при `demands:read_any`, доступ по `projects:read_any`, история из аудита, потребности только своего проекта, документы и счётчик с учётом конфиденциальности | `server/src/test/kotlin/org/example/project/ProjectTabsRoutesTest.kt` |
 
 **Ключевые решения**
 
@@ -901,12 +901,13 @@ UI/UX .......................... 73%
 
 **Проверки**
 
-- Сборка, тесты и браузерный прогон не выполнялись: в среде нет JDK, Docker и PostgreSQL, submodule `vendor/ComposeDataGrid` пуст.
-- Статическая проверка: баланс скобок во всех изменённых `.kt` — OK; сигнатуры DTO и вызовов сверены по исходникам (`DemandLineInput`, `CreateNomenclatureRequest`, `CreateRoleRequest`, `CreateBomLineRequest`, `TaskCommandRequest`, `CancelTaskRequest`, `TaskStatusChip`, `userName`); для тестовых потребностей выбран путь `POST /api/demands/from-bom`, так как `PROJECT`-потребность ручным созданием запрещена сервисом.
+- `./gradlew.bat --no-daemon :server:test --tests 'org.example.project.ProjectTabsRoutesTest'` — `BUILD SUCCESSFUL`, 7/7 сценариев на чистой PostgreSQL-БД V1–V28.
+- `./gradlew.bat --no-daemon :app:webApp:wasmJsBrowserDevelopmentWebpack`, `:app:shared:wasmJsTest`, `:app:shared:jsTest` — `BUILD SUCCESSFUL`.
+- Два независимых review: ошибки Compose, прав `projects:read_any`, счётчика конфиденциальных документов, инвалидации и гонки загрузки исправлены; блокеров не осталось.
 
 **Не сделано / риски**
 
-- Весь код блока не компилировался и не исполнялся — вероятны ошибки компиляции в DI, тестовых хелперах и UI-композиции; первый прогон нужен на машине с JDK и PostgreSQL.
+- Изолированный браузерный E2E-прогон вкладок не выполнялся; успешная сборка не заменяет визуальную проверку.
 - Вкладки «Этапы», «Изделия», проценты готовности и обсуждение проекта сознательно не реализованы (PRJ-08/09/18/17).
 - Вкладки «Потребности» и «Документы» только читают: создание потребности и загрузка документа из карточки проекта не добавлены (формы остаются в соответствующих разделах).
 

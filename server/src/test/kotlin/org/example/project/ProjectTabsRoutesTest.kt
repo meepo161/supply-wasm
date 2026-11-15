@@ -139,6 +139,31 @@ class ProjectTabsRoutesTest {
     }
 
     @Test
+    fun `project read any opens every tab without demand permission`() = testApp {
+        val ctx = bootstrap()
+        val project = createProject(ctx.owner, ctx.ownerId, "Проект для читателя")
+        createTask(ctx.owner, project.id, "Задача проекта", TaskStatus.NEW, ctx.ownerId)
+        createUserWithRole(
+            ctx.admin,
+            "project-reader",
+            "password",
+            "Project Reader",
+            listOf(CreatePermissionRequest("projects", "read_any"))
+        )
+        val reader = loginClient("project-reader", "password")
+
+        listOf("summary", "tasks", "demands", "documents", "history").forEach { tab ->
+            val response = reader.get("/api/projects/${project.id}/$tab")
+            assertEquals(HttpStatusCode.OK, response.status, "$tab: ${response.bodyAsText()}")
+        }
+        val tasks = reader.get("/api/projects/${project.id}/tasks")
+            .bodyAs<ApiResponse<List<TaskDto>>>().data!!
+        assertEquals(1, tasks.size)
+        val task = reader.get("/api/tasks/${tasks.first().id}")
+        assertEquals(HttpStatusCode.OK, task.status, task.bodyAsText())
+    }
+
+    @Test
     fun `history contains real audit events and is ordered newest first`() = testApp {
         val ctx = bootstrap()
         val project = createProject(ctx.owner, ctx.ownerId, "Проект с историей")
@@ -234,7 +259,8 @@ class ProjectTabsRoutesTest {
                 stringify(
                     CreateDocumentRequest(
                         name = "Техзадание проекта",
-                        docType = DocumentType.TECHNICAL_SPECIFICATION
+                        docType = DocumentType.TECHNICAL_SPECIFICATION,
+                        confidentiality = DocumentConfidentiality.CONFIDENTIAL
                     )
                 )
             )
@@ -256,11 +282,24 @@ class ProjectTabsRoutesTest {
         val summary = ctx.owner.get("/api/projects/${project.id}/summary")
             .bodyAs<ApiResponse<ProjectSummaryDto>>().data!!
         assertEquals(1, summary.documentCount)
+
+        val added = ctx.owner.post("/api/projects/${project.id}/members") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(AddProjectMemberRequest(ctx.memberId)))
+        }
+        assertEquals(HttpStatusCode.OK, added.status, added.bodyAsText())
+        val memberDocuments = ctx.member.get("/api/projects/${project.id}/documents")
+            .bodyAs<ApiResponse<List<DocumentDto>>>().data!!
+        assertTrue(memberDocuments.isEmpty())
+        val memberSummary = ctx.member.get("/api/projects/${project.id}/summary")
+            .bodyAs<ApiResponse<ProjectSummaryDto>>().data!!
+        assertEquals(0, memberSummary.documentCount)
     }
 
     // --- Сценарии ---
 
     private data class Ctx(
+        val admin: HttpClient,
         val owner: HttpClient,
         val ownerId: Long,
         val member: HttpClient,
@@ -273,11 +312,17 @@ class ProjectTabsRoutesTest {
         createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
         val ownerId = createUserWithRole(admin, "owner", "password", "Owner", ownerPermissions()).id
         val memberId = createUserWithRole(admin, "member", "password", "Member", memberPermissions()).id
-        createUserWithRole(admin, "stranger", "password", "Stranger", emptyList())
+        createUserWithRole(
+            admin,
+            "stranger",
+            "password",
+            "Stranger",
+            listOf(CreatePermissionRequest("demands", "read_any"))
+        )
         val owner = loginClient("owner", "password")
         val member = loginClient("member", "password")
         val stranger = loginClient("stranger", "password")
-        return Ctx(owner, ownerId, member, memberId, stranger)
+        return Ctx(admin, owner, ownerId, member, memberId, stranger)
     }
 
     private suspend fun createProject(client: HttpClient, ownerId: Long, name: String): ProjectDto {
@@ -288,7 +333,9 @@ class ProjectTabsRoutesTest {
                     CreateProjectRequest(
                         name = name,
                         projectType = ProjectType.ORDER_DEVELOPMENT,
-                        ownerId = ownerId
+                        ownerId = ownerId,
+                        plannedStartAt = java.time.OffsetDateTime.now().toString(),
+                        plannedEndAt = java.time.OffsetDateTime.now().plusDays(30).toString()
                     )
                 )
             )

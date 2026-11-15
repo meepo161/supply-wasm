@@ -133,11 +133,6 @@ class DocumentRepository(private val dsl: DSLContext) {
         return rows.map { mapDocument(it) }
     }
 
-    fun countByProject(projectId: Long): Int =
-        dsl.fetchCount(
-            dsl.selectOne().from("document_links").where("project_id = ?", projectId)
-        )
-
     fun updateDocument(
         id: Long,
         name: String?,

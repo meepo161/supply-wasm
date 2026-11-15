@@ -155,7 +155,11 @@ class ProjectService(
             openTaskCount = openTaskCount,
             completedTaskCount = taskCount - openTaskCount,
             demandCount = demandRepository.countByProject(id),
-            documentCount = documentRepository.countByProject(id),
+            documentCount = documentRepository.listByProject(
+                id,
+                currentUser.userId,
+                currentUser.hasPermission("documents", "read_any")
+            ).size,
             memberCount = projectRepository.listMembers(id).size,
             isMember = isMember,
             canManageMembers = canManageMembers(project, currentUser)

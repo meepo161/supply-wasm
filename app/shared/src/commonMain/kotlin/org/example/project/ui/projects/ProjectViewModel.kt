@@ -108,49 +108,61 @@ class ProjectViewModel(
         viewModelScope.launch {
             when (tab) {
                 ProjectTab.OVERVIEW -> when (val result = projectRepository.summary(id)) {
-                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                        summary = result.data,
-                        tabLoading = false,
-                        loadedTabs = _uiState.value.loadedTabs + tab
-                    )
-                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                        tabLoading = false,
-                        tabError = result.error
-                    )
+                    is ApiResult.Success -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(
+                            summary = result.data,
+                            tabLoading = false,
+                            loadedTabs = _uiState.value.loadedTabs + tab
+                        )
+                    }
+                    is ApiResult.Error -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(tabLoading = false, tabError = result.error)
+                    }
                 }
                 ProjectTab.TASKS -> loadTasks(id, _uiState.value.taskStatusFilter)
                 ProjectTab.DEMANDS -> when (val result = projectRepository.demands(id)) {
-                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                        demands = result.data,
-                        tabLoading = false,
-                        loadedTabs = _uiState.value.loadedTabs + tab
-                    )
-                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                        tabLoading = false,
-                        tabError = result.error
-                    )
+                    is ApiResult.Success -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(
+                            demands = result.data,
+                            tabLoading = false,
+                            loadedTabs = _uiState.value.loadedTabs + tab
+                        )
+                    }
+                    is ApiResult.Error -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(tabLoading = false, tabError = result.error)
+                    }
                 }
                 ProjectTab.DOCUMENTS -> when (val result = projectRepository.documents(id)) {
-                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                        documents = result.data,
-                        tabLoading = false,
-                        loadedTabs = _uiState.value.loadedTabs + tab
-                    )
-                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                        tabLoading = false,
-                        tabError = result.error
-                    )
+                    is ApiResult.Success -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(
+                            documents = result.data,
+                            tabLoading = false,
+                            loadedTabs = _uiState.value.loadedTabs + tab
+                        )
+                    }
+                    is ApiResult.Error -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(tabLoading = false, tabError = result.error)
+                    }
                 }
                 ProjectTab.HISTORY -> when (val result = projectRepository.history(id)) {
-                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                        history = result.data,
-                        tabLoading = false,
-                        loadedTabs = _uiState.value.loadedTabs + tab
-                    )
-                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                        tabLoading = false,
-                        tabError = result.error
-                    )
+                    is ApiResult.Success -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(
+                            history = result.data,
+                            tabLoading = false,
+                            loadedTabs = _uiState.value.loadedTabs + tab
+                        )
+                    }
+                    is ApiResult.Error -> {
+                        if (_uiState.value.selectedProject?.id != id) return@launch
+                        _uiState.value = _uiState.value.copy(tabLoading = false, tabError = result.error)
+                    }
                 }
             }
         }
@@ -166,7 +178,13 @@ class ProjectViewModel(
     private fun loadTasks(projectId: Long, status: TaskStatus?) {
         _uiState.value = _uiState.value.copy(tabLoading = true, tabError = null)
         viewModelScope.launch {
-            when (val result = projectRepository.tasks(projectId, status)) {
+            val result = projectRepository.tasks(projectId, status)
+            if (_uiState.value.selectedProject?.id != projectId ||
+                _uiState.value.taskStatusFilter != status
+            ) {
+                return@launch
+            }
+            when (result) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
                     tasks = result.data,
                     tabLoading = false,
@@ -269,9 +287,9 @@ class ProjectViewModel(
                 is ApiResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         createForm = ProjectCreateForm(),
-                        createError = null,
-                        selectedProject = result.data
+                        createError = null
                     )
+                    selectProject(result.data)
                     loadProjects()
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(createError = result.error)
@@ -296,8 +314,10 @@ class ProjectViewModel(
                 is ApiResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         selectedProject = result.data,
-                        openForm = OpenProjectForm()
+                        openForm = OpenProjectForm(),
+                        loadedTabs = emptySet()
                     )
+                    loadTab()
                     loadProjects()
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(openError = result.error)
@@ -314,8 +334,10 @@ class ProjectViewModel(
                     _uiState.value = _uiState.value.copy(
                         selectedProject = result.data,
                         isClosing = false,
-                        closeError = null
+                        closeError = null,
+                        loadedTabs = emptySet()
                     )
+                    loadTab()
                     loadProjects()
                 }
                 is ApiResult.Error -> {
@@ -330,7 +352,10 @@ class ProjectViewModel(
         _uiState.value = _uiState.value.copy(memberError = null)
         viewModelScope.launch {
             when (val result = projectRepository.addMember(projectId, AddProjectMemberRequest(userId))) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(selectedProject = result.data)
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(selectedProject = result.data, loadedTabs = emptySet())
+                    loadTab()
+                }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(memberError = result.error)
             }
         }
@@ -340,7 +365,10 @@ class ProjectViewModel(
         _uiState.value = _uiState.value.copy(memberError = null)
         viewModelScope.launch {
             when (val result = projectRepository.removeMember(projectId, userId)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(selectedProject = result.data)
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(selectedProject = result.data, loadedTabs = emptySet())
+                    loadTab()
+                }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(memberError = result.error)
             }
         }
@@ -348,7 +376,9 @@ class ProjectViewModel(
 
     fun refreshSelectedProject(projectId: Long) {
         viewModelScope.launch {
-            when (val result = projectRepository.get(projectId)) {
+            val result = projectRepository.get(projectId)
+            if (_uiState.value.selectedProject?.id != projectId) return@launch
+            when (result) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
                     selectedProject = result.data,
                     detailLoading = false

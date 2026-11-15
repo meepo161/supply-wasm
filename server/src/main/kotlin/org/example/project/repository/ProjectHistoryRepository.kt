@@ -56,8 +56,8 @@ class ProjectHistoryRepository(private val dsl: DSLContext) {
     }
 
     /**
-     * Разбор `payload` без сериализатора: нужны только плоские строковые поля.
-     * Неизвестные структуры пропускаются, а не превращаются в выдуманный текст.
+     * Разбор `payload` без сериализатора: извлекаются строковые и числовые
+     * поля, которые уже записаны в аудит; новый текст не формируется.
      */
     internal fun parsePayload(raw: String?): Map<String, String> {
         if (raw.isNullOrBlank()) return emptyMap()

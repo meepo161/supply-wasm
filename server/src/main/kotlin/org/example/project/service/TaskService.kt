@@ -91,8 +91,8 @@ class TaskService(
 
     /**
      * Задачи проекта для вкладки карточки (PRJ-14). Фильтрация по проекту
-     * выполняется на сервере; права проверяются те же, что и для отдельной
-     * задачи, поэтому неучастник получает отказ, а не пустой список.
+     * выполняется на сервере; участники и `projects:read_any` видят все задачи
+     * проекта (D-22/D-50), неучастник получает отказ, а не пустой список.
      */
     fun listByProject(projectId: Long, status: TaskStatus?, currentUser: CurrentUser): List<TaskDto> {
         val project = projectRepository.findById(projectId) ?: throw NotFoundException("project", projectId)
@@ -102,7 +102,6 @@ class TaskService(
             throw ForbiddenException("Access to project tasks denied")
         }
         return taskRepository.listByProject(projectId, status?.name)
-            .filter { canRead(it, currentUser) }
             .map { it.toDto(loadParticipants(it.id)) }
     }
 
@@ -443,6 +442,7 @@ class TaskService(
         if (isParticipant(task.id, currentUser.userId, listOf(TaskParticipantRole.COEXECUTOR, TaskParticipantRole.OBSERVER))) return true
 
         if (task.area == "PROJECT" && task.projectId != null) {
+            if (currentUser.hasPermission("projects", "read_any")) return true
             val project = projectRepository.findById(task.projectId)
             if (project != null && (projectRepository.isMember(task.projectId, currentUser.userId) || project.ownerId == currentUser.userId)) {
                 return true

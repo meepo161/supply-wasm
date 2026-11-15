@@ -51,7 +51,7 @@ Task and project cards contain a real attachment section: the user picks a brows
 
 The demand card contains a reusable approval panel (`ApprovalsSection`): route list for the selected demand (`targetType=DEMAND`), route card with stages, ALL/ANY policy, assignees and decision history (author/time/comment), start of a route by template for a `PENDING_APPROVAL` demand with `approvals:start` and a per-attempt idempotency key, APPROVE/REJECT/RETURN decisions for the current stage (comment required for REJECT/RETURN on client and server) and route cancellation with a mandatory reason under `approvals:cancel`. After an action the panel reloads the route and the demand card refreshes so the final APPROVED status is visible. There is no global approval queue and no template editor in this increment.
 
-All project tab endpoints enforce server-side access: a non-member without `projects:read_any` receives `403`, an unknown project `404`. Documents additionally respect confidentiality and `documents:read_any`.
+All project tab endpoints enforce server-side access: a non-member without `projects:read_any` receives `403`, an unknown project `404`. The same project permission also opens an individual project task from the tab. Documents and their overview counter respect confidentiality and `documents:read_any`.
 
 Relevant sources:
 

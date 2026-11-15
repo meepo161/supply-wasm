@@ -152,7 +152,7 @@ private fun OverviewTab(summary: ProjectSummaryDto?, modifier: Modifier = Modifi
             // что методика их расчёта не утверждена.
             DetailLine("Задач всего", summary.taskCount.toString())
             DetailLine("В работе", summary.openTaskCount.toString())
-            DetailLine("Завершено", summary.completedTaskCount.toString())
+            DetailLine("Завершено или отменено", summary.completedTaskCount.toString())
             DetailLine("Потребностей", summary.demandCount.toString())
             DetailLine("Документов", summary.documentCount.toString())
             DetailLine("Участников", summary.memberCount.toString())
@@ -190,16 +190,16 @@ private fun TasksTab(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilterChipButton("Все", statusFilter == null) { onStatusFilter(null) }
-            FilterChipButton("В работе", statusFilter == TaskStatus.IN_PROGRESS) {
+            FilterChipButton("Все", statusFilter == null, onClick = { onStatusFilter(null) })
+            FilterChipButton("В работе", statusFilter == TaskStatus.IN_PROGRESS, onClick = {
                 onStatusFilter(TaskStatus.IN_PROGRESS)
-            }
-            FilterChipButton("На проверке", statusFilter == TaskStatus.ON_REVIEW) {
+            })
+            FilterChipButton("На проверке", statusFilter == TaskStatus.ON_REVIEW, onClick = {
                 onStatusFilter(TaskStatus.ON_REVIEW)
-            }
-            FilterChipButton("Закрыты", statusFilter == TaskStatus.CLOSED) {
+            })
+            FilterChipButton("Закрыты", statusFilter == TaskStatus.CLOSED, onClick = {
                 onStatusFilter(TaskStatus.CLOSED)
-            }
+            })
         }
 
         if (tasks.isEmpty()) {
