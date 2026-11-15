@@ -74,6 +74,22 @@ class DocumentService(
             .map { it.toDto() }
     }
 
+    /**
+     * Документы проекта для вкладки карточки (PRJ-16). Видимость документов
+     * не расширяется членством в проекте: закрытый документ остаётся закрытым,
+     * поэтому список дополнительно фильтруется правилами DMS.
+     */
+    fun listByProject(projectId: Long, currentUser: CurrentUser): List<DocumentDto> {
+        documentAccess.requireReadProject(projectId, currentUser)
+        return documentRepository
+            .listByProject(
+                projectId = projectId,
+                userId = currentUser.userId,
+                hasReadAny = currentUser.hasPermission("documents", "read_any")
+            )
+            .map { it.toDto() }
+    }
+
     fun get(id: Long, currentUser: CurrentUser): DocumentDto {
         loadReadable(id, currentUser)
         return loadFull(id)

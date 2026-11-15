@@ -112,6 +112,32 @@ class DocumentRepository(private val dsl: DSLContext) {
         }.map { mapDocument(it) }
     }
 
+    /**
+     * Документы, связанные с проектом (PRJ-16). Видимость документов повторяет
+     * общие правила DMS: `read_any` видит всё, остальные — PUBLIC/INTERNAL и свои.
+     */
+    fun listByProject(projectId: Long, userId: Long, hasReadAny: Boolean): List<DocumentRow> {
+        val visibility = if (hasReadAny) {
+            ""
+        } else {
+            " AND (d.confidentiality IN ('PUBLIC', 'INTERNAL') OR d.owner_id = ?)"
+        }
+        val sql = """
+            SELECT d.*
+            FROM documents d
+            JOIN document_links l ON l.document_id = d.id
+            WHERE l.project_id = ?$visibility
+            ORDER BY d.created_at DESC
+        """.trimIndent()
+        val rows = if (hasReadAny) dsl.fetch(sql, projectId) else dsl.fetch(sql, projectId, userId)
+        return rows.map { mapDocument(it) }
+    }
+
+    fun countByProject(projectId: Long): Int =
+        dsl.fetchCount(
+            dsl.selectOne().from("document_links").where("project_id = ?", projectId)
+        )
+
     fun updateDocument(
         id: Long,
         name: String?,

@@ -8,6 +8,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.request.url
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import org.example.project.dto.AddProjectMemberRequest
@@ -16,7 +17,13 @@ import org.example.project.dto.ApiResponse
 import org.example.project.dto.CloseProjectRequest
 import org.example.project.dto.CreateProjectRequest
 import org.example.project.dto.OpenProjectRequest
+import org.example.project.dto.DemandHeaderDto
+import org.example.project.dto.DocumentDto
 import org.example.project.dto.ProjectDto
+import org.example.project.dto.ProjectHistoryEntryDto
+import org.example.project.dto.ProjectSummaryDto
+import org.example.project.dto.TaskDto
+import org.example.project.dto.TaskStatus
 
 class ProjectApiClient(private val client: HttpClient) : ProjectRepository {
 
@@ -38,6 +45,30 @@ class ProjectApiClient(private val client: HttpClient) : ProjectRepository {
 
     override suspend fun removeMember(id: Long, userId: Long): ApiResult<ProjectDto> =
         delete("/api/projects/$id/members/$userId")
+
+    override suspend fun summary(id: Long): ApiResult<ProjectSummaryDto> =
+        get("/api/projects/$id/summary")
+
+    override suspend fun history(id: Long, limit: Int?): ApiResult<List<ProjectHistoryEntryDto>> =
+        getWithParams("/api/projects/$id/history", buildMap { limit?.let { put("limit", it.toString()) } })
+
+    override suspend fun tasks(id: Long, status: TaskStatus?): ApiResult<List<TaskDto>> =
+        getWithParams("/api/projects/$id/tasks", buildMap { status?.let { put("status", it.name) } })
+
+    override suspend fun demands(id: Long): ApiResult<List<DemandHeaderDto>> =
+        get("/api/projects/$id/demands")
+
+    override suspend fun documents(id: Long): ApiResult<List<DocumentDto>> =
+        get("/api/projects/$id/documents")
+
+    private suspend inline fun <reified T> getWithParams(
+        path: String,
+        params: Map<String, String>
+    ): ApiResult<T> = execute {
+        client.get(path) {
+            url { params.forEach { (key, value) -> parameters.append(key, value) } }
+        }
+    }
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         execute { client.get(path) }

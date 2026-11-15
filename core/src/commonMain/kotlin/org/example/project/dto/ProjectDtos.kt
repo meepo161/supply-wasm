@@ -91,3 +91,45 @@ data class CloseProjectRequest(
 data class AddProjectMemberRequest(
     val userId: Long
 )
+
+// ---------------------------------------------------------------------------
+// Карточка проекта: вкладки «Обзор», «Задачи», «Потребности», «Документы»,
+// «История» (ТЗ M.4, PRJ-13/PRJ-14). Этапы, риски и проценты готовности в
+// первую поставку не входят (PRJ-08/PRJ-09, M.1/M.4), поэтому их здесь нет.
+// ---------------------------------------------------------------------------
+
+/**
+ * Запись истории проекта: изменение статуса, участники, открытие и закрытие,
+ * приёмка по заказу. Данные берутся из журнала аудита, а не пересчитываются на
+ * клиенте, поэтому в карточке видно только то, что действительно произошло.
+ */
+@Serializable
+data class ProjectHistoryEntryDto(
+    val id: Long,
+    val action: String,
+    /** Название действия по-русски; сервер отдаёт готовую подпись. */
+    val title: String,
+    val userId: Long? = null,
+    val userName: String? = null,
+    val payload: Map<String, String> = emptyMap(),
+    val createdAt: String
+)
+
+/**
+ * Сводка по проекту для вкладки «Обзор»: только реальные счётчики связанных
+ * записей. Проценты готовности не вычисляются — методика не утверждена.
+ */
+@Serializable
+data class ProjectSummaryDto(
+    val projectId: Long,
+    val taskCount: Int,
+    val openTaskCount: Int,
+    val completedTaskCount: Int,
+    val demandCount: Int,
+    val documentCount: Int,
+    val memberCount: Int,
+    /** Пользователь состоит в проекте; неучастник видит только обзор без вкладок. */
+    val isMember: Boolean,
+    /** Может добавлять и удалять участников. */
+    val canManageMembers: Boolean
+)

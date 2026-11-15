@@ -6,7 +6,11 @@ import org.example.project.exception.NotFoundException
 import org.example.project.exception.ValidationException
 import org.example.project.generated.jooq.tables.records.ProjectsRecord
 import org.example.project.model.CurrentUser
+import org.example.project.repository.DemandRepository
+import org.example.project.repository.DocumentRepository
+import org.example.project.repository.ProjectHistoryRepository
 import org.example.project.repository.ProjectRepository
+import org.example.project.repository.TaskRepository
 import org.example.project.repository.UserRepository
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
@@ -14,6 +18,10 @@ import java.time.format.DateTimeParseException
 class ProjectService(
     private val projectRepository: ProjectRepository,
     private val userRepository: UserRepository,
+    private val taskRepository: TaskRepository,
+    private val demandRepository: DemandRepository,
+    private val documentRepository: DocumentRepository,
+    private val historyRepository: ProjectHistoryRepository,
     private val auditService: AuditService,
     private val dsl: org.jooq.DSLContext
 ) {
@@ -125,6 +133,65 @@ class ProjectService(
             projectRepository.listForUser(currentUser.userId)
         }
         return records.map { it.toDto() }
+    }
+
+    /**
+     * Сводка для вкладки «Обзор» (PRJ-13): только реальные счётчики связанных
+     * записей. Проценты готовности не вычисляются — методика не утверждена
+     * (M.1/M.4), а выдуманные проценты показывать нельзя.
+     */
+    fun summary(id: Long, currentUser: CurrentUser): ProjectSummaryDto {
+        val project = projectRepository.findById(id) ?: throw NotFoundException("project", id)
+        if (!canRead(project, currentUser)) {
+            throw ForbiddenException("Access to project denied")
+        }
+        val isMember = projectRepository.isMember(id, currentUser.userId) ||
+            project.ownerId == currentUser.userId
+        val taskCount = taskRepository.countByProject(id)
+        val openTaskCount = taskRepository.countOpenByProject(id, CLOSED_TASK_STATUSES)
+        return ProjectSummaryDto(
+            projectId = id,
+            taskCount = taskCount,
+            openTaskCount = openTaskCount,
+            completedTaskCount = taskCount - openTaskCount,
+            demandCount = demandRepository.countByProject(id),
+            documentCount = documentRepository.countByProject(id),
+            memberCount = projectRepository.listMembers(id).size,
+            isMember = isMember,
+            canManageMembers = canManageMembers(project, currentUser)
+        )
+    }
+
+    /**
+     * История проекта из журнала аудита (PRJ-13). События не переписываются:
+     * вкладка показывает то, что уже зафиксировано при изменении проекта.
+     */
+    fun history(id: Long, limit: Int?, currentUser: CurrentUser): List<ProjectHistoryEntryDto> {
+        val project = projectRepository.findById(id) ?: throw NotFoundException("project", id)
+        if (!canRead(project, currentUser)) {
+            throw ForbiddenException("Access to project denied")
+        }
+        val effectiveLimit = (limit ?: DEFAULT_HISTORY_LIMIT).coerceIn(1, MAX_HISTORY_LIMIT)
+        return historyRepository.listForProject(id, effectiveLimit).map { entry ->
+            ProjectHistoryEntryDto(
+                id = entry.id,
+                action = entry.action,
+                title = historyTitle(entry.action),
+                userId = entry.userId,
+                userName = entry.userName,
+                payload = entry.payload,
+                createdAt = entry.createdAt.toString()
+            )
+        }
+    }
+
+    private fun historyTitle(action: String): String = when (action) {
+        "CREATE" -> "Проект создан"
+        "OPEN" -> "Проект открыт"
+        "CLOSE" -> "Проект закрыт"
+        "ADD_MEMBER" -> "Добавлен участник"
+        "REMOVE_MEMBER" -> "Удалён участник"
+        else -> action
     }
 
     fun addMember(id: Long, request: AddProjectMemberRequest, currentUser: CurrentUser): ProjectDto {
@@ -251,5 +318,14 @@ class ProjectService(
 
     companion object {
         private val CLOSEABLE_STATUSES = setOf("PLANNED", "IN_PROGRESS", "ON_HOLD", "COMPLETED")
+
+        /**
+         * Статусы задачи, в которых работа по задаче завершена. Список совпадает
+         * с `TaskStatus`: новых статусов здесь не изобретается.
+         */
+        private val CLOSED_TASK_STATUSES = listOf("CLOSED", "CANCELLED")
+
+        private const val DEFAULT_HISTORY_LIMIT = 100
+        private const val MAX_HISTORY_LIMIT = 500
     }
 }

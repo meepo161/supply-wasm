@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 fun ProjectsScreen(
     currentUser: org.example.project.dto.UserDto,
     viewModel: ProjectViewModel,
+    onTaskOpen: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -42,7 +43,12 @@ fun ProjectsScreen(
             onAddMember = { viewModel.addMember(selected.id, it) },
             onRemoveMember = { viewModel.removeMember(selected.id, it) },
             onBack = viewModel::backToList,
-            modifier = modifier
+            modifier = modifier,
+            tabsState = state,
+            onTabSelected = viewModel::selectTab,
+            onTabRefresh = { viewModel.loadTab() },
+            onTaskStatusFilter = viewModel::filterTasks,
+            onTaskOpen = onTaskOpen
         )
     } else {
         ProjectListScreen(

@@ -10,6 +10,12 @@ import org.example.project.data.ApiResult
 import org.example.project.data.ProjectRepository
 import org.example.project.data.UserRepository
 import org.example.project.dto.AddProjectMemberRequest
+import org.example.project.dto.DemandHeaderDto
+import org.example.project.dto.DocumentDto
+import org.example.project.dto.ProjectHistoryEntryDto
+import org.example.project.dto.ProjectSummaryDto
+import org.example.project.dto.TaskDto
+import org.example.project.dto.TaskStatus
 import org.example.project.dto.CloseProjectRequest
 import org.example.project.dto.CreateProjectRequest
 import org.example.project.dto.OpenProjectRequest
@@ -63,11 +69,119 @@ class ProjectViewModel(
             selectedProject = project,
             detailLoading = true,
             openError = null,
-            memberError = null
+            memberError = null,
+            selectedTab = ProjectTab.OVERVIEW,
+            tabError = null,
+            summary = null,
+            tasks = emptyList(),
+            demands = emptyList(),
+            documents = emptyList(),
+            history = emptyList(),
+            loadedTabs = emptySet(),
+            taskStatusFilter = null
         )
         viewModelScope.launch {
             refreshSelectedProject(project.id)
+            loadTab(ProjectTab.OVERVIEW)
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Вкладки карточки проекта (PRJ-13/PRJ-14)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Переключение вкладки. Данные загружаются при первом открытии и по кнопке
+     * «Обновить»: повторный клик по той же вкладке не тратит запросы.
+     */
+    fun selectTab(tab: ProjectTab) {
+        val project = _uiState.value.selectedProject ?: return
+        _uiState.value = _uiState.value.copy(selectedTab = tab, tabError = null)
+        // Загруженность отслеживается явно: пустой список — тоже валидный
+        // результат, и повторно запрашивать его при каждом клике не нужно.
+        if (tab !in _uiState.value.loadedTabs) loadTab(tab, project.id)
+    }
+
+    fun loadTab(tab: ProjectTab = _uiState.value.selectedTab, projectId: Long? = null) {
+        val id = projectId ?: _uiState.value.selectedProject?.id ?: return
+        _uiState.value = _uiState.value.copy(tabLoading = true, tabError = null)
+        viewModelScope.launch {
+            when (tab) {
+                ProjectTab.OVERVIEW -> when (val result = projectRepository.summary(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                        summary = result.data,
+                        tabLoading = false,
+                        loadedTabs = _uiState.value.loadedTabs + tab
+                    )
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        tabLoading = false,
+                        tabError = result.error
+                    )
+                }
+                ProjectTab.TASKS -> loadTasks(id, _uiState.value.taskStatusFilter)
+                ProjectTab.DEMANDS -> when (val result = projectRepository.demands(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                        demands = result.data,
+                        tabLoading = false,
+                        loadedTabs = _uiState.value.loadedTabs + tab
+                    )
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        tabLoading = false,
+                        tabError = result.error
+                    )
+                }
+                ProjectTab.DOCUMENTS -> when (val result = projectRepository.documents(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                        documents = result.data,
+                        tabLoading = false,
+                        loadedTabs = _uiState.value.loadedTabs + tab
+                    )
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        tabLoading = false,
+                        tabError = result.error
+                    )
+                }
+                ProjectTab.HISTORY -> when (val result = projectRepository.history(id)) {
+                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                        history = result.data,
+                        tabLoading = false,
+                        loadedTabs = _uiState.value.loadedTabs + tab
+                    )
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        tabLoading = false,
+                        tabError = result.error
+                    )
+                }
+            }
+        }
+    }
+
+    /** Фильтр по статусу задачи выполняется на сервере, а не в списке на клиенте. */
+    fun filterTasks(status: TaskStatus?) {
+        val project = _uiState.value.selectedProject ?: return
+        _uiState.value = _uiState.value.copy(taskStatusFilter = status)
+        loadTasks(project.id, status)
+    }
+
+    private fun loadTasks(projectId: Long, status: TaskStatus?) {
+        _uiState.value = _uiState.value.copy(tabLoading = true, tabError = null)
+        viewModelScope.launch {
+            when (val result = projectRepository.tasks(projectId, status)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    tasks = result.data,
+                    tabLoading = false,
+                    loadedTabs = _uiState.value.loadedTabs + ProjectTab.TASKS
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    tabLoading = false,
+                    tabError = result.error
+                )
+            }
+        }
+    }
+
+    fun dismissTabError() {
+        _uiState.value = _uiState.value.copy(tabError = null)
     }
 
     /**
@@ -75,17 +189,30 @@ class ProjectViewModel(
      * поэтому карточка запрашивается у сервера — права проверяются повторно.
      */
     fun openProjectById(projectId: Long) {
+        // Вкладки от предыдущего проекта не должны переезжать в новый.
         _uiState.value = _uiState.value.copy(
             detailLoading = true,
             openError = null,
-            memberError = null
+            memberError = null,
+            selectedTab = ProjectTab.OVERVIEW,
+            tabError = null,
+            summary = null,
+            tasks = emptyList(),
+            demands = emptyList(),
+            documents = emptyList(),
+            history = emptyList(),
+            taskStatusFilter = null,
+            loadedTabs = emptySet()
         )
         viewModelScope.launch {
             when (val result = projectRepository.get(projectId)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    selectedProject = result.data,
-                    detailLoading = false
-                )
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedProject = result.data,
+                        detailLoading = false
+                    )
+                    loadTab(ProjectTab.OVERVIEW, projectId)
+                }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     detailLoading = false,
                     error = result.error
@@ -99,7 +226,16 @@ class ProjectViewModel(
             selectedProject = null,
             openError = null,
             memberError = null,
-            createError = null
+            createError = null,
+            selectedTab = ProjectTab.OVERVIEW,
+            tabError = null,
+            summary = null,
+            tasks = emptyList(),
+            demands = emptyList(),
+            documents = emptyList(),
+            history = emptyList(),
+            taskStatusFilter = null,
+            loadedTabs = emptySet()
         )
     }
 
@@ -259,8 +395,33 @@ data class ProjectsUiState(
     val closeError: org.example.project.dto.ApiError? = null,
     val isClosing: Boolean = false,
     val createForm: ProjectCreateForm = ProjectCreateForm(),
-    val openForm: OpenProjectForm = OpenProjectForm()
+    val openForm: OpenProjectForm = OpenProjectForm(),
+
+    // Вкладки карточки (PRJ-13/PRJ-14)
+    val selectedTab: ProjectTab = ProjectTab.OVERVIEW,
+    val tabLoading: Boolean = false,
+    val tabError: org.example.project.dto.ApiError? = null,
+    val summary: ProjectSummaryDto? = null,
+    val tasks: List<TaskDto> = emptyList(),
+    val demands: List<DemandHeaderDto> = emptyList(),
+    val documents: List<DocumentDto> = emptyList(),
+    val history: List<ProjectHistoryEntryDto> = emptyList(),
+    val taskStatusFilter: TaskStatus? = null,
+    /** Вкладки, данные которых уже получены с сервера (включая пустые ответы). */
+    val loadedTabs: Set<ProjectTab> = emptySet()
 )
+
+/**
+ * Вкладки карточки проекта по M.4: обзор, задачи, потребности, документы,
+ * история. Этапы, риски и проценты готовности в первую поставку не входят.
+ */
+enum class ProjectTab(val title: String) {
+    OVERVIEW("Обзор"),
+    TASKS("Задачи"),
+    DEMANDS("Потребности"),
+    DOCUMENTS("Документы"),
+    HISTORY("История")
+}
 
 data class ProjectCreateForm(
     val name: String = "",

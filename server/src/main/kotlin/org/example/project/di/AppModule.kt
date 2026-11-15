@@ -44,6 +44,7 @@ fun appModule(config: AppConfig) = module {
     single { DepartmentRepository(get()) }
     single { RoleRepository(get()) }
     single { ProjectRepository(get()) }
+    single { ProjectHistoryRepository(get()) }
     single { ChatRepository(get()) }
     single { TaskRepository(get()) }
     single { NotificationRepository(get()) }
@@ -61,7 +62,18 @@ fun appModule(config: AppConfig) = module {
     single { DepartmentService(get(), get()) }
     single { RoleService(get(), get(), get()) }
     single { PermissionService(get(), get(), get()) }
-    single { ProjectService(get(), get(), get(), get()) }
+    single {
+        ProjectService(
+            projectRepository = get(),
+            userRepository = get(),
+            taskRepository = get(),
+            demandRepository = get(),
+            documentRepository = get(),
+            historyRepository = get(),
+            auditService = get(),
+            dsl = get()
+        )
+    }
     single { TaskService(get(), get(), get(), get(), get(), get()) }
     single { NotificationService(get()) }
     single { ChatEventBus() }

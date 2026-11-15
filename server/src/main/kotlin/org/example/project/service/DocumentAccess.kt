@@ -20,6 +20,21 @@ class DocumentAccess(
             projectRepository.isMember(projectId, currentUser.userId)
     }
 
+    /**
+     * Проверка доступа к проекту для вкладки «Документы» (PRJ-13):
+     * неучастник получает 403, несуществующий проект — 404.
+     */
+    fun requireReadProject(projectId: Long, currentUser: CurrentUser) {
+        val project = projectRepository.findById(projectId)
+            ?: throw org.example.project.exception.NotFoundException("project", projectId)
+        if (!currentUser.hasPermission("projects", "read_any") &&
+            project.ownerId != currentUser.userId &&
+            !projectRepository.isMember(projectId, currentUser.userId)
+        ) {
+            throw org.example.project.exception.ForbiddenException("Access to project documents denied")
+        }
+    }
+
     fun canReadTask(taskId: Long, currentUser: CurrentUser): Boolean {
         chatRepository.findTaskById(taskId) ?: return false
         return chatRepository.canRead(taskId, currentUser.userId, currentUser.hasPermission("tasks", "read_any"))

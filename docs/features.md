@@ -44,11 +44,14 @@ The project area uses real server data and supports:
 - project card with type, priority, owner, dates, opening data and members;
 - opening a project with a reason and optimistic version check;
 - closing a project with permission/version checks and server-side detection of unfinished related processes;
-- adding and removing members with the appropriate server-side permission.
+- adding and removing members with the appropriate server-side permission;
+- project card tabs «Обзор», «Задачи», «Потребности», «Документы», «История». The overview shows only real counters of related records (tasks, open/completed tasks, demands, documents, members) — no readiness percentages, because their formula is not approved. The task tab reads `GET /api/projects/{id}/tasks?status=...` with server-side filtering and «Открыть» switches to the task card in the task section. The demand and document tabs are read-only lists served by their own endpoints. The history tab reads `audit_log` for `entity_type='PROJECT'`; the server returns ready Russian titles and the timestamp, and paginates via `limit` (1..500). «Этапы» and «Изделия» tabs are not shown: the entities do not exist yet (PRJ-08/09).
 
 Task and project cards contain a real attachment section: the user picks a browser file, uploads/downloads/deletes it through the authorized API, with read-only behavior for closed tasks. WMS, BOM, demand and document screens are connected to their real API clients. Their full business acceptance is tracked separately; implementation presence is not presented as a completed ERP.
 
 The demand card contains a reusable approval panel (`ApprovalsSection`): route list for the selected demand (`targetType=DEMAND`), route card with stages, ALL/ANY policy, assignees and decision history (author/time/comment), start of a route by template for a `PENDING_APPROVAL` demand with `approvals:start` and a per-attempt idempotency key, APPROVE/REJECT/RETURN decisions for the current stage (comment required for REJECT/RETURN on client and server) and route cancellation with a mandatory reason under `approvals:cancel`. After an action the panel reloads the route and the demand card refreshes so the final APPROVED status is visible. There is no global approval queue and no template editor in this increment.
+
+All project tab endpoints enforce server-side access: a non-member without `projects:read_any` receives `403`, an unknown project `404`. Documents additionally respect confidentiality and `documents:read_any`.
 
 Relevant sources:
 
@@ -56,6 +59,7 @@ Relevant sources:
 - [`MainScaffold.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/main/MainScaffold.kt)
 - [`ProjectsScreen.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/projects/ProjectsScreen.kt)
 - [`ProjectViewModel.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/projects/ProjectViewModel.kt)
+- [`ProjectTabs.kt`](../app/shared/src/commonMain/kotlin/org/example/project/ui/projects/ProjectTabs.kt)
 
 ## HTTP client and data layer
 

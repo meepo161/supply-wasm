@@ -862,7 +862,9 @@ private fun MainContent(
 
         NavigationDestination.PROJECTS -> ProjectsScreen(
             currentUser = user,
-            viewModel = projectViewModel
+            viewModel = projectViewModel,
+            // Задача из вкладки «Задачи» проекта открывается в разделе задач.
+            onTaskOpen = onOpenTask
         )
 
         NavigationDestination.WMS -> wmsViewModel?.let {

@@ -130,6 +130,16 @@ class DemandRepository(private val dsl: DSLContext) {
         }
     }
 
+    /** Потребности проекта для вкладки «Потребности» карточки (PRJ-15). */
+    fun listByProject(projectId: Long): List<DemandsRecord> =
+        dsl.selectFrom(DEMANDS)
+            .where(DEMANDS.PROJECT_ID.eq(projectId))
+            .orderBy(DEMANDS.CREATED_AT.desc())
+            .fetch()
+
+    fun countByProject(projectId: Long): Int =
+        dsl.fetchCount(DEMANDS, DEMANDS.PROJECT_ID.eq(projectId))
+
     fun createDemand(
         number: String,
         sourceType: String,

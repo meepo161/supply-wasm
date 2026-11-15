@@ -46,7 +46,7 @@ fun Application.configureRouting() {
         departmentRoutes(departmentService)
         roleRoutes(roleService)
         permissionRoutes(permissionService)
-        projectRoutes(projectService)
+        projectRoutes(projectService, taskService, demandService, documentService)
         taskRoutes(taskService)
         chatRoutes(chatService)
         notificationRoutes(notificationService)

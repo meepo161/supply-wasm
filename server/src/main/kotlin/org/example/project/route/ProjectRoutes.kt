@@ -8,9 +8,22 @@ import io.ktor.server.routing.*
 import org.example.project.dto.*
 import org.example.project.plugins.RequireAuthPlugin
 import org.example.project.plugins.currentUser
+import org.example.project.service.DemandService
+import org.example.project.service.DocumentService
 import org.example.project.service.ProjectService
+import org.example.project.service.TaskService
 
-fun Route.projectRoutes(projectService: ProjectService) {
+/** Числовой параметр пути; текст ошибки совпадает с остальными маршрутами проекта. */
+private fun ApplicationCall.longParamOrThrow(name: String): Long =
+    parameters[name]?.toLongOrNull()
+        ?: throw org.example.project.exception.ValidationException("Invalid $name")
+
+fun Route.projectRoutes(
+    projectService: ProjectService,
+    taskService: TaskService,
+    demandService: DemandService,
+    documentService: DocumentService
+) {
     route("/api/projects") {
         install(RequireAuthPlugin) {}
 
@@ -41,6 +54,55 @@ fun Route.projectRoutes(projectService: ProjectService) {
             val request = call.receive<CloseProjectRequest>()
             val project = projectService.close(id, request, call.currentUser())
             call.respond(HttpStatusCode.OK, ApiResponse.success(project))
+        }
+
+        // Вкладки карточки проекта (PRJ-13/PRJ-14). Права проверяются в сервисах:
+        // неучастник получает 403, а не пустой список.
+        get("/{id}/summary") {
+            val id = call.longParamOrThrow("id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(projectService.summary(id, call.currentUser())))
+        }
+
+        get("/{id}/history") {
+            val id = call.longParamOrThrow("id")
+            val limit = call.request.queryParameters["limit"]?.let {
+                it.toIntOrNull() ?: throw org.example.project.exception.ValidationException("Invalid limit")
+            }
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(projectService.history(id, limit, call.currentUser()))
+            )
+        }
+
+        get("/{id}/tasks") {
+            val id = call.longParamOrThrow("id")
+            val status = call.request.queryParameters["status"]?.let {
+                try {
+                    TaskStatus.valueOf(it)
+                } catch (_: IllegalArgumentException) {
+                    throw org.example.project.exception.ValidationException("Invalid task status")
+                }
+            }
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(taskService.listByProject(id, status, call.currentUser()))
+            )
+        }
+
+        get("/{id}/demands") {
+            val id = call.longParamOrThrow("id")
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(demandService.listByProject(id, call.currentUser()))
+            )
+        }
+
+        get("/{id}/documents") {
+            val id = call.longParamOrThrow("id")
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(documentService.listByProject(id, call.currentUser()))
+            )
         }
 
         post("/{id}/members") {

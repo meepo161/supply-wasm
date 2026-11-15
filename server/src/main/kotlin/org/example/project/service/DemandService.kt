@@ -214,6 +214,21 @@ class DemandService(
         return getDetail(id, currentUser)
     }
 
+    /**
+     * Потребности проекта для вкладки карточки (PRJ-15). Доступ повторяет
+     * правила потребностей: участник проекта видит их, остальным нужен
+     * `demands:read_any`.
+     */
+    fun listByProject(projectId: Long, currentUser: CurrentUser): List<DemandHeaderDto> {
+        val project = projectRepository.findById(projectId) ?: throw NotFoundException("project", projectId)
+        val isMember = projectRepository.isMember(projectId, currentUser.userId) ||
+            project.ownerId == currentUser.userId
+        if (!isMember && !currentUser.hasPermission("demands", "read_any")) {
+            throw ForbiddenException("Access to project demands denied")
+        }
+        return demandRepository.listByProject(projectId).map { it.toHeaderDto() }
+    }
+
     fun list(currentUser: CurrentUser): List<DemandHeaderDto> {
         val readAny = currentUser.hasPermission("demands", "read_any")
         return demandRepository.listAccessible(currentUser.userId, readAny)

@@ -61,6 +61,29 @@ class TaskRepository(private val dsl: DSLContext) {
             .fetch()
     }
 
+    /**
+     * Задачи проекта с серверной фильтрацией (PRJ-14). Видимость повторяет
+     * общие правила задач: `read_any` видит всё, участник проекта — задачи
+     * своего проекта, остальным доступ закрыт проверкой в сервисе.
+     */
+    fun listByProject(projectId: Long, status: String? = null): List<TasksRecord> {
+        val conditions = mutableListOf(TASKS.PROJECT_ID.eq(projectId))
+        status?.let { conditions += TASKS.STATUS.eq(it) }
+        return dsl.selectFrom(TASKS)
+            .where(conditions)
+            .orderBy(TASKS.CREATED_AT.desc())
+            .fetch()
+    }
+
+    fun countByProject(projectId: Long): Int =
+        dsl.fetchCount(TASKS, TASKS.PROJECT_ID.eq(projectId))
+
+    fun countOpenByProject(projectId: Long, closedStatuses: List<String>): Int =
+        dsl.fetchCount(
+            TASKS,
+            TASKS.PROJECT_ID.eq(projectId).and(TASKS.STATUS.notIn(closedStatuses))
+        )
+
     fun create(
         number: String,
         area: String,

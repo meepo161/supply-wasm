@@ -57,7 +57,14 @@ fun ProjectDetailScreen(
     onAddMember: (Long) -> Unit,
     onRemoveMember: (Long) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // Вкладки карточки (PRJ-13/PRJ-14). Передаётся весь снимок состояния,
+    // чтобы сигнатура не разрасталась на десять отдельных параметров.
+    tabsState: ProjectsUiState? = null,
+    onTabSelected: (ProjectTab) -> Unit = {},
+    onTabRefresh: () -> Unit = {},
+    onTaskStatusFilter: (org.example.project.dto.TaskStatus?) -> Unit = {},
+    onTaskOpen: (Long) -> Unit = {}
 ) {
     val isOwner = project.ownerId == currentUser.id
     val canManageMembers = isOwner
@@ -127,6 +134,17 @@ fun ProjectDetailScreen(
                 error = openError,
                 onReasonChange = onOpenReasonChange,
                 onOpen = onOpenProject
+            )
+        }
+
+        if (tabsState != null) {
+            ProjectTabsSection(
+                state = tabsState,
+                currentUser = currentUser,
+                onTabSelected = onTabSelected,
+                onRefresh = onTabRefresh,
+                onTaskStatusFilter = onTaskStatusFilter,
+                onTaskClick = onTaskOpen
             )
         }
 
