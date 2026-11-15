@@ -157,7 +157,7 @@ class SupplierRepository(private val dsl: DSLContext) {
         record.note = note
         record.createdBy = createdBy
         record.store()
-        return record
+        return findSupplierById(record.id)!!
     }
 
     fun updateSupplier(
@@ -196,9 +196,10 @@ class SupplierRepository(private val dsl: DSLContext) {
         note?.let { set[SUPPLIERS.NOTE] = it }
         set[SUPPLIERS.UPDATED_AT] = OffsetDateTime.now()
         set[SUPPLIERS.UPDATED_BY] = updatedBy
-        var update = dsl.update(SUPPLIERS).set(set)
-        update = update.where(SUPPLIERS.ID.eq(id).and(SUPPLIERS.VERSION.eq(expectedVersion)))
-        val changed = update.execute()
+        set[SUPPLIERS.VERSION] = SUPPLIERS.VERSION.plus(1)
+        val changed = dsl.update(SUPPLIERS).set(set)
+            .where(SUPPLIERS.ID.eq(id).and(SUPPLIERS.VERSION.eq(expectedVersion)))
+            .execute()
         if (changed == 0) return null
         return dsl.selectFrom(SUPPLIERS).where(SUPPLIERS.ID.eq(id)).fetchOne()
     }
@@ -217,6 +218,7 @@ class SupplierRepository(private val dsl: DSLContext) {
         set[SUPPLIERS.VERIFIED_AT] = if (verifierId != null) OffsetDateTime.now() else null
         set[SUPPLIERS.UPDATED_AT] = OffsetDateTime.now()
         set[SUPPLIERS.UPDATED_BY] = verifierId
+        set[SUPPLIERS.VERSION] = SUPPLIERS.VERSION.plus(1)
         val changed = dsl.update(SUPPLIERS).set(set)
             .where(SUPPLIERS.ID.eq(id).and(SUPPLIERS.VERSION.eq(expectedVersion)))
             .execute()
@@ -229,6 +231,7 @@ class SupplierRepository(private val dsl: DSLContext) {
             .set(SUPPLIERS.ARCHIVED, archived)
             .set(SUPPLIERS.UPDATED_AT, OffsetDateTime.now())
             .set(SUPPLIERS.UPDATED_BY, updatedBy)
+            .set(SUPPLIERS.VERSION, SUPPLIERS.VERSION.plus(1))
             .where(SUPPLIERS.ID.eq(id).and(SUPPLIERS.VERSION.eq(expectedVersion)))
             .execute()
         if (changed == 0) return null
@@ -239,6 +242,7 @@ class SupplierRepository(private val dsl: DSLContext) {
         dsl.update(SUPPLIERS)
             .set(SUPPLIERS.UPDATED_AT, OffsetDateTime.now())
             .set(SUPPLIERS.UPDATED_BY, updatedBy)
+            .set(SUPPLIERS.VERSION, SUPPLIERS.VERSION.plus(1))
             .where(SUPPLIERS.ID.eq(id))
             .execute()
     }
@@ -425,7 +429,7 @@ class SupplierRepository(private val dsl: DSLContext) {
         record.requestedBy = requestedBy
         record.createdBy = createdBy
         record.store()
-        return record
+        return findOfferById(record.id)!!
     }
 
     fun replaceOfferLines(offerId: Long, lines: List<NewOfferLine>, createdBy: Long) {
@@ -502,6 +506,7 @@ class SupplierRepository(private val dsl: DSLContext) {
         set[SUPPLIER_OFFERS.STATUS] = newStatus
         set[SUPPLIER_OFFERS.UPDATED_AT] = OffsetDateTime.now()
         set[SUPPLIER_OFFERS.UPDATED_BY] = updatedBy
+        set[SUPPLIER_OFFERS.VERSION] = SUPPLIER_OFFERS.VERSION.plus(1)
         if (selectedBy != null) {
             set[SUPPLIER_OFFERS.SELECTED_BY] = selectedBy
             set[SUPPLIER_OFFERS.SELECTED_AT] = selectedAt
@@ -546,6 +551,7 @@ class SupplierRepository(private val dsl: DSLContext) {
         note?.let { set[SUPPLIER_OFFERS.NOTE] = it }
         set[SUPPLIER_OFFERS.UPDATED_AT] = OffsetDateTime.now()
         set[SUPPLIER_OFFERS.UPDATED_BY] = updatedBy
+        set[SUPPLIER_OFFERS.VERSION] = SUPPLIER_OFFERS.VERSION.plus(1)
         val changed = dsl.update(SUPPLIER_OFFERS).set(set)
             .where(SUPPLIER_OFFERS.ID.eq(id).and(SUPPLIER_OFFERS.VERSION.eq(expectedVersion)))
             .execute()

@@ -301,13 +301,14 @@ class ProductionService(
         request: ProductionStageActionRequest,
         currentUser: CurrentUser
     ): ProductionOrderDto {
-        if (request.reason.isNullOrBlank()) {
+        val reason = request.reason?.trim()
+        if (reason.isNullOrBlank()) {
             throw ValidationException("Skip reason is required", mapOf("reason" to "required"))
         }
         return stageTransition(
             orderId, stageId, request, currentUser,
             fromStatuses = listOf("PENDING"), newStatus = "SKIPPED",
-            actualEndAt = OffsetDateTime.now(), skipReason = request.reason.trim()
+            actualEndAt = OffsetDateTime.now(), skipReason = reason
         )
     }
 

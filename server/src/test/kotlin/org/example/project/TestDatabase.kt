@@ -84,6 +84,13 @@ object TestDatabase {
             user = USER
             password = PASSWORD
         }.connection.use { conn ->
+            conn.createStatement().execute(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid()
+                """.trimIndent()
+            )
             conn.createStatement().execute("DROP DATABASE IF EXISTS $DB_NAME")
             conn.createStatement().execute("CREATE DATABASE $DB_NAME")
         }

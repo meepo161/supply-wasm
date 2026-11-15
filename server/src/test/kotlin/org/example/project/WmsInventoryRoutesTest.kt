@@ -487,7 +487,7 @@ class WmsInventoryRoutesTest {
     private fun testApp(block: suspend ApplicationTestBuilder.() -> Unit) {
         testApplication {
             environment {
-                config = ApplicationConfig(
+                config = HoconApplicationConfig(
                     ConfigFactory.parseString(
                         """
                         ktor {
@@ -550,7 +550,7 @@ class WmsInventoryRoutesTest {
         @JvmStatic
         @AfterClass
         fun teardown() {
-            TestDatabase.close()
+            TestDatabase.destroy()
         }
 
         private fun wmsPermissions() = listOf(

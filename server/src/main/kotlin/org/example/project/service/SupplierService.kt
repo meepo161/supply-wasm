@@ -9,6 +9,7 @@ import org.example.project.exception.ValidationException
 import org.example.project.generated.jooq.tables.records.SupplierOffersRecord
 import org.example.project.generated.jooq.tables.records.SuppliersRecord
 import org.example.project.model.CurrentUser
+import org.example.project.repository.DemandRepository
 import org.example.project.repository.SupplierRepository
 import org.jooq.DSLContext
 import org.jooq.TransactionalCallable
@@ -35,6 +36,7 @@ import java.time.format.DateTimeParseException
  */
 class SupplierService(
     private val supplierRepository: SupplierRepository,
+    private val demandRepository: DemandRepository,
     private val auditService: AuditService,
     private val dsl: DSLContext
 ) {
@@ -527,9 +529,23 @@ class SupplierService(
                 )
                 if (demand.status == "APPROVED") {
                     // Регламент §9.3: согласованная потребность передаётся снабжению.
-                    dsl.execute(
-                        "UPDATE demands SET status = 'IN_PROCUREMENT', version = version + 1 WHERE id = ? AND status = 'APPROVED'",
-                        request.demandId
+                    demandRepository.transitionStatus(
+                        id = demand.id,
+                        expectedVersion = demand.version,
+                        fromStatus = "APPROVED",
+                        newStatus = "IN_PROCUREMENT"
+                    ) ?: throw ConflictException("Demand was modified concurrently")
+                    demandRepository.insertDemandHistory(
+                        demandId = demand.id,
+                        action = "STATUS_CHANGED",
+                        fromStatus = "APPROVED",
+                        toStatus = "IN_PROCUREMENT",
+                        reason = "Supplier offer ${offer.number} created",
+                        changedBy = currentUser.userId
+                    )
+                    auditService.log(
+                        currentUser.userId, "STATUS_CHANGED", "DEMAND", demand.id,
+                        mapOf("number" to demand.number, "offerId" to offer.id)
                     )
                 }
                 auditService.log(
@@ -571,15 +587,42 @@ class SupplierService(
                             mapOf("lines[$index].quantity" to "not_positive")
                         )
                     }
+                    val deficit = demandLine.deficitQuantity ?: demandLine.quantity
+                    if (quantity > deficit) {
+                        throw ValidationException(
+                            "Offered quantity exceeds the open deficit of the demand line",
+                            mapOf("lines[$index].quantity" to "exceeds_deficit")
+                        )
+                    }
+                    val price = parseQuantity(line.unitPrice, "lines[$index].unitPrice")
+                    if (price < BigDecimal.ZERO) {
+                        throw ValidationException(
+                            "Unit price must not be negative",
+                            mapOf("lines[$index].unitPrice" to "negative")
+                        )
+                    }
+                    val vat = parseQuantity(line.vatRate, "lines[$index].vatRate")
+                    if (vat < BigDecimal.ZERO || vat > BigDecimal.valueOf(100)) {
+                        throw ValidationException(
+                            "VAT rate must be between 0 and 100",
+                            mapOf("lines[$index].vatRate" to "out_of_range")
+                        )
+                    }
                     SupplierRepository.NewOfferLine(
                         lineNo = index + 1,
                         demandLineId = demandLine.id!!,
                         nomenclatureId = demandLine.nomenclatureId,
                         quantity = quantity,
                         unit = demandLine.unit,
-                        unitPrice = parseQuantity(line.unitPrice, "lines[$index].unitPrice"),
-                        vatRate = parseQuantity(line.vatRate, "lines[$index].vatRate"),
+                        unitPrice = price,
+                        vatRate = vat,
                         note = line.note?.trim()
+                    )
+                }
+                if (normalized.map { it.demandLineId }.distinct().size != normalized.size) {
+                    throw ValidationException(
+                        "Each demand line may appear only once in an offer",
+                        mapOf("lines" to "duplicate_demand_line")
                     )
                 }
                 supplierRepository.replaceOfferLines(id, normalized, currentUser.userId)
@@ -654,7 +697,7 @@ class SupplierService(
                 currentUser.userId, request.status.name, "SUPPLIER_OFFER", id,
                 mapOf("number" to existing.number, "reason" to request.reason)
             )
-            id to buildOffer(updated)
+            id to json.encodeToString(SupplierOfferDto.serializer(), buildOffer(updated))
         }
     }
 
@@ -748,6 +791,15 @@ class SupplierService(
             if (offer.status != "SELECTED") {
                 throw ConflictException("Offer is not selected")
             }
+            val demand = supplierRepository.findDemandById(offer.demandId)
+                ?: throw NotFoundException("demand", offer.demandId)
+            if (demand.initiatorId != currentUser.userId &&
+                !currentUser.hasPermission("suppliers", "select_any")
+            ) {
+                throw org.example.project.exception.ForbiddenException(
+                    "Only the demand initiator can withdraw the preferred offer"
+                )
+            }
             val updated = dsl.update(
                 org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS
             )
@@ -757,6 +809,10 @@ class SupplierService(
                 .set(org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS.SELECTION_REASON, null as String?)
                 .set(org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS.UPDATED_AT, OffsetDateTime.now())
                 .set(org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS.UPDATED_BY, currentUser.userId)
+                .set(
+                    org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS.VERSION,
+                    org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS.VERSION.plus(1)
+                )
                 .where(
                     org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS.ID.eq(id)
                         .and(org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS.VERSION.eq(version))
@@ -868,7 +924,8 @@ class SupplierService(
                     "Поставщик не прошёл проверку"
                 )
             }
-            if (column.deliveryDays == null) {
+            val deliveryDays = column.deliveryDays
+            if (deliveryDays == null) {
                 warnings += SupplierOfferWarningDto(
                     column.offerId, SupplierOfferWarningType.DELIVERY_UNKNOWN,
                     "Срок поставки не указан"
@@ -881,8 +938,8 @@ class SupplierService(
                     "Позиций вне предложения: $missing из ${column.lines.size}"
                 )
             }
-            if (requiredDate != null && column.deliveryDays != null &&
-                today.plusDays(column.deliveryDays.toLong()).isAfter(requiredDate)
+            if (requiredDate != null && deliveryDays != null &&
+                today.plusDays(deliveryDays.toLong()).isAfter(requiredDate)
             ) {
                 warnings += SupplierOfferWarningDto(
                     column.offerId, SupplierOfferWarningType.DELIVERY_TOO_LONG,
@@ -1106,25 +1163,37 @@ class SupplierService(
                 mapOf("idempotencyKey" to "required")
             )
         val requestHash = sha256("$operation|$requestPayload")
-        return dsl.transactionResult(TransactionalCallable {
-            val existing = supplierRepository.findIdempotency(currentUser.userId, operation, key)
-            if (existing != null) {
-                if (existing.requestHash != requestHash) {
-                    throw ConflictException("Idempotency key was already used with a different request")
+        try {
+            return dsl.transactionResult(TransactionalCallable {
+                val existing = supplierRepository.findIdempotency(currentUser.userId, operation, key)
+                if (existing != null) {
+                    if (existing.requestHash != requestHash) {
+                        throw ConflictException("Idempotency key was already used with a different request")
+                    }
+                    return@TransactionalCallable CommandResponse(
+                        HttpStatusCode.fromValue(existing.responseStatus),
+                        existing.responseBody
+                    )
                 }
-                return@TransactionalCallable CommandResponse(
-                    HttpStatusCode.fromValue(existing.responseStatus),
-                    existing.responseBody
+                val (entityId, dataJson) = work()
+                val body = """{"success":true,"data":$dataJson}"""
+                val entityType = if (operation.startsWith("SUPPLIER_OFFER")) "SUPPLIER_OFFER" else "SUPPLIER"
+                supplierRepository.insertIdempotency(
+                    currentUser.userId, operation, key, requestHash,
+                    entityType, entityId, successStatus.value, body
                 )
+                CommandResponse(successStatus, body)
+            })
+        } catch (e: org.jooq.exception.DataAccessException) {
+            if (e.sqlState() == "23505" && e.message?.contains("uq_supplier_idempotency") == true) {
+                val existing = supplierRepository.findIdempotency(currentUser.userId, operation, key)
+                if (existing != null && existing.requestHash == requestHash) {
+                    return CommandResponse(HttpStatusCode.fromValue(existing.responseStatus), existing.responseBody)
+                }
+                throw ConflictException("Idempotency key was already used with a different request")
             }
-            val (entityId, dataJson) = work()
-            val body = """{"success":true,"data":$dataJson}"""
-            supplierRepository.insertIdempotency(
-                currentUser.userId, operation, key, requestHash,
-                "SUPPLIER_OFFER", entityId, successStatus.value, body
-            )
-            CommandResponse(successStatus, body)
-        })
+            throw e
+        }
     }
 
     private fun sha256(value: String): String =

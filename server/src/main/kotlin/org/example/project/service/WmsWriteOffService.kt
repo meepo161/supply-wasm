@@ -54,7 +54,7 @@ class WmsWriteOffService(
         return executeIdempotent(
             "WRITE_OFF_CREATE", request.idempotencyKey, payload, HttpStatusCode.Created, currentUser
         ) {
-            createWriteOff(request, lines, currentUser)
+            createWriteOff(request, lines, currentUser).let { it.id to it }
         }
     }
 

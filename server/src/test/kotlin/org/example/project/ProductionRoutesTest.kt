@@ -71,13 +71,16 @@ class ProductionRoutesTest {
 
         var current = started
         current.stages.forEach { stage ->
-            val stageStarted = client.post("/api/production/orders/${order.id}/stages/${stage.id}/start") {
-                contentType(ContentType.Application.Json)
-                setBody(stringify(ProductionStageActionRequest(stage.version)))
+            val runningStage = if (stage.status == ProductionStageStatus.IN_PROGRESS) {
+                stage
+            } else {
+                val stageStarted = client.post("/api/production/orders/${order.id}/stages/${stage.id}/start") {
+                    contentType(ContentType.Application.Json)
+                    setBody(stringify(ProductionStageActionRequest(stage.version)))
+                }
+                assertEquals(HttpStatusCode.OK, stageStarted.status, stageStarted.bodyAsText())
+                stageStarted.bodyAs<ApiResponse<ProductionOrderDto>>().data!!.stages.first { it.id == stage.id }
             }
-            assertEquals(HttpStatusCode.OK, stageStarted.status, stageStarted.bodyAsText())
-            val refreshed = stageStarted.bodyAs<ApiResponse<ProductionOrderDto>>().data!!
-            val runningStage = refreshed.stages.first { it.id == stage.id }
             val stageCompleted = client.post("/api/production/orders/${order.id}/stages/${stage.id}/complete") {
                 contentType(ContentType.Application.Json)
                 setBody(stringify(ProductionStageActionRequest(runningStage.version)))
@@ -231,6 +234,7 @@ class ProductionRoutesTest {
                     CreateProjectRequest(
                         name = "Производственный проект ${UUID.randomUUID().toString().take(6)}",
                         description = "Проект для тестов производства",
+                        projectType = ProjectType.ORDER_DEVELOPMENT,
                         ownerId = makerId
                     )
                 )
@@ -389,7 +393,7 @@ class ProductionRoutesTest {
     private fun testApp(block: suspend ApplicationTestBuilder.() -> Unit) {
         testApplication {
             environment {
-                config = ApplicationConfig(
+                config = HoconApplicationConfig(
                     ConfigFactory.parseString(
                         """
                         ktor {
@@ -452,7 +456,7 @@ class ProductionRoutesTest {
         @JvmStatic
         @AfterClass
         fun teardown() {
-            TestDatabase.close()
+            TestDatabase.destroy()
         }
 
         // Заказы создаёт пользователь с правами производства; фикстуры BOM и

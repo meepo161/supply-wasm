@@ -247,8 +247,8 @@ private fun SupplierCardPane(
                     state.users.firstOrNull { it.id == supplier.responsibleId }?.fullName
                         ?: supplier.responsibleId?.toString() ?: "—"
                 )
-                if (!supplier.verificationNote.isNullOrBlank()) {
-                    DetailRow("Примечание проверки", supplier.verificationNote)
+                supplier.verificationNote?.takeIf { it.isNotBlank() }?.let { note ->
+                    DetailRow("Примечание проверки", note)
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -492,12 +492,14 @@ private fun ComparisonPane(
                         }
                         Spacer(Modifier.height(10.dp))
                     }
-                    if (comparison.selectionBlockedReason != null && comparison.selectedOfferId == null) {
-                        Text(
-                            text = comparison.selectionBlockedReason,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    comparison.selectionBlockedReason?.let { reason ->
+                        if (comparison.selectedOfferId == null) {
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

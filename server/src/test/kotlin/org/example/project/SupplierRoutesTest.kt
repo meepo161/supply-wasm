@@ -39,7 +39,7 @@ class SupplierRoutesTest {
     @Test
     fun `demand two offers comparison and initiator selection`() = testApp {
         val admin = jsonClient()
-        createUserWithRole(admin, "admin", "admin", emptyList())
+        createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
         val initiatorId = createUserWithRole(
             admin, "initiator", "password", "Init", initiatorPermissions()
         ).id
@@ -224,14 +224,17 @@ class SupplierRoutesTest {
     @Test
     fun `expired offer cannot be selected even if it is the cheapest`() = testApp {
         val admin = jsonClient()
-        createUserWithRole(admin, "admin", "admin", emptyList())
+        createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
         createUserWithRole(admin, "initiator", "password", "Init", initiatorPermissions())
         createUserWithRole(admin, "buyer", "password", "Buyer", buyerPermissions())
         val initiator = loginClient("initiator", "password")
         val buyer = loginClient("buyer", "password")
 
         val material = createNomenclature(admin, "SUP-MAT-2", "2", "pcs")
-        val demand = createDemand(initiator, material.id, "2", "pcs")
+        val demand = createDemand(
+            initiator, material.id, "2", "pcs",
+            requiredDate = java.time.LocalDate.now().plusDays(1).toString()
+        )
         val lineId = demand.lines.first().id
         val supplier = createSupplier(buyer, "ООО Срок", "7701112233")
         setVerified(admin, supplier.supplier.id, supplier.supplier.version)
@@ -275,7 +278,7 @@ class SupplierRoutesTest {
     @Test
     fun `supplier card keeps contacts addresses documents and verification`() = testApp {
         val admin = jsonClient()
-        createUserWithRole(admin, "admin", "admin", emptyList())
+        createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
         createUserWithRole(admin, "buyer", "password", "Buyer", buyerPermissions())
         val buyer = loginClient("buyer", "password")
 
@@ -354,7 +357,7 @@ class SupplierRoutesTest {
     @Test
     fun `unverified supplier offer cannot be selected`() = testApp {
         val admin = jsonClient()
-        createUserWithRole(admin, "admin", "admin", emptyList())
+        createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
         createUserWithRole(admin, "initiator", "password", "Init", initiatorPermissions())
         createUserWithRole(admin, "buyer", "password", "Buyer", buyerPermissions())
         val initiator = loginClient("initiator", "password")
@@ -395,7 +398,7 @@ class SupplierRoutesTest {
     @Test
     fun `supplier endpoints require permissions`() = testApp {
         val admin = jsonClient()
-        createUserWithRole(admin, "admin", "admin", emptyList())
+        createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
         createUserWithRole(admin, "nobody", "password", "Nobody", emptyList())
         val nobody = loginClient("nobody", "password")
 
@@ -436,7 +439,8 @@ class SupplierRoutesTest {
         client: HttpClient,
         nomenclatureId: Long,
         quantity: String,
-        unit: String
+        unit: String,
+        requiredDate: String? = null
     ): DemandDetailDto {
         val response = client.post("/api/demands") {
             contentType(ContentType.Application.Json)
@@ -445,6 +449,7 @@ class SupplierRoutesTest {
                     CreateDemandRequest(
                         sourceType = DemandSourceType.MANUAL,
                         priority = DemandPriority.NORMAL,
+                        requiredDate = requiredDate,
                         lines = listOf(DemandLineInput(1, nomenclatureId, quantity, unit))
                     )
                 )
@@ -549,6 +554,11 @@ class SupplierRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(stringify(LoginRequest("admin", "admin123")))
         }
+        if (login == "admin") {
+            val me = adminClient.get("/api/auth/me")
+            assertEquals(HttpStatusCode.OK, me.status, me.bodyAsText())
+            return me.bodyAs<ApiResponse<MeResponse>>().data!!.user
+        }
         if (permissions.isNotEmpty()) {
             val roleResponse = adminClient.post("/api/roles") {
                 contentType(ContentType.Application.Json)
@@ -596,7 +606,7 @@ class SupplierRoutesTest {
     private fun testApp(block: suspend ApplicationTestBuilder.() -> Unit) {
         testApplication {
             environment {
-                config = ApplicationConfig(
+                config = HoconApplicationConfig(
                     ConfigFactory.parseString(
                         """
                         ktor {

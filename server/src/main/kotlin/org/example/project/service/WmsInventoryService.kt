@@ -58,7 +58,7 @@ class WmsInventoryService(
         return executeIdempotent(
             "INVENTORY_CREATE", request.idempotencyKey, payload, HttpStatusCode.Created, currentUser
         ) {
-            createInventory(request, currentUser)
+            createInventory(request, currentUser).let { it.id to it }
         }
     }
 
@@ -81,7 +81,7 @@ class WmsInventoryService(
         return executeIdempotent(
             "INVENTORY_COUNT", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
         ) {
-            id to submitCounts(id, request, currentUser)
+            id to submitInventoryCounts(id, request, currentUser)
         }
     }
 
@@ -248,7 +248,7 @@ class WmsInventoryService(
         )
     }
 
-    private fun submitCounts(
+    private fun submitInventoryCounts(
         id: Long,
         request: SubmitInventoryCountsRequest,
         currentUser: CurrentUser

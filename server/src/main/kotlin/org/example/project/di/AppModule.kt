@@ -78,7 +78,7 @@ fun appModule(config: AppConfig) = module {
     single { ProductionRepository(get()) }
     single { ProductionService(get(), get(), get()) }
     single { SupplierRepository(get()) }
-    single { SupplierService(get(), get(), get()) }
+    single { SupplierService(get(), get(), get(), get()) }
     single { AttachmentService(get(), get(), get(), get(), get(), get()) }
     single { BomService(get(), get(), get()) }
     single { DocumentRepository(get()) }
