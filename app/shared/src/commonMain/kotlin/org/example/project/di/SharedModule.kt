@@ -22,6 +22,8 @@ import org.example.project.data.ProductionApiClient
 import org.example.project.data.ProductionRepository
 import org.example.project.data.ProjectApiClient
 import org.example.project.data.ProjectRepository
+import org.example.project.data.PurchaseOrderApiClient
+import org.example.project.data.PurchaseOrderRepository
 import org.example.project.data.SearchApiClient
 import org.example.project.data.SupplierApiClient
 import org.example.project.data.SupplierRepository
@@ -54,5 +56,6 @@ val sharedModule = module {
     singleOf(::ApprovalApiClient) bind ApprovalRepository::class
     singleOf(::SearchApiClient) bind SearchRepository::class
     singleOf(::SupplierApiClient) bind SupplierRepository::class
+    singleOf(::PurchaseOrderApiClient) bind PurchaseOrderRepository::class
     singleOf(::ProductionApiClient) bind ProductionRepository::class
 }

@@ -53,6 +53,7 @@ import org.example.project.data.DocumentRepository
 import org.example.project.data.NotificationRepository
 import org.example.project.data.ProductionRepository
 import org.example.project.data.ProjectRepository
+import org.example.project.data.PurchaseOrderRepository
 import org.example.project.data.SupplierRepository
 import org.example.project.data.SearchRepository
 import org.example.project.data.TaskRepository
@@ -85,6 +86,8 @@ import org.example.project.ui.theme.LocalBrandPalette
 import org.example.project.ui.theme.LocalThemeController
 import org.example.project.ui.production.ProductionScreen
 import org.example.project.ui.production.ProductionViewModel
+import org.example.project.ui.supplier.PurchaseOrderScreen
+import org.example.project.ui.supplier.PurchaseOrderViewModel
 import org.example.project.ui.supplier.SupplierScreen
 import org.example.project.ui.supplier.SupplierViewModel
 import org.example.project.ui.wms.WmsScreen
@@ -109,6 +112,7 @@ fun MainScaffold(
     val bomRepository: BomRepository = koinInject()
     val productionRepository: ProductionRepository = koinInject()
     val supplierRepository: SupplierRepository = koinInject()
+    val purchaseOrderRepository: PurchaseOrderRepository = koinInject()
     val demandRepository: DemandRepository = koinInject()
     val documentRepository: DocumentRepository = koinInject()
     val notificationRepository: NotificationRepository = koinInject()
@@ -157,6 +161,18 @@ fun MainScaffold(
                 supplierRepository,
                 demandRepository,
                 wmsRepository,
+                userRepository,
+                user
+            )
+        }
+    } else {
+        null
+    }
+    val purchaseOrderViewModel = if (NavigationDestination.PURCHASE_ORDERS in destinations) {
+        remember(user) {
+            PurchaseOrderViewModel(
+                purchaseOrderRepository,
+                supplierRepository,
                 userRepository,
                 user
             )
@@ -274,6 +290,7 @@ fun MainScaffold(
                         productionViewModel = productionViewModel,
                         demandViewModel = demandViewModel,
                         supplierViewModel = supplierViewModel,
+                        purchaseOrderViewModel = purchaseOrderViewModel,
                         documentViewModel = documentViewModel,
                         adminViewModel = adminViewModel,
                         onOpenTask = onOpenTask,
@@ -824,6 +841,7 @@ private fun MainContent(
     productionViewModel: ProductionViewModel?,
     demandViewModel: DemandViewModel?,
     supplierViewModel: SupplierViewModel?,
+    purchaseOrderViewModel: PurchaseOrderViewModel?,
     documentViewModel: DocumentViewModel,
     adminViewModel: AdminViewModel?,
     onOpenTask: (Long) -> Unit,
@@ -861,6 +879,10 @@ private fun MainContent(
 
         NavigationDestination.SUPPLIERS -> supplierViewModel?.let {
             SupplierScreen(viewModel = it)
+        }
+
+        NavigationDestination.PURCHASE_ORDERS -> purchaseOrderViewModel?.let {
+            PurchaseOrderScreen(viewModel = it)
         }
 
         NavigationDestination.DEMANDS -> demandViewModel?.let {

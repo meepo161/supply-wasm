@@ -104,10 +104,12 @@ Relevant sources:
 - [`ChatRoutes.kt`](../server/src/main/kotlin/org/example/project/route/ChatRoutes.kt)
 - [`NotificationRoutes.kt`](../server/src/main/kotlin/org/example/project/route/NotificationRoutes.kt)
 - [`WmsRoutes.kt`](../server/src/main/kotlin/org/example/project/route/WmsRoutes.kt)
+- [`SupplierRoutes.kt`](../server/src/main/kotlin/org/example/project/route/SupplierRoutes.kt)
+- [`PurchaseOrderRoutes.kt`](../server/src/main/kotlin/org/example/project/route/PurchaseOrderRoutes.kt)
 
 ## Not yet implemented
 
-Complete WMS, procurement, production, BOM, documents, approvals, calendar/Gantt, external Mail, external push delivery, Android and the full 100 business scenarios are not implemented. Work in progress is not presented as a working feature until its API/UI integration and checks pass.
+Complete WMS, procurement (claims, payments, approval thresholds), production, BOM, documents, approvals, calendar/Gantt, external Mail, external push delivery, Android and the full 100 business scenarios are not implemented. Work in progress is not presented as a working feature until its API/UI integration and checks pass.
 
 ## Визуальное оформление интерфейса
 
@@ -149,5 +151,46 @@ confirmed, delivery time is unknown or misses the required date, or the supplier
 is not verified — so choosing by the single lowest price is impossible. Only one
 offer per demand can be preferred; the second selection returns `409`.
 
-The number of offers and suppliers is not the same as orders: purchase orders,
-partial deliveries, claims and supplier rating are **not** implemented.
+## Заказы поставщикам и частичные поставки (SUP-15, SUP-16)
+
+Заказы поставщику живут в разделе **Заказы поставщикам** (`V26__purchase_orders.sql`).
+Заказ создаётся только из предложения в статусе `SELECTED` и только у проверенного
+поставщика; `offer_id` уникален, поэтому одно предложение даёт ровно один заказ и
+обойти выбор инициатора нельзя. Количество в заказе можно только уменьшить
+относительно предложения. Связь заказа с потребностями — многие-ко-многим
+(`purchase_order_demands`), потребность выбранного предложения входит в неё всегда.
+
+Жизненный цикл: `DRAFT → PENDING_APPROVAL → APPROVED → SENT`, затем
+`PARTIALLY_DELIVERED`/`DELIVERED` по факту поставок и `CLOSED`; `CANCELLED`
+возможен из `DRAFT`, `PENDING_APPROVAL`, `APPROVED` и `SENT` с обязательной
+причиной. Отправка требует согласования: `send` возвращает `409`, пока пуст
+`approved_at`. Согласование требует права `suppliers:approve_order`, а согласование
+собственного заказа — дополнительно `suppliers:approve_order_any`.
+
+Существенные условия — количество, ожидаемый срок поставки, условия оплаты и адрес
+доставки. Их изменение требует `changeReason`; если заказ уже не черновик, он
+возвращается в `PENDING_APPROVAL`, выставляется `reapproval_required`, а в историю
+пишется `REAPPROVAL_REQUIRED`, поэтому согласованный заказ нельзя отправить
+поставщику с молча изменёнными условиями.
+
+Поставки частичные: `purchase_deliveries`/`purchase_delivery_lines` принимают
+количество не больше остатка по позиции, одна позиция заказа встречается в поставке
+один раз, а сам заказ должен быть в статусе `SENT` или `PARTIALLY_DELIVERED`.
+После регистрации `delivered_quantity` пересчитывается из SQL-суммы по поставкам в
+статусе `REGISTERED`, а статус заказа становится `PARTIALLY_DELIVERED` или
+`DELIVERED`. Отмена поставки пересчитывает количества обратно, возвращает заказ в
+`SENT`, если не поставлено ничего, и пишет `DELIVERY_CANCELLED` в историю.
+
+Суммы считает база (view `purchase_order_totals` и `GENERATED`-столбец `line_total`):
+без НДС, НДС, с НДС, заказанное и поставленное количество. Деньги и количества
+передаются строками `NUMERIC(19,4)`, клиент их не пересчитывает. Все команды
+идемпотентны: ключ обязателен, хеш тела — `sha256(operation|payload)`, повтор ключа
+с другим телом даёт `409`. Номера `PO-YYYY-00001` и `PD-YYYY-00001` выдаются под
+`pg_advisory_xact_lock`.
+
+Сознательно не реализовано: оплата, счета-фактуры и претензии (вне согласованного
+объёма), суммовые пороги и маршруты согласования (§9.7 — открытый вопрос,
+выдуманные суммы не вводились), а также связь поставки с приёмкой WMS: приёмка на
+склад пока не ссылается на заказ, `source_document` — только свободная строка
+основания. Претензии и оценка поставщика по фактам (SUP-17) остаются открытыми.
+
