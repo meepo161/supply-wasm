@@ -191,14 +191,14 @@ private fun OrderDetailPane(
                 if (order.stages.isEmpty()) {
                     EmptyState(
                         title = "Этапов нет",
-                        text = "Заказ создан без этапов — выполнить выпуск нельзя",
+                        text = "Список этапов заказа пуст",
                         glyph = ErpIconGlyph.Alert,
                         accent = Brand.Amber
                     )
                 } else {
                     ProductionStagesGrid(
                         stages = order.stages,
-                        onClick = { stage -> onStageClick(order, stage.status, stage.id, viewModel, canManage) },
+                        onClick = { },
                         modifier = Modifier.fillMaxWidth().height(220.dp)
                     )
                     Spacer(Modifier.height(8.dp))
@@ -232,21 +232,6 @@ private fun OrderDetailPane(
                 OrderActionRow(order = order, viewModel = viewModel)
             }
         }
-    }
-}
-
-/** Клик по этапу запускает или завершает его — так же, как кнопки под таблицей. */
-private fun onStageClick(
-    order: ProductionOrderDto,
-    stageStatus: ProductionStageStatus,
-    stageId: Long,
-    viewModel: ProductionViewModel,
-    canManage: Boolean
-) {
-    if (!canManage || !ProductionViewModel.canEditStages(order.status)) return
-    when {
-        ProductionViewModel.canStartStage(stageStatus) -> viewModel.startStage(stageId)
-        ProductionViewModel.canCompleteStage(stageStatus) -> viewModel.completeStage(stageId)
     }
 }
 
@@ -342,7 +327,7 @@ private fun OrderTotals(order: ProductionOrderDto) {
         )
         TotalChip(
             label = "Этапы закрыты",
-            value = "${order.stages.count { it.status != ProductionStageStatus.PENDING }} / ${order.stages.size}",
+            value = "${order.stages.count { it.status == ProductionStageStatus.COMPLETED || it.status == ProductionStageStatus.SKIPPED }} / ${order.stages.size}",
             accent = Brand.Indigo,
             modifier = Modifier.weight(1f)
         )

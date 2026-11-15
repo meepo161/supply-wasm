@@ -1370,10 +1370,11 @@ private fun InventoryDetailDialog(
                                     accent = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (discrepancy?.kind != null) {
+                            val discrepancyKind = discrepancy?.kind
+                            if (discrepancyKind != null) {
                                 PillBadge(
-                                    text = "${discrepancy.kind.localizedName()}: ${discrepancy.discrepancy}",
-                                    accent = if (discrepancy.kind ==
+                                    text = "${discrepancyKind.localizedName()}: ${discrepancy.discrepancy}",
+                                    accent = if (discrepancyKind ==
                                         org.example.project.dto.InventoryDiscrepancyKind.SURPLUS
                                     ) {
                                         Brand.Teal

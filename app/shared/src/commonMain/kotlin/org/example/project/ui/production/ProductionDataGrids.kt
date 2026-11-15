@@ -27,8 +27,7 @@ fun ProductionOrdersGrid(
         "План" to orders.map { it.plannedQuantity.toString() },
         "Факт" to orders.map { it.actualQuantity.toString() },
         "Начало" to orders.map { it.plannedStartAt.toDisplayDateTime() },
-        "Окончание" to orders.map { it.plannedEndAt.toDisplayDateTime() },
-        "Этапов" to orders.map { it.stages.size.toString() }
+        "Окончание" to orders.map { it.plannedEndAt.toDisplayDateTime() }
     )
     Un7KCMPDataGrid(
         data = data,
