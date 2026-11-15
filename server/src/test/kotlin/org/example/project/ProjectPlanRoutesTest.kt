@@ -243,7 +243,7 @@ class ProjectPlanRoutesTest {
 
         val linked = ctx.owner.post("/api/projects/${project.id}/risks") {
             contentType(ContentType.Application.Json)
-            setBody(riskRequest("Риск по задаче", taskId = ownTask.id))
+            setBody(stringify(riskRequest("Риск по задаче", taskId = ownTask.id)))
         }
         assertEquals(HttpStatusCode.Created, linked.status, linked.bodyAsText())
         assertEquals(
@@ -253,7 +253,7 @@ class ProjectPlanRoutesTest {
 
         val foreign = ctx.owner.post("/api/projects/${project.id}/risks") {
             contentType(ContentType.Application.Json)
-            setBody(riskRequest("Риск по чужой задаче", taskId = foreignTask.id))
+            setBody(stringify(riskRequest("Риск по чужой задаче", taskId = foreignTask.id)))
         }
         assertEquals(HttpStatusCode.BadRequest, foreign.status, foreign.bodyAsText())
     }
@@ -287,7 +287,7 @@ class ProjectPlanRoutesTest {
 
         val critical = ctx.owner.post("/api/projects/${project.id}/risks") {
             contentType(ContentType.Application.Json)
-            setBody(riskRequest("Критичный риск", criticality = ProjectRiskCriticality.CRITICAL))
+            setBody(stringify(riskRequest("Критичный риск", criticality = ProjectRiskCriticality.CRITICAL)))
         }
         assertEquals(HttpStatusCode.Created, critical.status, critical.bodyAsText())
 

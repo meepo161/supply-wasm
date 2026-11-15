@@ -266,14 +266,14 @@ class ProjectPlanRepository(private val dsl: DSLContext) {
     fun countOpenRisks(projectId: Long): Int =
         dsl.fetchCount(
             PROJECT_RISKS,
-            PROJECT_RISKS.PROJECT_ID.eq(projectId).and(PROJECT_RISKS.STATUS.in("OPEN", "MITIGATING"))
+            PROJECT_RISKS.PROJECT_ID.eq(projectId).and(PROJECT_RISKS.STATUS.`in`("OPEN", "MITIGATING"))
         )
 
     fun countCriticalRisks(projectId: Long): Int =
         dsl.fetchCount(
             PROJECT_RISKS,
             PROJECT_RISKS.PROJECT_ID.eq(projectId)
-                .and(PROJECT_RISKS.STATUS.in("OPEN", "MITIGATING"))
+                .and(PROJECT_RISKS.STATUS.`in`("OPEN", "MITIGATING"))
                 .and(PROJECT_RISKS.CRITICALITY.eq("CRITICAL"))
         )
 

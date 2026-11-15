@@ -184,13 +184,13 @@ class ProjectPlanService(
                 id = stageId,
                 name = name,
                 description = if (request.description == null) stage.description
-                else request.description.trim().ifBlank { null },
+                else request.description?.trim()?.ifBlank { null },
                 sequence = sequence,
                 plannedStartAt = plannedStartAt,
                 plannedEndAt = plannedEndAt,
                 responsibleId = request.responsibleId ?: stage.responsibleId,
                 completionCriteria = if (request.completionCriteria == null) stage.completionCriteria
-                else request.completionCriteria.trim().ifBlank { null },
+                else request.completionCriteria?.trim()?.ifBlank { null },
                 expectedVersion = request.version
             ) ?: throw ConflictException("Stage was modified concurrently")
 
@@ -356,12 +356,12 @@ class ProjectPlanService(
                 name = request.name?.let { requireName(it, "name") } ?: milestone.name,
                 stageId = request.stageId ?: milestone.stageId,
                 description = if (request.description == null) milestone.description
-                else request.description.trim().ifBlank { null },
+                else request.description?.trim()?.ifBlank { null },
                 plannedAt = if (request.plannedAt == null) milestone.plannedAt
                 else parseDateTime(request.plannedAt, "plannedAt"),
                 responsibleId = request.responsibleId ?: milestone.responsibleId,
                 note = if (request.note == null) milestone.note
-                else request.note.trim().ifBlank { null },
+                else request.note?.trim()?.ifBlank { null },
                 expectedVersion = request.version
             ) ?: throw ConflictException("Milestone was modified concurrently")
 
@@ -505,14 +505,14 @@ class ProjectPlanService(
             val stageId = request.stageId ?: risk.stageId
             val taskId = request.taskId ?: risk.taskId
             val responsePlan = if (request.responsePlan == null) risk.responsePlan
-            else request.responsePlan.trim().ifBlank { null }
+            else request.responsePlan?.trim()?.ifBlank { null }
             validateRisk(title, responsePlan, stageId, taskId, risk.projectId)
 
             val updated = planRepository.updateRisk(
                 id = riskId,
                 title = title,
                 description = if (request.description == null) risk.description
-                else request.description.trim().ifBlank { null },
+                else request.description?.trim()?.ifBlank { null },
                 category = request.category?.name ?: risk.category,
                 probability = request.probability?.name ?: risk.probability,
                 impact = request.impact?.name ?: risk.impact,
