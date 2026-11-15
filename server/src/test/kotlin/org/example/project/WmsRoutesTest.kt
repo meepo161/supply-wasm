@@ -575,7 +575,13 @@ class WmsRoutesTest {
                                 nomenclatureId = nomenclatureId,
                                 expectedQuantity = expected,
                                 receivedQuantity = received,
-                                locationId = locationId
+                                locationId = locationId,
+                                // Расхождение фиксируется с обоснованием (V27).
+                                discrepancyReason = if (received != null && received != expected) {
+                                    "Принято по факту пересчёта"
+                                } else {
+                                    null
+                                }
                             )
                         )
                     )

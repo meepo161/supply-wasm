@@ -94,7 +94,7 @@ The real D-10 flow has been exercised over HTTP: project → task → assignment
 
 ### WMS server core
 
-The `/api/wms` API supports warehouses, storage locations, nomenclature and barcodes, receipts with partial quantities and atomic posting, stock balances, project/other reservations, internal/inter-warehouse transfers, issue and return operations with optimistic versions and idempotency checks. The combined WMS/BOM/DMS/demand suite passed all 61 tests, including concurrent stock operations, access checks and protection against duplicate posting. Browser checks confirmed real warehouse, location and nomenclature data in the WMS UI. This is not a complete WMS: transfer/issue UI, write-off, inventory and the remaining business operations are still incomplete.
+The `/api/wms` API supports warehouses, storage locations, nomenclature and barcodes, receipts and reception by source document (see the reception section below), stock balances, project/other reservations, internal/inter-warehouse transfers, issue and return operations with optimistic versions and idempotency checks. The combined WMS/BOM/DMS/demand suite passed all 61 tests, including concurrent stock operations, access checks and protection against duplicate posting. Browser checks confirmed real warehouse, location and nomenclature data in the WMS UI. This is not a complete WMS: transfer/issue UI, write-off, inventory and the remaining business operations are still incomplete.
 
 Relevant sources:
 
@@ -106,6 +106,7 @@ Relevant sources:
 - [`WmsRoutes.kt`](../server/src/main/kotlin/org/example/project/route/WmsRoutes.kt)
 - [`SupplierRoutes.kt`](../server/src/main/kotlin/org/example/project/route/SupplierRoutes.kt)
 - [`PurchaseOrderRoutes.kt`](../server/src/main/kotlin/org/example/project/route/PurchaseOrderRoutes.kt)
+- [`ReceiptRoutes.kt`](../server/src/main/kotlin/org/example/project/route/ReceiptRoutes.kt)
 
 ## Not yet implemented
 
@@ -190,7 +191,55 @@ offer per demand can be preferred; the second selection returns `409`.
 
 Сознательно не реализовано: оплата, счета-фактуры и претензии (вне согласованного
 объёма), суммовые пороги и маршруты согласования (§9.7 — открытый вопрос,
-выдуманные суммы не вводились), а также связь поставки с приёмкой WMS: приёмка на
-склад пока не ссылается на заказ, `source_document` — только свободная строка
-основания. Претензии и оценка поставщика по фактам (SUP-17) остаются открытыми.
+выдуманные суммы не вводились). Связь с приёмкой WMS реализована отдельным блоком —
+см. следующий раздел. Претензии и оценка поставщика по фактам (SUP-17) остаются
+открытыми.
+
+## Приёмка на склад по основаниям (WMS-PROC-001, D-49)
+
+Приёмка вынесена в `ReceiptService` (`/api/wms/receipts*`) и всегда имеет основание:
+заказ поставщику, счёт (`INVOICE`), накладная/УПД (`DELIVERY_NOTE`), возврат,
+перемещение, начальный остаток или прочий документ (`V27__wms_receipt_basis.sql`).
+Для заказа, счёта, накладной, возврата и перемещения номер документа-основания
+обязателен (`400`), и только этим трём видам разрешено ссылаться на заказ поставщику.
+
+Один документ-основание даёт ровно одну приёмку: частичный уникальный индекс
+`uq_receipts_source_document (source_type, source_document_no)` не считает
+`CANCELLED`, поэтому повторная приёмка той же накладной возвращает `409`. Приёмка по
+заказу может быть частичной и многократной, но не может превысить заказанное:
+ожидаемое количество не вводится клиентом, оно считается как остаток заказа минус
+уже принятое. Проверка выполняется дважды — при создании и при проведении, потому
+что между черновиком и проведением могла пройти другая приёмка; превышение даёт
+`409`. Одна позиция заказа встречается в приёмке один раз (`422 duplicate_order_line`).
+
+Расхождения «ожидалось / принято» фиксируются по строке как `SHORTAGE` или
+`SURPLUS` с величиной `DECIMAL(19,4)`; расхождение без `discrepancyReason`
+отклоняется (`400`). Фактически принятое (`receivedQuantity`) может отличаться от
+ожидаемого и задаётся явно.
+
+Остаток появляется только после проведения: `POST /api/wms/receipts/{id}/post`
+блокирует документ, сверяет версию, запрещает повторное проведение и «нулевое»
+проведение, пишет движение `RECEIPT`, увеличивает физический остаток и пересчитывает
+принятое по поставке в одной транзакции. Проведённый документ неизменяем — триггер
+`wms_guard_receipt_mutation`. Поздняя связь с заказом, поставкой или номером
+накладной выполняется через `POST /api/wms/receipts/{id}/links`: пишется
+append-only журнал `receipt_links`, остаток не пересоздаётся, повторная привязка тех
+же документов и конфликт номера документа дают `409`.
+
+Ожидаемые поставки отдаёт `GET /api/wms/expected-receipts?purchaseOrderId` на основе
+view `purchase_order_receipt_status` («заказано / поставлено / принято / осталось»).
+Список приёмок фильтруется сервером: `GET /api/wms/receipts?purchaseOrderId&status`.
+
+Права: чтение `wms:read`, создание, проведение и связывание — `wms:post`. В UI вкладка
+«Приёмка» показывает список документов, форму создания с основанием и обязательным
+номером документа, бейдж расхождения в карточке и диалог поздней связи.
+
+Поздняя связь меняет только документ: строки приёмки не сопоставляются с позициями
+заказа автоматически, поэтому принятое по такому заказу не попадает в
+`purchase_order_receipt_status`. Сопоставление строк задаётся при создании приёмки
+полем `purchaseOrderLineId` — угадывать соответствие по номенклатуре сервер не
+стал, это было бы выдуманным правилом.
+
+Не реализовано в этом блоке: настраиваемый контроль качества по категории и
+номенклатуре с карантином (`WMS-37`) и претензии к поставщику.
 

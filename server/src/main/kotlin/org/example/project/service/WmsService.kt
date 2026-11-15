@@ -6,8 +6,6 @@ import org.example.project.exception.NotFoundException
 import org.example.project.exception.ValidationException
 import org.example.project.generated.jooq.tables.records.NomenclatureBarcodesRecord
 import org.example.project.generated.jooq.tables.records.NomenclatureRecord
-import org.example.project.generated.jooq.tables.records.ReceiptLinesRecord
-import org.example.project.generated.jooq.tables.records.ReceiptsRecord
 import org.example.project.generated.jooq.tables.records.ReservationHistoryRecord
 import org.example.project.generated.jooq.tables.records.ReservationsRecord
 import org.example.project.generated.jooq.tables.records.StorageLocationsRecord
@@ -194,163 +192,8 @@ class WmsService(
         return wmsRepository.selectStock(warehouseId, nomenclatureId).map { it.toDto() }
     }
 
-    // Приёмка (D-29): кладовщик создаёт черновик, сверяет и проводит без ОТК.
-
-    fun createReceipt(request: CreateReceiptRequest, currentUser: CurrentUser): ReceiptDto {
-        currentUser.requirePermission("wms", "post")
-        if (request.lines.isEmpty()) {
-            throw ValidationException("Receipt must have at least one line", mapOf("lines" to "required"))
-        }
-        val lineNos = request.lines.map { it.lineNo }
-        if (lineNos.distinct().size != lineNos.size) {
-            throw ValidationException("Duplicate line numbers", mapOf("lines" to "duplicate_line_no"))
-        }
-        val warehouse = wmsRepository.findWarehouseById(request.warehouseId)
-            ?: throw NotFoundException("warehouse", request.warehouseId)
-        if (warehouse.active != true) {
-            throw ValidationException("Warehouse is inactive", mapOf("warehouseId" to "inactive"))
-        }
-        val expectedAt = parseDateTime(request.expectedAt)
-        if (request.expectedAt != null && expectedAt == null) {
-            throw ValidationException("Invalid expected date", mapOf("expectedAt" to "invalid"))
-        }
-
-        return dsl.transactionResult(TransactionalCallable {
-            val number = wmsRepository.generateReceiptNumber()
-            val receipt = wmsRepository.createReceipt(
-                number = number,
-                sourceType = request.sourceType.name,
-                sourceRef = request.sourceRef?.trim(),
-                warehouseId = request.warehouseId,
-                expectedAt = expectedAt,
-                note = request.note?.trim(),
-                createdBy = currentUser.userId
-            )
-            for (line in request.lines) {
-                val nomenclature = wmsRepository.findNomenclatureById(line.nomenclatureId)
-                    ?: throw NotFoundException("nomenclature", line.nomenclatureId)
-                if (nomenclature.archived == true) {
-                    throw ConflictException("Nomenclature is archived: ${nomenclature.code}")
-                }
-                val location = wmsRepository.findLocationById(line.locationId)
-                    ?: throw NotFoundException("storage_location", line.locationId)
-                if (location.warehouseId != request.warehouseId) {
-                    throw ValidationException(
-                        "Location does not belong to the receipt warehouse",
-                        mapOf("locationId" to "other_warehouse")
-                    )
-                }
-                if (location.active != true) {
-                    throw ValidationException("Location is inactive", mapOf("locationId" to "inactive"))
-                }
-                val expected = parseQuantity(line.expectedQuantity, "expectedQuantity")
-                // Фактическое количество по умолчанию равно ожидаемому; превышение
-                // не попадает в свободный остаток без отдельного решения (8.4 ТЗ).
-                val received = line.receivedQuantity
-                    ?.let { parseQuantity(it, "receivedQuantity", allowZero = true) }
-                    ?: expected
-                if (received > expected) {
-                    throw ValidationException(
-                        "Received quantity exceeds expected; surplus requires a separate decision",
-                        mapOf("receivedQuantity" to "exceeds_expected")
-                    )
-                }
-                var lotId: Long? = null
-                val lotNumber = line.lotNumber
-                if (nomenclature.lotTracked == true && lotNumber.isNullOrBlank()) {
-                    throw ValidationException(
-                        "Lot number is required for lot-tracked nomenclature",
-                        mapOf("lotNumber" to "required")
-                    )
-                }
-                if (!lotNumber.isNullOrBlank()) {
-                    lotId = (wmsRepository.findLot(nomenclature.id, lotNumber.trim())
-                        ?: wmsRepository.createLot(nomenclature.id, lotNumber.trim(), currentUser.userId)).id
-                }
-                wmsRepository.insertReceiptLine(
-                    receiptId = receipt.id,
-                    lineNo = line.lineNo,
-                    nomenclatureId = nomenclature.id,
-                    expectedQuantity = expected,
-                    receivedQuantity = received,
-                    lotId = lotId,
-                    locationId = line.locationId,
-                    note = line.note?.trim()
-                )
-            }
-            auditService.log(
-                currentUser.userId, "CREATE", "RECEIPT", receipt.id,
-                mapOf("number" to receipt.number, "sourceType" to receipt.sourceType, "lines" to request.lines.size)
-            )
-            receipt.toDto(wmsRepository.listReceiptLines(receipt.id))
-        })
-    }
-
-    fun getReceipt(id: Long, currentUser: CurrentUser): ReceiptDto {
-        currentUser.requirePermission("wms", "read")
-        val receipt = wmsRepository.findReceiptById(id) ?: throw NotFoundException("receipt", id)
-        return receipt.toDto(wmsRepository.listReceiptLines(id))
-    }
-
-    // Проведение атомарно: статус POSTED, движения RECEIPT и физический остаток
-    // в одной транзакции. Повторное проведение отклоняется условным UPDATE
-    // (инварианты 2 и 18 ТЗ), конкурентное изменение — проверкой версии (19).
-    fun postReceipt(id: Long, request: PostReceiptRequest, currentUser: CurrentUser): ReceiptDto {
-        currentUser.requirePermission("wms", "post")
-        return dsl.transactionResult(TransactionalCallable {
-            val receipt = wmsRepository.lockReceiptById(id) ?: throw NotFoundException("receipt", id)
-            if (receipt.version != request.version) {
-                throw ConflictException("Receipt was modified concurrently")
-            }
-            if (receipt.status == "POSTED") {
-                throw ConflictException("Receipt is already posted")
-            }
-            if (receipt.status != "DRAFT" && receipt.status != "IN_PROGRESS") {
-                throw ConflictException("Receipt cannot be posted from status ${receipt.status}")
-            }
-            val lines = wmsRepository.listReceiptLines(id)
-            if (lines.isEmpty()) {
-                throw ValidationException("Receipt has no lines", mapOf("lines" to "required"))
-            }
-            for (line in lines) {
-                val received = line.receivedQuantity
-                if (received.signum() <= 0) continue
-                val nomenclature = wmsRepository.findNomenclatureById(line.nomenclatureId)
-                    ?: throw NotFoundException("nomenclature", line.nomenclatureId)
-                if (nomenclature.archived == true) {
-                    throw ConflictException("Nomenclature is archived: ${nomenclature.code}")
-                }
-                wmsRepository.insertMovement(
-                    movementType = "RECEIPT",
-                    nomenclatureId = line.nomenclatureId,
-                    lotId = line.lotId,
-                    serialId = null,
-                    fromLocationId = null,
-                    toLocationId = line.locationId,
-                    quantity = received,
-                    documentType = "RECEIPT",
-                    documentId = receipt.id,
-                    note = "Receipt ${receipt.number}",
-                    createdBy = currentUser.userId
-                )
-                wmsRepository.increasePhysical(
-                    warehouseId = receipt.warehouseId,
-                    locationId = line.locationId,
-                    nomenclatureId = line.nomenclatureId,
-                    lotId = line.lotId,
-                    serialId = null,
-                    quantity = received
-                )
-            }
-            val posted = wmsRepository.postReceipt(id, request.version, currentUser.userId)
-                ?: throw ConflictException("Receipt was modified concurrently")
-            auditService.log(
-                currentUser.userId, "POST", "RECEIPT", id,
-                mapOf("number" to receipt.number, "lines" to lines.size)
-            )
-            posted.toDto(wmsRepository.listReceiptLines(id))
-        })
-    }
+    // Приёмка вынесена в ReceiptService: основания (заказ, счёт, накладная/УПД,
+    // возврат, перемещение, начальный остаток), расхождения и поздние связи.
 
     // Резервы (D-30): резерв не является выдачей; доступное уменьшается
     // через reserved_qty и не может стать отрицательным (инварианты 1 и 5).
@@ -648,34 +491,6 @@ private fun WmsRepository.StockRow.toDto(): StockBalanceDto = StockBalanceDto(
     reservedQty = this.balance.reservedQty.toPlainString(),
     availableQty = this.balance.availableQty.toPlainString(),
     version = this.balance.version ?: 0
-)
-
-private fun ReceiptLinesRecord.toDto(): ReceiptLineDto = ReceiptLineDto(
-    id = this.id,
-    lineNo = this.lineNo,
-    nomenclatureId = this.nomenclatureId,
-    expectedQuantity = this.expectedQuantity.toPlainString(),
-    receivedQuantity = this.receivedQuantity.toPlainString(),
-    lotId = this.lotId,
-    locationId = this.locationId,
-    note = this.note
-)
-
-private fun ReceiptsRecord.toDto(lines: List<ReceiptLinesRecord>): ReceiptDto = ReceiptDto(
-    id = this.id,
-    number = this.number,
-    sourceType = ReceiptSourceType.valueOf(this.sourceType),
-    sourceRef = this.sourceRef,
-    warehouseId = this.warehouseId,
-    status = this.status?.let { ReceiptStatus.valueOf(it) } ?: ReceiptStatus.DRAFT,
-    expectedAt = this.expectedAt?.toString(),
-    note = this.note,
-    postedAt = this.postedAt?.toString(),
-    postedBy = this.postedBy,
-    createdAt = this.createdAt?.toString(),
-    createdBy = this.createdBy,
-    version = this.version ?: 0,
-    lines = lines.map { it.toDto() }
 )
 
 private fun ReservationHistoryRecord.toDto(): ReservationHistoryDto = ReservationHistoryDto(

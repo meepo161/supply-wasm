@@ -13,6 +13,7 @@ import org.example.project.dto.ApiError
 import org.example.project.dto.CreateNomenclatureBarcodeRequest
 import org.example.project.dto.CreateNomenclatureRequest
 import org.example.project.dto.CreateReceiptRequest
+import org.example.project.dto.LinkReceiptRequest
 import org.example.project.dto.CreateReservationRequest
 import org.example.project.dto.CreateStorageLocationRequest
 import org.example.project.dto.CreateWarehouseRequest
@@ -83,6 +84,7 @@ class WmsViewModel(
         _uiState.value = _uiState.value.copy(
             selectedTab = tab,
             operationError = null,
+            successMessage = null,
             selectedNomenclature = null,
             currentReservation = null
         )
@@ -95,7 +97,7 @@ class WmsViewModel(
             }
             WmsTab.NOMENCLATURE -> loadNomenclature()
             WmsTab.STOCK -> loadStock()
-            WmsTab.RECEIPTS -> { }
+            WmsTab.RECEIPTS -> loadReceipts()
             WmsTab.RESERVATIONS -> loadReservations()
             WmsTab.TRANSFERS -> loadTransfers()
             WmsTab.ISSUES -> loadIssues()
@@ -343,10 +345,12 @@ class WmsViewModel(
                 lineNo = line.lineNo,
                 nomenclatureId = nomId,
                 expectedQuantity = qty.trim(),
-                receivedQuantity = null,
+                receivedQuantity = line.receivedQuantity.takeIf { it.isNotBlank() }?.trim(),
                 lotNumber = line.lotNumber.takeIf { it.isNotBlank() },
                 locationId = locId,
-                note = line.note.takeIf { it.isNotBlank() }
+                note = line.note.takeIf { it.isNotBlank() },
+                purchaseOrderLineId = line.purchaseOrderLineId,
+                discrepancyReason = line.discrepancyReason.takeIf { it.isNotBlank() }
             )
         }
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
@@ -355,6 +359,10 @@ class WmsViewModel(
                 CreateReceiptRequest(
                     sourceType = form.sourceType,
                     sourceRef = form.sourceRef.takeIf { it.isNotBlank() },
+                    sourceDocumentNo = form.sourceDocumentNo.takeIf { it.isNotBlank() },
+                    sourceDocumentDate = form.sourceDocumentDate.takeIf { it.isNotBlank() },
+                    purchaseOrderId = form.purchaseOrderId,
+                    purchaseDeliveryId = form.purchaseDeliveryId,
                     warehouseId = warehouseId,
                     expectedAt = form.expectedAt.takeIf { it.isNotBlank() },
                     note = form.note.takeIf { it.isNotBlank() },
@@ -366,8 +374,10 @@ class WmsViewModel(
                         createReceiptForm = CreateReceiptForm(),
                         currentReceipt = result.data,
                         activeDialog = null,
-                        isLoading = false
+                        isLoading = false,
+                        successMessage = "Приёмка ${result.data.number} создана"
                     )
+                    loadReceipts()
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -377,14 +387,7 @@ class WmsViewModel(
         }
     }
 
-    fun loadReceiptById() {
-        val id = _uiState.value.loadReceiptId.toLongOrNull()
-        if (id == null) {
-            _uiState.value = _uiState.value.copy(
-                operationError = ApiError("VALIDATION_ERROR", "Введите числовой ID приёмки")
-            )
-            return
-        }
+    fun openReceipt(id: Long) {
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
             when (val result = repository.getReceipt(id)) {
@@ -401,6 +404,17 @@ class WmsViewModel(
         }
     }
 
+    fun loadReceiptById() {
+        val id = _uiState.value.loadReceiptId.toLongOrNull()
+        if (id == null) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Введите числовой ID приёмки")
+            )
+            return
+        }
+        openReceipt(id)
+    }
+
     fun postReceipt() {
         val receipt = _uiState.value.currentReceipt ?: return
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
@@ -410,9 +424,12 @@ class WmsViewModel(
                     _uiState.value = _uiState.value.copy(
                         currentReceipt = result.data,
                         isLoading = false,
-                        operationError = null
+                        operationError = null,
+                        successMessage = "Приёмка ${result.data.number} проведена, остаток обновлён"
                     )
                     loadStock()
+                    loadReceipts()
+                    loadExpectedReceipts()
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -424,6 +441,107 @@ class WmsViewModel(
 
     fun clearCurrentReceipt() {
         _uiState.value = _uiState.value.copy(currentReceipt = null, loadReceiptId = "")
+    }
+
+    fun dismissSuccess() {
+        _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+
+    /** Список приёмок: сервер фильтрует по заказу и статусу. */
+    fun loadReceipts() {
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.listReceipts()) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    receipts = result.data,
+                    isLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    /** Ожидаемые к приёмке позиции: «заказано / поставлено / принято / осталось». */
+    fun loadExpectedReceipts(purchaseOrderId: Long? = null) {
+        _uiState.value = _uiState.value.copy(operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.listExpectedReceipts(purchaseOrderId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    expectedReceipts = result.data
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun updateReceiptLinkOrderId(value: String) {
+        _uiState.value = _uiState.value.copy(receiptLinkOrderId = value)
+    }
+
+    fun updateReceiptLinkDocumentNo(value: String) {
+        _uiState.value = _uiState.value.copy(receiptLinkDocumentNo = value)
+    }
+
+    fun updateReceiptLinkReason(value: String) {
+        _uiState.value = _uiState.value.copy(receiptLinkReason = value)
+    }
+
+    /**
+     * Поздняя связь проведённой приёмки с заказом или накладной.
+     * Остаток не пересоздаётся — меняется только учётная связь.
+     */
+    fun linkReceipt() {
+        val receipt = _uiState.value.currentReceipt ?: return
+        val orderId = _uiState.value.receiptLinkOrderId.trim().toLongOrNull()
+        val documentNo = _uiState.value.receiptLinkDocumentNo.trim().takeIf { it.isNotEmpty() }
+        val reason = _uiState.value.receiptLinkReason.trim()
+        if (orderId == null && documentNo == null) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Укажите заказ или номер накладной")
+            )
+            return
+        }
+        if (reason.length < 5) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Обоснование связи должно быть содержательным")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.linkReceipt(
+                receipt.id,
+                LinkReceiptRequest(
+                    purchaseOrderId = orderId,
+                    purchaseDeliveryId = null,
+                    sourceDocumentNo = documentNo,
+                    reason = reason,
+                    version = receipt.version,
+                    idempotencyKey = "receipt-link-${receipt.id}-${Random.nextLong().toString(16)}"
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        currentReceipt = result.data,
+                        isLoading = false,
+                        successMessage = "Приёмка связана с документами",
+                        receiptLinkOrderId = "",
+                        receiptLinkDocumentNo = "",
+                        receiptLinkReason = ""
+                    )
+                    loadReceipts()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
     }
 
     fun createReservation() {
@@ -1838,6 +1956,12 @@ data class WmsUiState(
     val stock: List<org.example.project.dto.StockBalanceDto> = emptyList(),
     val reservations: List<org.example.project.dto.ReservationDto> = emptyList(),
     val currentReceipt: org.example.project.dto.ReceiptDto? = null,
+    val receipts: List<org.example.project.dto.ReceiptDto> = emptyList(),
+    val expectedReceipts: List<org.example.project.dto.ExpectedReceiptLineDto> = emptyList(),
+    val receiptLinkOrderId: String = "",
+    val receiptLinkDocumentNo: String = "",
+    val receiptLinkReason: String = "",
+    val successMessage: String? = null,
     val currentReservation: org.example.project.dto.ReservationDto? = null,
     val selectedNomenclature: org.example.project.dto.NomenclatureDto? = null,
     val selectedTab: WmsTab = WmsTab.WAREHOUSES,
@@ -1964,9 +2088,17 @@ data class CreateNomenclatureForm(
     val barcodes: List<CreateNomenclatureBarcodeRequest> = listOf(CreateNomenclatureBarcodeRequest(barcode = ""))
 )
 
+/**
+ * Форма приёмки: основание обязательно, документ-основание заполняется для
+ * заказа, счёта, накладной, возврата и перемещения (ТЗ §8.4).
+ */
 data class CreateReceiptForm(
-    val sourceType: org.example.project.dto.ReceiptSourceType = org.example.project.dto.ReceiptSourceType.OTHER,
+    val sourceType: org.example.project.dto.ReceiptSourceType = org.example.project.dto.ReceiptSourceType.PURCHASE_ORDER,
     val sourceRef: String = "",
+    val sourceDocumentNo: String = "",
+    val sourceDocumentDate: String = "",
+    val purchaseOrderId: Long? = null,
+    val purchaseDeliveryId: Long? = null,
     val warehouseId: Long? = null,
     val expectedAt: String = "",
     val note: String = "",
@@ -1977,9 +2109,15 @@ data class CreateReceiptLineForm(
     val lineNo: Int = 1,
     val nomenclatureId: Long? = null,
     val expectedQuantity: String = "",
+    /** Фактически принято; пусто — равно ожидаемому. */
+    val receivedQuantity: String = "",
     val locationId: Long? = null,
     val lotNumber: String = "",
-    val note: String = ""
+    val note: String = "",
+    /** Позиция заказа поставщику, которую закрывает строка. */
+    val purchaseOrderLineId: Long? = null,
+    /** Обоснование расхождения — обязательно, если принято не столько, сколько ожидалось. */
+    val discrepancyReason: String = ""
 )
 
 data class CreateReservationForm(

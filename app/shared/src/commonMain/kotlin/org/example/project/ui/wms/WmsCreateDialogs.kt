@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import org.example.project.dto.BarcodePackageType
 import org.example.project.dto.CreateNomenclatureBarcodeRequest
 import org.example.project.dto.NomenclatureDto
+import org.example.project.dto.ReceiptSourceType
 import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.WarehouseDto
 import org.example.project.ui.projects.ErrorMessageCard
@@ -315,10 +316,46 @@ fun CreateReceiptDialog(
                     onSelect = { onFormChange(form.copy(sourceType = it)) },
                     modifier = Modifier.fillMaxWidth()
                 )
+                // Основание проверяется сервером: для заказа, счёта, накладной,
+                // возврата и перемещения номер документа обязателен.
+                OutlinedTextField(
+                    value = form.sourceDocumentNo,
+                    onValueChange = { onFormChange(form.copy(sourceDocumentNo = it)) },
+                    label = { Text("Номер документа-основания") },
+                    placeholder = { Text("УПД-123 или СЧ-45") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    isError = form.sourceDocumentNo.isBlank() && form.sourceType != ReceiptSourceType.INITIAL_STOCK &&
+                        form.sourceType != ReceiptSourceType.OTHER
+                )
+                OutlinedTextField(
+                    value = form.sourceDocumentDate,
+                    onValueChange = { onFormChange(form.copy(sourceDocumentDate = it)) },
+                    label = { Text("Дата документа (ГГГГ-ММ-ДД)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                if (form.sourceType == ReceiptSourceType.PURCHASE_ORDER ||
+                    form.sourceType == ReceiptSourceType.DELIVERY_NOTE ||
+                    form.sourceType == ReceiptSourceType.INVOICE
+                ) {
+                    OutlinedTextField(
+                        value = form.purchaseOrderId?.toString().orEmpty(),
+                        onValueChange = { value ->
+                            onFormChange(form.copy(purchaseOrderId = value.trim().toLongOrNull()))
+                        },
+                        label = { Text("ID заказа поставщику") },
+                        supportingText = {
+                            Text("Заказ уменьшает ожидаемый остаток; приёмка может быть частичной")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
                 OutlinedTextField(
                     value = form.sourceRef,
                     onValueChange = { onFormChange(form.copy(sourceRef = it)) },
-                    label = { Text("Ссылка на источник") },
+                    label = { Text("Свободное описание основания") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -409,6 +446,26 @@ private fun ReceiptLineRow(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+        OutlinedTextField(
+            value = line.receivedQuantity,
+            onValueChange = { onChange(line.copy(receivedQuantity = it)) },
+            label = { Text("Фактически принято") },
+            supportingText = { Text("Пусто — равно ожидаемому. Расхождение фиксируется отдельно") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        if (line.receivedQuantity.isNotBlank() &&
+            line.receivedQuantity.trim() != line.expectedQuantity.trim()
+        ) {
+            OutlinedTextField(
+                value = line.discrepancyReason,
+                onValueChange = { onChange(line.copy(discrepancyReason = it)) },
+                label = { Text("Обоснование расхождения *") },
+                supportingText = { Text("Недопоставка или излишек без обоснования не принимается") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+        }
         OutlinedTextField(
             value = line.lotNumber,
             onValueChange = { onChange(line.copy(lotNumber = it)) },

@@ -64,26 +64,6 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getStock(warehouseId, nomenclatureId, call.currentUser())))
         }
 
-        post("/receipts") {
-            val request = call.receive<CreateReceiptRequest>()
-            val receipt = wmsService.createReceipt(request, call.currentUser())
-            call.respond(HttpStatusCode.Created, ApiResponse.success(receipt))
-        }
-
-        get("/receipts/{id}") {
-            val id = call.parameters["id"]?.toLongOrNull()
-                ?: throw ValidationException("Invalid receipt id")
-            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getReceipt(id, call.currentUser())))
-        }
-
-        post("/receipts/{id}/post") {
-            val id = call.parameters["id"]?.toLongOrNull()
-                ?: throw ValidationException("Invalid receipt id")
-            val request = call.receive<PostReceiptRequest>()
-            val receipt = wmsService.postReceipt(id, request, call.currentUser())
-            call.respond(HttpStatusCode.OK, ApiResponse.success(receipt))
-        }
-
         post("/reservations") {
             val request = call.receive<CreateReservationRequest>()
             val reservation = wmsService.createReservation(request, call.currentUser())

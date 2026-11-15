@@ -49,7 +49,10 @@ import org.example.project.dto.InventoryActionRequest
 import org.example.project.dto.InventoryDto
 import org.example.project.dto.InventoryStatus
 import org.example.project.dto.SubmitInventoryCountsRequest
+import org.example.project.dto.ExpectedReceiptLineDto
+import org.example.project.dto.LinkReceiptRequest
 import org.example.project.dto.PostReceiptRequest
+import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
@@ -88,6 +91,17 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
             }
         )
 
+    override suspend fun listReceipts(
+        purchaseOrderId: Long?,
+        status: ReceiptStatus?
+    ): ApiResult<List<ReceiptDto>> {
+        val params = buildMap {
+            purchaseOrderId?.let { put("purchaseOrderId", it.toString()) }
+            status?.let { put("status", it.name) }
+        }
+        return getWithParams("/api/wms/receipts", params)
+    }
+
     override suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto> =
         post("/api/wms/receipts", request)
 
@@ -95,6 +109,16 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
 
     override suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto> =
         post("/api/wms/receipts/$id/post", request)
+
+    override suspend fun linkReceipt(id: Long, request: LinkReceiptRequest): ApiResult<ReceiptDto> =
+        post("/api/wms/receipts/$id/links", request)
+
+    override suspend fun listExpectedReceipts(
+        purchaseOrderId: Long?
+    ): ApiResult<List<ExpectedReceiptLineDto>> {
+        val params = buildMap { purchaseOrderId?.let { put("purchaseOrderId", it.toString()) } }
+        return getWithParams("/api/wms/expected-receipts", params)
+    }
 
     override suspend fun createReservation(request: CreateReservationRequest): ApiResult<ReservationDto> =
         post("/api/wms/reservations", request)

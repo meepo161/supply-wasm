@@ -68,6 +68,7 @@ fun appModule(config: AppConfig) = module {
     single { ChatService(get(), get(), get(), get(), get()) }
     single { SearchService(get(), get()) }
     single { WmsService(get(), get(), get()) }
+    single { ReceiptService(get(), get(), get(), get()) }
     single { WmsTransferService(get(), get(), get()) }
     single { WmsIssueService(get(), get(), get()) }
     single { WmsWriteOffRepository(get()) }

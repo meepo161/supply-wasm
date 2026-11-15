@@ -7,7 +7,10 @@ import org.example.project.dto.CreateStorageLocationRequest
 import org.example.project.dto.CreateWarehouseRequest
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.PostReceiptRequest
+import org.example.project.dto.ExpectedReceiptLineDto
+import org.example.project.dto.LinkReceiptRequest
 import org.example.project.dto.ReceiptDto
+import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
@@ -59,9 +62,16 @@ interface WmsRepository {
 
     suspend fun getStock(warehouseId: Long?, nomenclatureId: Long?): ApiResult<List<StockBalanceDto>>
 
+    suspend fun listReceipts(purchaseOrderId: Long? = null, status: ReceiptStatus? = null): ApiResult<List<ReceiptDto>>
     suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto>
     suspend fun getReceipt(id: Long): ApiResult<ReceiptDto>
     suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto>
+
+    /** Поздняя связь проведённой приёмки с заказом или накладной. */
+    suspend fun linkReceipt(id: Long, request: LinkReceiptRequest): ApiResult<ReceiptDto>
+
+    /** Ожидаемые к приёмке позиции по заказам: заказано/поставлено/принято/осталось. */
+    suspend fun listExpectedReceipts(purchaseOrderId: Long? = null): ApiResult<List<ExpectedReceiptLineDto>>
 
     suspend fun createReservation(request: CreateReservationRequest): ApiResult<ReservationDto>
     suspend fun listReservations(

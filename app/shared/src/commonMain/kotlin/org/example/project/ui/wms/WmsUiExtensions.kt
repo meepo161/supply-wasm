@@ -56,10 +56,18 @@ fun BarcodePackageType.localizedName(): String = when (this) {
 
 fun ReceiptSourceType.localizedName(): String = when (this) {
     ReceiptSourceType.PURCHASE_ORDER -> "Заказ поставщику"
+    ReceiptSourceType.INVOICE -> "Счёт на оплату"
+    ReceiptSourceType.DELIVERY_NOTE -> "Накладная/УПД"
     ReceiptSourceType.RETURN -> "Возврат"
     ReceiptSourceType.TRANSFER -> "Перемещение"
     ReceiptSourceType.INITIAL_STOCK -> "Начальный остаток"
-    ReceiptSourceType.OTHER -> "Прочее"
+    ReceiptSourceType.OTHER -> "Прочий документ"
+}
+
+/** Документ-основание обязателен для всего, кроме начального остатка и прочего. */
+fun ReceiptSourceType.requiresDocument(): Boolean = when (this) {
+    ReceiptSourceType.INITIAL_STOCK, ReceiptSourceType.OTHER -> false
+    else -> true
 }
 
 fun ReceiptStatus.localizedName(): String = when (this) {

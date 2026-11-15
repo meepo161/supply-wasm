@@ -431,30 +431,134 @@ private fun ReceiptsTab(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(text = "Приёмка", style = MaterialTheme.typography.headlineSmall)
-        state.operationError?.let { ErrorMessageCard(error = it) }
-
-        if (state.currentReceipt == null) {
+        TabHeader(
+            title = "Приёмка",
+            onCreate = { viewModel.showDialog(WmsDialog.CreateReceipt) },
+            onRefresh = viewModel::loadReceipts,
+            createLabel = "Новая приёмка"
+        )
+        // Основание приёмки не свободная строка: заказ, счёт, накладная/УПД,
+        // возврат, перемещение, начальный остаток, прочий документ.
+        Text(
+            text = "Основание: заказ поставщику, счёт, накладная/УПД, возврат, перемещение, " +
+                "начальный остаток или прочий документ. Один документ проводится один раз.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        state.successMessage?.let { message ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = state.loadReceiptId,
-                    onValueChange = viewModel::updateLoadReceiptId,
-                    label = { Text("ID приёмки") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
                 )
-                Button(onClick = viewModel::loadReceiptById) { Text("Открыть") }
+                TextButton(onClick = viewModel::dismissSuccess) { Text("Ок") }
             }
-            Button(onClick = { viewModel.showDialog(WmsDialog.CreateReceipt) }) {
-                Text("Создать приёмку")
+        }
+        state.operationError?.let { ErrorMessageCard(error = it) }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = state.loadReceiptId,
+                onValueChange = viewModel::updateLoadReceiptId,
+                label = { Text("ID приёмки") },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            Button(onClick = viewModel::loadReceiptById) { Text("Открыть") }
+            TextButton(onClick = { viewModel.loadExpectedReceipts() }) {
+                Text("Ожидаемые поставки")
+            }
+        }
+
+        if (state.expectedReceipts.isNotEmpty()) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Ожидается к приёмке", style = MaterialTheme.typography.titleSmall)
+                    state.expectedReceipts.take(20).forEach { line ->
+                        Text(
+                            text = "${line.orderNumber} · позиция ${line.lineNo}: " +
+                                "заказано ${line.orderedQuantity}, поставлено ${line.deliveredQuantity}, " +
+                                "принято ${line.acceptedQuantity}, осталось ${line.notAcceptedQuantity}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+
+        if (state.currentReceipt == null) {
+            if (state.receipts.isEmpty()) {
+                EmptyState("Приёмок ещё не было. Создайте документ с основанием.")
+            } else {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        state.receipts.forEach { receipt ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${receipt.number} · ${receipt.sourceType.localizedName()}",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = listOfNotNull(
+                                            receipt.sourceDocumentNo,
+                                            receipt.purchaseOrderNumber?.let { "заказ $it" },
+                                            if (receipt.hasDiscrepancies) "есть расхождения" else null
+                                        ).joinToString(" · ").ifBlank { "без документа" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    text = receipt.status.localizedName(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                TextButton(onClick = { viewModel.openReceipt(receipt.id) }) {
+                                    Text("Открыть")
+                                }
+                            }
+                        }
+                    }
+                }
             }
         } else {
             ReceiptDetailCard(
                 receipt = state.currentReceipt,
+                linkOrderId = state.receiptLinkOrderId,
+                linkDocumentNo = state.receiptLinkDocumentNo,
+                linkReason = state.receiptLinkReason,
+                onLinkOrderIdChange = viewModel::updateReceiptLinkOrderId,
+                onLinkDocumentNoChange = viewModel::updateReceiptLinkDocumentNo,
+                onLinkReasonChange = viewModel::updateReceiptLinkReason,
+                onLink = viewModel::linkReceipt,
                 onPost = viewModel::postReceipt,
                 onClose = viewModel::clearCurrentReceipt
             )
@@ -465,6 +569,13 @@ private fun ReceiptsTab(
 @Composable
 private fun ReceiptDetailCard(
     receipt: ReceiptDto,
+    linkOrderId: String,
+    linkDocumentNo: String,
+    linkReason: String,
+    onLinkOrderIdChange: (String) -> Unit,
+    onLinkDocumentNoChange: (String) -> Unit,
+    onLinkReasonChange: (String) -> Unit,
+    onLink: () -> Unit,
     onPost: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -476,21 +587,102 @@ private fun ReceiptDetailCard(
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = "Приёмка ${receipt.number}", style = MaterialTheme.typography.titleMedium)
             Text(text = "Статус: ${receipt.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-            Text(text = "Источник: ${receipt.sourceType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "Основание: ${receipt.sourceType.localizedName()}" +
+                    (receipt.sourceDocumentNo?.let { " · документ $it" } ?: ""),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            receipt.purchaseOrderNumber?.let { orderNumber ->
+                Text(text = "Заказ поставщику: $orderNumber", style = MaterialTheme.typography.bodyMedium)
+            }
+            receipt.purchaseDeliveryNumber?.let { deliveryNumber ->
+                Text(text = "Поставка: $deliveryNumber", style = MaterialTheme.typography.bodyMedium)
+            }
             Text(text = "Версия: ${receipt.version}", style = MaterialTheme.typography.bodyMedium)
+            if (receipt.hasDiscrepancies) {
+                Text(
+                    text = "По документу есть расхождения «ожидалось / принято»",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             HorizontalDivider()
             Text("Строки:", style = MaterialTheme.typography.labelLarge)
             receipt.lines.forEach { line ->
-                Text(
-                    text = "№${line.lineNo}: номенклатура ${line.nomenclatureId}, ожидалось ${line.expectedQuantity}, принято ${line.receivedQuantity}",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "№${line.lineNo}: номенклатура ${line.nomenclatureCode ?: line.nomenclatureId}, " +
+                            "ожидалось ${line.expectedQuantity}, принято ${line.receivedQuantity}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    line.discrepancyKind?.let { kind ->
+                        Text(
+                            text = (if (kind.name == "SHORTAGE") "Недопоставка " else "Излишек ") +
+                                "${line.discrepancyQuantity}: ${line.discrepancyReason ?: "без обоснования"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+            if (receipt.links.isNotEmpty()) {
+                HorizontalDivider()
+                Text("Связи, добавленные позже:", style = MaterialTheme.typography.labelLarge)
+                receipt.links.forEach { link ->
+                    Text(
+                        text = listOfNotNull(
+                            link.purchaseOrderId?.let { "заказ #$it" },
+                            link.purchaseDeliveryId?.let { "поставка #$it" },
+                            link.sourceDocumentNo?.let { "документ $it" },
+                            link.reason
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (receipt.status == ReceiptStatus.DRAFT) {
+                if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
                     Button(onClick = onPost) { Text("Провести") }
                 }
                 TextButton(onClick = onClose) { Text("Закрыть") }
+            }
+            // Поздняя связь: заказ и накладная могут появиться после приёмки.
+            // К заказу поставщику привязываются только приёмки по заказу, счёту
+            // и накладной/УПД — начальный остаток, возврат и перемещение к нему
+            // не относятся (сервер отвечает 400).
+            if (receipt.status == ReceiptStatus.POSTED) {
+                HorizontalDivider()
+                Text(
+                    text = "Связать с документами, появившимися позже (остаток не пересоздаётся)",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = linkOrderId,
+                        onValueChange = onLinkOrderIdChange,
+                        label = { Text("ID заказа") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = linkDocumentNo,
+                        onValueChange = onLinkDocumentNoChange,
+                        label = { Text("Номер накладной") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+                OutlinedTextField(
+                    value = linkReason,
+                    onValueChange = onLinkReasonChange,
+                    label = { Text("Обоснование связи") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Button(onClick = onLink) { Text("Связать") }
             }
         }
     }

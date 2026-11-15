@@ -37,6 +37,7 @@ object TestDatabase {
             conn.createStatement().execute(
                 """
                 TRUNCATE TABLE
+                  receipt_links,
                   purchase_idempotency_keys, purchase_delivery_lines, purchase_deliveries,
                   purchase_order_history, purchase_order_demands, purchase_order_lines, purchase_orders,
                   supplier_idempotency_keys, supplier_offer_history,

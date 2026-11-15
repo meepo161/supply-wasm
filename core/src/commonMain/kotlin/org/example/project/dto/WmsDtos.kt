@@ -43,13 +43,30 @@ enum class BarcodePackageType {
     PACKAGE
 }
 
+/**
+ * Основание приёмки (ТЗ §8.4): заказ поставщику, счёт, накладная/УПД, возврат,
+ * перемещение, начальный остаток, прочий документированный источник.
+ * Основание обязательно и проверяется сервером.
+ */
 @Serializable
 enum class ReceiptSourceType {
     PURCHASE_ORDER,
+    INVOICE,
+    DELIVERY_NOTE,
     RETURN,
     TRANSFER,
     INITIAL_STOCK,
     OTHER
+}
+
+/** Вид расхождения «ожидалось / принято» по строке приёмки. */
+@Serializable
+enum class ReceiptDiscrepancyKind {
+    /** Принято меньше ожидаемого: остаток не закрыт, недопоставка видна. */
+    SHORTAGE,
+
+    /** Принято больше ожидаемого: излишек требует отдельного решения. */
+    SURPLUS
 }
 
 @Serializable
@@ -204,17 +221,44 @@ data class ReceiptLineInput(
     val receivedQuantity: String? = null,
     val lotNumber: String? = null,
     val locationId: Long,
-    val note: String? = null
+    val note: String? = null,
+    /** Позиция заказа поставщику, которую закрывает строка приёмки. */
+    val purchaseOrderLineId: Long? = null,
+    /** Обоснование расхождения, если принято не столько, сколько ожидалось. */
+    val discrepancyReason: String? = null
 )
 
 @Serializable
 data class CreateReceiptRequest(
     val sourceType: ReceiptSourceType,
+    /** Свободное описание основания, если документ ещё не заведён. */
     val sourceRef: String? = null,
+    /** Номер документа-основания: накладная, УПД, счёт. */
+    val sourceDocumentNo: String? = null,
+    /** Дата документа-основания. */
+    val sourceDocumentDate: String? = null,
+    /** Заказ поставщику, по которому идёт приёмка. */
+    val purchaseOrderId: Long? = null,
+    /** Поставка заказа, если приёмка закрывает конкретную поставку. */
+    val purchaseDeliveryId: Long? = null,
     val warehouseId: Long,
     val expectedAt: String? = null,
     val note: String? = null,
     val lines: List<ReceiptLineInput>
+)
+
+/**
+ * Поздняя связь уже проведённой приёмки с заказом и/или накладной.
+ * Остаток не пересоздаётся: меняется только учётная связь документов.
+ */
+@Serializable
+data class LinkReceiptRequest(
+    val purchaseOrderId: Long? = null,
+    val purchaseDeliveryId: Long? = null,
+    val sourceDocumentNo: String? = null,
+    val reason: String,
+    val version: Long,
+    val idempotencyKey: String? = null
 )
 
 @Serializable
@@ -227,11 +271,18 @@ data class ReceiptLineDto(
     val id: Long,
     val lineNo: Int,
     val nomenclatureId: Long,
+    val nomenclatureCode: String? = null,
+    val nomenclatureName: String? = null,
     val expectedQuantity: String,
     val receivedQuantity: String,
     val lotId: Long? = null,
     val locationId: Long? = null,
-    val note: String? = null
+    val note: String? = null,
+    /** Расхождение по строке: вид, величина и обоснование. */
+    val discrepancyKind: ReceiptDiscrepancyKind? = null,
+    val discrepancyQuantity: String? = null,
+    val discrepancyReason: String? = null,
+    val purchaseOrderLineId: Long? = null
 )
 
 @Serializable
@@ -240,6 +291,12 @@ data class ReceiptDto(
     val number: String,
     val sourceType: ReceiptSourceType,
     val sourceRef: String? = null,
+    val sourceDocumentNo: String? = null,
+    val sourceDocumentDate: String? = null,
+    val purchaseOrderId: Long? = null,
+    val purchaseOrderNumber: String? = null,
+    val purchaseDeliveryId: Long? = null,
+    val purchaseDeliveryNumber: String? = null,
     val warehouseId: Long,
     val status: ReceiptStatus = ReceiptStatus.DRAFT,
     val expectedAt: String? = null,
@@ -249,7 +306,42 @@ data class ReceiptDto(
     val createdAt: String? = null,
     val createdBy: Long,
     val version: Long = 0,
-    val lines: List<ReceiptLineDto> = emptyList()
+    val lines: List<ReceiptLineDto> = emptyList(),
+    /** Связи, добавленные после проведения: заказ или накладная, пришедшие позже. */
+    val links: List<ReceiptLinkDto> = emptyList(),
+    /** Есть ли по документу расхождения «ожидалось / принято». */
+    val hasDiscrepancies: Boolean = false
+)
+
+@Serializable
+data class ReceiptLinkDto(
+    val id: Long,
+    val receiptId: Long,
+    val purchaseOrderId: Long? = null,
+    val purchaseDeliveryId: Long? = null,
+    /** Номер документа, пришедшего позже: накладная, УПД, счёт. */
+    val sourceDocumentNo: String? = null,
+    val reason: String,
+    val linkedBy: Long,
+    val linkedAt: String? = null
+)
+
+/** Ожидаемое к приёмке по заказу: «заказано / поставлено / принято / осталось». */
+@Serializable
+data class ExpectedReceiptLineDto(
+    val orderId: Long,
+    val orderNumber: String,
+    val orderStatus: String,
+    val orderLineId: Long,
+    val lineNo: Int,
+    val nomenclatureId: Long,
+    val nomenclatureCode: String? = null,
+    val nomenclatureName: String? = null,
+    val orderedQuantity: String,
+    val deliveredQuantity: String,
+    val acceptedQuantity: String,
+    val expectedRemaining: String,
+    val notAcceptedQuantity: String
 )
 
 @Serializable

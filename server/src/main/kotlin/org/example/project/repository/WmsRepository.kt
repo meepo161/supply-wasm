@@ -4,6 +4,10 @@ import org.example.project.generated.jooq.tables.Lots.LOTS
 import org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
 import org.example.project.generated.jooq.tables.NomenclatureBarcodes.NOMENCLATURE_BARCODES
 import org.example.project.generated.jooq.tables.Projects.PROJECTS
+import org.example.project.generated.jooq.tables.PurchaseDeliveries.PURCHASE_DELIVERIES
+import org.example.project.generated.jooq.tables.PurchaseOrderLines.PURCHASE_ORDER_LINES
+import org.example.project.generated.jooq.tables.PurchaseOrders.PURCHASE_ORDERS
+import org.example.project.generated.jooq.tables.ReceiptLinks.RECEIPT_LINKS
 import org.example.project.generated.jooq.tables.ReceiptLines.RECEIPT_LINES
 import org.example.project.generated.jooq.tables.Receipts.RECEIPTS
 import org.example.project.generated.jooq.tables.ReservationHistory.RESERVATION_HISTORY
@@ -18,7 +22,11 @@ import org.example.project.generated.jooq.tables.Warehouses.WAREHOUSES
 import org.example.project.generated.jooq.tables.records.LotsRecord
 import org.example.project.generated.jooq.tables.records.NomenclatureBarcodesRecord
 import org.example.project.generated.jooq.tables.records.NomenclatureRecord
+import org.example.project.generated.jooq.tables.records.PurchaseDeliveriesRecord
+import org.example.project.generated.jooq.tables.records.PurchaseOrderLinesRecord
+import org.example.project.generated.jooq.tables.records.PurchaseOrdersRecord
 import org.example.project.generated.jooq.tables.records.ReceiptLinesRecord
+import org.example.project.generated.jooq.tables.records.ReceiptLinksRecord
 import org.example.project.generated.jooq.tables.records.ReceiptsRecord
 import org.example.project.generated.jooq.tables.records.ReservationHistoryRecord
 import org.example.project.generated.jooq.tables.records.ReservationsRecord
@@ -30,6 +38,7 @@ import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Record
 import java.math.BigDecimal
+import java.time.LocalDate
 import java.time.OffsetDateTime
 
 class WmsRepository(private val dsl: DSLContext) {
@@ -368,6 +377,10 @@ class WmsRepository(private val dsl: DSLContext) {
         number: String,
         sourceType: String,
         sourceRef: String?,
+        sourceDocumentNo: String?,
+        sourceDocumentDate: LocalDate?,
+        purchaseOrderId: Long?,
+        purchaseDeliveryId: Long?,
         warehouseId: Long,
         expectedAt: OffsetDateTime?,
         note: String?,
@@ -377,12 +390,160 @@ class WmsRepository(private val dsl: DSLContext) {
         record.number = number
         record.sourceType = sourceType
         record.sourceRef = sourceRef
+        record.sourceDocumentNo = sourceDocumentNo
+        record.sourceDocumentDate = sourceDocumentDate
+        record.purchaseOrderId = purchaseOrderId
+        record.purchaseDeliveryId = purchaseDeliveryId
         record.warehouseId = warehouseId
         record.expectedAt = expectedAt
         record.note = note
         record.createdBy = createdBy
         record.store()
         return findReceiptById(record.id)!!
+    }
+
+    /** Поиск приёмки по тому же документу-основанию: повторная приёмка запрещена. */
+    fun findReceiptBySourceDocument(
+        sourceType: String,
+        sourceDocumentNo: String
+    ): ReceiptsRecord? =
+        dsl.selectFrom(RECEIPTS)
+            .where(RECEIPTS.SOURCE_TYPE.eq(sourceType))
+            .and(RECEIPTS.SOURCE_DOCUMENT_NO.eq(sourceDocumentNo))
+            .and(RECEIPTS.STATUS.ne("CANCELLED"))
+            .fetchOne()
+
+    fun findReceiptsByPurchaseOrder(orderId: Long): List<ReceiptsRecord> =
+        dsl.selectFrom(RECEIPTS)
+            .where(RECEIPTS.PURCHASE_ORDER_ID.eq(orderId))
+            .orderBy(RECEIPTS.ID.asc())
+            .fetch()
+
+    fun updateReceiptLinks(
+        id: Long,
+        expectedVersion: Long,
+        purchaseOrderId: Long?,
+        purchaseDeliveryId: Long?,
+        sourceDocumentNo: String?,
+        updatedBy: Long
+    ): ReceiptsRecord? {
+        val set = mutableMapOf<org.jooq.Field<*>, Any?>()
+        if (purchaseOrderId != null) set[RECEIPTS.PURCHASE_ORDER_ID] = purchaseOrderId
+        if (purchaseDeliveryId != null) set[RECEIPTS.PURCHASE_DELIVERY_ID] = purchaseDeliveryId
+        if (sourceDocumentNo != null) set[RECEIPTS.SOURCE_DOCUMENT_NO] = sourceDocumentNo
+        set[RECEIPTS.VERSION] = RECEIPTS.VERSION.plus(1)
+        val changed = dsl.update(RECEIPTS)
+            .set(set)
+            .where(RECEIPTS.ID.eq(id))
+            .and(RECEIPTS.VERSION.eq(expectedVersion))
+            .execute()
+        if (changed == 0) return null
+        return findReceiptById(id)
+    }
+
+    fun insertReceiptLink(
+        receiptId: Long,
+        purchaseOrderId: Long?,
+        purchaseDeliveryId: Long?,
+        sourceDocumentNo: String?,
+        reason: String,
+        linkedBy: Long
+    ) {
+        dsl.insertInto(RECEIPT_LINKS)
+            .set(RECEIPT_LINKS.RECEIPT_ID, receiptId)
+            .set(RECEIPT_LINKS.PURCHASE_ORDER_ID, purchaseOrderId)
+            .set(RECEIPT_LINKS.PURCHASE_DELIVERY_ID, purchaseDeliveryId)
+            .set(RECEIPT_LINKS.SOURCE_DOCUMENT_NO, sourceDocumentNo)
+            .set(RECEIPT_LINKS.REASON, reason)
+            .set(RECEIPT_LINKS.LINKED_BY, linkedBy)
+            .execute()
+    }
+
+    fun listReceiptLinks(receiptId: Long): List<ReceiptLinksRecord> =
+        dsl.selectFrom(RECEIPT_LINKS)
+            .where(RECEIPT_LINKS.RECEIPT_ID.eq(receiptId))
+            .orderBy(RECEIPT_LINKS.ID.asc())
+            .fetch()
+
+    /** Заказ, к которому относится приёмка, — для проверок прав и сумм. */
+    fun findPurchaseOrderById(id: Long): PurchaseOrdersRecord? =
+        dsl.selectFrom(PURCHASE_ORDERS).where(PURCHASE_ORDERS.ID.eq(id)).fetchOne()
+
+    fun findPurchaseOrderLineById(id: Long): PurchaseOrderLinesRecord? =
+        dsl.selectFrom(PURCHASE_ORDER_LINES).where(PURCHASE_ORDER_LINES.ID.eq(id)).fetchOne()
+
+    fun listPurchaseOrderLines(orderId: Long): List<PurchaseOrderLinesRecord> =
+        dsl.selectFrom(PURCHASE_ORDER_LINES)
+            .where(PURCHASE_ORDER_LINES.ORDER_ID.eq(orderId))
+            .orderBy(PURCHASE_ORDER_LINES.LINE_NO.asc())
+            .fetch()
+
+    fun findPurchaseDeliveryById(id: Long): PurchaseDeliveriesRecord? =
+        dsl.selectFrom(PURCHASE_DELIVERIES).where(PURCHASE_DELIVERIES.ID.eq(id)).fetchOne()
+
+    /** Ожидаемые к приёмке позиции по заказу (view `purchase_order_receipt_status`). */
+    fun expectedReceiptLines(orderId: Long?): List<org.jooq.Record> {
+        val sql = StringBuilder(
+            """
+            SELECT order_id, order_number, order_status, order_line_id, line_no,
+                   nomenclature_id, ordered_quantity, delivered_quantity,
+                   accepted_quantity, expected_remaining, not_accepted_quantity
+            FROM purchase_order_receipt_status
+            """.trimIndent()
+        )
+        if (orderId != null) sql.append(" WHERE order_id = ?")
+        sql.append(" ORDER BY order_id, line_no")
+        return if (orderId != null) {
+            dsl.fetch(sql.toString(), orderId).intoList()
+        } else {
+            dsl.fetch(sql.toString()).intoList()
+        }
+    }
+
+    /**
+     * Принятое по позиции заказа: сумма проведённых приёмок.
+     * `excludeReceiptId` исключает текущий документ — так пересчитывается
+     * остаток при проведении, не считая приёмку дважды.
+     */
+    fun acceptedQuantityForOrderLine(orderLineId: Long, excludeReceiptId: Long? = null): BigDecimal =
+        dsl.fetchOne(
+            """
+            SELECT COALESCE(SUM(rl.received_quantity), 0) AS total
+            FROM receipt_lines rl
+                     JOIN receipts r ON r.id = rl.receipt_id
+            WHERE rl.purchase_order_line_id = ?
+              AND r.status = 'POSTED'
+              AND (? IS NULL OR r.id <> ?)
+            """.trimIndent(),
+            orderLineId, excludeReceiptId, excludeReceiptId
+        )?.get("total", BigDecimal::class.java) ?: BigDecimal.ZERO
+
+    /** Принято по позициям поставки: позиция заказа → количество. */
+    fun acceptedQuantitiesForDelivery(deliveryId: Long): Map<Long, BigDecimal> =
+        dsl.fetch(
+            """
+            SELECT rl.purchase_order_line_id AS order_line_id,
+                   COALESCE(SUM(rl.received_quantity), 0) AS accepted
+            FROM receipt_lines rl
+                     JOIN receipts r ON r.id = rl.receipt_id
+            WHERE r.status = 'POSTED'
+              AND r.purchase_delivery_id = ?
+              AND rl.purchase_order_line_id IS NOT NULL
+            GROUP BY rl.purchase_order_line_id
+            """.trimIndent(),
+            deliveryId
+        ).associate { row ->
+            row.get("order_line_id", Long::class.java) to row.get("accepted", BigDecimal::class.java)
+        }
+
+    fun listReceipts(purchaseOrderId: Long?, status: String?): List<ReceiptsRecord> {
+        val conditions = mutableListOf<Condition>()
+        purchaseOrderId?.let { conditions += RECEIPTS.PURCHASE_ORDER_ID.eq(it) }
+        status?.let { conditions += RECEIPTS.STATUS.eq(it) }
+        return dsl.selectFrom(RECEIPTS)
+            .where(conditions)
+            .orderBy(RECEIPTS.ID.desc())
+            .fetch()
     }
 
     fun insertReceiptLine(
@@ -393,7 +554,11 @@ class WmsRepository(private val dsl: DSLContext) {
         receivedQuantity: BigDecimal,
         lotId: Long?,
         locationId: Long?,
-        note: String?
+        note: String?,
+        purchaseOrderLineId: Long? = null,
+        discrepancyKind: String? = null,
+        discrepancyQuantity: BigDecimal? = null,
+        discrepancyReason: String? = null
     ) {
         dsl.insertInto(RECEIPT_LINES)
             .set(RECEIPT_LINES.RECEIPT_ID, receiptId)
@@ -404,6 +569,10 @@ class WmsRepository(private val dsl: DSLContext) {
             .set(RECEIPT_LINES.LOT_ID, lotId)
             .set(RECEIPT_LINES.LOCATION_ID, locationId)
             .set(RECEIPT_LINES.NOTE, note)
+            .set(RECEIPT_LINES.PURCHASE_ORDER_LINE_ID, purchaseOrderLineId)
+            .set(RECEIPT_LINES.DISCREPANCY_KIND, discrepancyKind)
+            .set(RECEIPT_LINES.DISCREPANCY_QUANTITY, discrepancyQuantity)
+            .set(RECEIPT_LINES.DISCREPANCY_REASON, discrepancyReason)
             .execute()
     }
 
