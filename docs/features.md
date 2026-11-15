@@ -120,3 +120,34 @@ Complete WMS, procurement, production, BOM, documents, approvals, calendar/Gantt
 - `index.html` и `styles.css` содержат брендированную заставку загрузки, которая скрывается после появления канваса Compose.
 
 Оформление не проверено визуальным прогоном в браузере в текущей среде: сборка Wasm и JDK в ней недоступны, изменения проверены только статически (баланс скобок, отсутствие неиспользуемых импортов). Перед приёмкой требуется прогон `:app:webApp:wasmJsBrowserDevelopmentRun`.
+
+## Suppliers and offers (SUP-13, SUP-14)
+
+Supplier cards live under the **Поставщики** navigation item and store requisites
+(name, INN/KPP/OGRN, country, legal address, contacts, phone, email, site),
+contacts, addresses, purchase categories, documents with validity dates and a
+verification status (`NOT_VERIFIED`, `IN_REVIEW`, `VERIFIED`, `REJECTED`).
+Duplicates are detected by INN among non-archived cards and rejected with `409`.
+
+Offers are attached to a demand and to a verified supplier. An offer stores
+currency, technical compliance (`UNKNOWN`, `FULL`, `PARTIAL`, `DEVIATION`),
+document completeness, delivery time and terms, delivery cost, payment terms,
+warranty, validity date and per-line quantity, unit price and VAT rate. Line
+totals and offer totals are computed by the database (`supplier_offer_totals`),
+the client never recalculates money.
+
+`GET /api/demands/{id}/supplier-offers/comparison` returns one column per offer,
+per-demand-line quantities, warnings (`EXPIRED`, `NOT_COMPLIANT`,
+`COMPLIANCE_UNKNOWN`, `DOCUMENTS_MISSING`, `SUPPLIER_NOT_VERIFIED`,
+`INCOMPLETE_COVERAGE`, `DELIVERY_UNKNOWN`, `DELIVERY_TOO_LONG`), the
+`cheapestOfferId` and a separate `recommendedOfferId`.
+
+Selection follows D-28: the demand initiator picks the preferred offer and must
+give a reason of at least 10 characters. The server refuses the selection when
+the offer expired, technical compliance is not confirmed, documents are not
+confirmed, delivery time is unknown or misses the required date, or the supplier
+is not verified — so choosing by the single lowest price is impossible. Only one
+offer per demand can be preferred; the second selection returns `409`.
+
+The number of offers and suppliers is not the same as orders: purchase orders,
+partial deliveries, claims and supplier rating are **not** implemented.

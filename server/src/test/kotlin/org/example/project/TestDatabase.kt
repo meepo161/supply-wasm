@@ -37,6 +37,10 @@ object TestDatabase {
             conn.createStatement().execute(
                 """
                 TRUNCATE TABLE
+                  supplier_idempotency_keys, supplier_offer_history,
+                  supplier_offer_lines, supplier_offers,
+                  supplier_documents, supplier_category_links, supplier_categories,
+                  supplier_addresses, supplier_contacts, suppliers,
                   wms_issue_idempotency_keys, return_lines, return_orders,
                   issue_picks, issue_lines, issue_orders,
                   receipt_line_serials, receipt_lines, receipts,

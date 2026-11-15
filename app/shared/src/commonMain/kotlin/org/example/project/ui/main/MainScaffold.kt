@@ -53,6 +53,7 @@ import org.example.project.data.DocumentRepository
 import org.example.project.data.NotificationRepository
 import org.example.project.data.ProductionRepository
 import org.example.project.data.ProjectRepository
+import org.example.project.data.SupplierRepository
 import org.example.project.data.SearchRepository
 import org.example.project.data.TaskRepository
 import org.example.project.data.UserRepository
@@ -84,6 +85,8 @@ import org.example.project.ui.theme.LocalBrandPalette
 import org.example.project.ui.theme.LocalThemeController
 import org.example.project.ui.production.ProductionScreen
 import org.example.project.ui.production.ProductionViewModel
+import org.example.project.ui.supplier.SupplierScreen
+import org.example.project.ui.supplier.SupplierViewModel
 import org.example.project.ui.wms.WmsScreen
 import org.example.project.ui.wms.WmsViewModel
 import org.koin.compose.koinInject
@@ -105,6 +108,7 @@ fun MainScaffold(
     val wmsRepository: WmsRepository = koinInject()
     val bomRepository: BomRepository = koinInject()
     val productionRepository: ProductionRepository = koinInject()
+    val supplierRepository: SupplierRepository = koinInject()
     val demandRepository: DemandRepository = koinInject()
     val documentRepository: DocumentRepository = koinInject()
     val notificationRepository: NotificationRepository = koinInject()
@@ -140,6 +144,19 @@ fun MainScaffold(
                 productionRepository,
                 projectRepository,
                 bomRepository,
+                userRepository,
+                user
+            )
+        }
+    } else {
+        null
+    }
+    val supplierViewModel = if (NavigationDestination.SUPPLIERS in destinations) {
+        remember(user) {
+            SupplierViewModel(
+                supplierRepository,
+                demandRepository,
+                wmsRepository,
                 userRepository,
                 user
             )
@@ -256,6 +273,7 @@ fun MainScaffold(
                         bomViewModel = bomViewModel,
                         productionViewModel = productionViewModel,
                         demandViewModel = demandViewModel,
+                        supplierViewModel = supplierViewModel,
                         documentViewModel = documentViewModel,
                         adminViewModel = adminViewModel,
                         onOpenTask = onOpenTask,
@@ -805,6 +823,7 @@ private fun MainContent(
     bomViewModel: BomViewModel?,
     productionViewModel: ProductionViewModel?,
     demandViewModel: DemandViewModel?,
+    supplierViewModel: SupplierViewModel?,
     documentViewModel: DocumentViewModel,
     adminViewModel: AdminViewModel?,
     onOpenTask: (Long) -> Unit,
@@ -838,6 +857,10 @@ private fun MainContent(
 
         NavigationDestination.PRODUCTION -> productionViewModel?.let {
             ProductionScreen(viewModel = it)
+        }
+
+        NavigationDestination.SUPPLIERS -> supplierViewModel?.let {
+            SupplierScreen(viewModel = it)
         }
 
         NavigationDestination.DEMANDS -> demandViewModel?.let {

@@ -33,6 +33,8 @@ enum class NavigationDestination(
         group = NavGroup.SUPPLY, gradient = Gradients.Aurora, description = "Заказы и выпуск"),
     BOM("Номенклатура и BOM", listOf("bom:read_any"), glyph = ErpIconGlyph.Layers, group = NavGroup.SUPPLY,
         gradient = Gradients.Berry, description = "Состав изделий"),
+    SUPPLIERS("Поставщики", listOf("suppliers:read"), glyph = ErpIconGlyph.Cart,
+        group = NavGroup.SUPPLY, gradient = Gradients.Sunset, description = "Контрагенты и предложения"),
     DEMANDS("Снабжение", listOf("demands:create", "demands:read_any"), glyph = ErpIconGlyph.Cart,
         group = NavGroup.SUPPLY, gradient = Gradients.Sunset, description = "Заявки и закупки"),
     DOCUMENTS("Документы", glyph = ErpIconGlyph.Documents, group = NavGroup.SUPPLY,
