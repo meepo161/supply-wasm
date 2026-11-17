@@ -35,7 +35,8 @@ The task area uses real server data and supports:
 - creation of personal, project and department tasks in the MVP-02 field set (no subtasks, checklists, tags or time tracking);
 - task card with description, acceptance criteria, result and participants; on wide screens the discussion is shown next to the description, on narrow screens via «Описание»/«Обсуждение» tabs with the draft preserved;
 - status commands (assign, accept, result, review accept/return, close, block/unblock, reopen, cancel) shown only for the status/role combinations the server accepts; server errors and 409-conflict reloads are surfaced;
-- Task Chat with author/time, distinct compact styling for SYSTEM events, «Все / Сообщения / События» filter, idempotency-key sending and WebSocket delivery with cursor-based recovery and manual HTTP refresh; after the task is closed the discussion is read-only.
+- Task Chat with author/time, distinct compact styling for SYSTEM events, «Все / Сообщения / События» filter, idempotency-key sending and WebSocket delivery with cursor-based recovery and manual HTTP refresh; after the task is closed the discussion is read-only;
+- the discussion view (`TaskChatPanel.kt`) shows an avatar with a name-derived gradient per author, groups consecutive messages of the same author, separates days with a divider taken from the raw `createdAt` string, marks the current user's own messages («вы») and highlights them, renders system events as one compact line with an icon, counts messages and events per filter and in the header, shows «Есть новые» only when the server reports newer messages, auto-scrolls to the newest message only while the reader is already at the bottom, and offers a 1–5 line composer with a character counter, a disabled send button for empty drafts and an «Отправка…» state
 
 The project area uses real server data and supports:
 

@@ -93,6 +93,7 @@ fun TaskDetailScreen(
                     TaskChatPanel(
                         chat = state.chat,
                         readOnly = task.isClosedLike(),
+                        currentUserId = currentUser.id,
                         onDraftChange = viewModel::updateChatDraft,
                         onSend = viewModel::sendMessage,
                         onRefresh = { viewModel.refreshChat(manual = true) },
@@ -129,6 +130,7 @@ fun TaskDetailScreen(
                         else -> TaskChatPanel(
                             chat = state.chat,
                             readOnly = task.isClosedLike(),
+                            currentUserId = currentUser.id,
                             onDraftChange = viewModel::updateChatDraft,
                             onSend = viewModel::sendMessage,
                             onRefresh = { viewModel.refreshChat(manual = true) },
