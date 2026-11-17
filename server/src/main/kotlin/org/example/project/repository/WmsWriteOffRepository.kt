@@ -186,7 +186,7 @@ class WmsWriteOffRepository(private val dsl: DSLContext) {
 
     // Лимит списания без согласования: складской переопределяет значение
     // wms_settings.write_off_default_limit.
-    fun findWarehouseLimit(warehouseId: Long): BigDecimal? =
+    fun findWarehouseLimit(warehouseId: Long): BigDecimal =
         dsl.select(WMS_WRITE_OFF_LIMITS.LIMIT_QUANTITY)
             .from(WMS_WRITE_OFF_LIMITS)
             .where(WMS_WRITE_OFF_LIMITS.WAREHOUSE_ID.eq(warehouseId))

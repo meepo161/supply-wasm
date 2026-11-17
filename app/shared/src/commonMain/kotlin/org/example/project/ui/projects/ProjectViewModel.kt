@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.project.data.ApiResult
 import org.example.project.data.ProjectRepository
+import org.example.project.data.TaskRepository
 import org.example.project.data.UserRepository
 import org.example.project.dto.AddProjectMemberRequest
 import org.example.project.dto.CloseProjectRequest
@@ -16,11 +17,14 @@ import org.example.project.dto.OpenProjectRequest
 import org.example.project.dto.ProjectDto
 import org.example.project.dto.ProjectPriority
 import org.example.project.dto.ProjectType
+import org.example.project.dto.TaskDto
 import org.example.project.dto.UserDto
+import org.example.project.ui.tasks.filterByProject
 
 class ProjectViewModel(
     private val projectRepository: ProjectRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val taskRepository: TaskRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProjectsUiState())
@@ -63,8 +67,10 @@ class ProjectViewModel(
             selectedProject = project,
             detailLoading = true,
             openError = null,
-            memberError = null
+            memberError = null,
+            detailTab = ProjectDetailTab.OVERVIEW
         )
+        loadProjectTasks(project.id)
         viewModelScope.launch {
             refreshSelectedProject(project.id)
         }
@@ -78,18 +84,24 @@ class ProjectViewModel(
         _uiState.value = _uiState.value.copy(
             detailLoading = true,
             openError = null,
-            memberError = null
+            memberError = null,
+            detailTab = ProjectDetailTab.OVERVIEW
         )
+        loadProjectTasks(projectId)
         viewModelScope.launch {
             when (val result = projectRepository.get(projectId)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    selectedProject = result.data,
-                    detailLoading = false
-                )
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    detailLoading = false,
-                    error = result.error
-                )
+                is ApiResult.Success -> if (_uiState.value.projectTasksProjectId == projectId) {
+                    _uiState.value = _uiState.value.copy(
+                        selectedProject = result.data,
+                        detailLoading = false
+                    )
+                }
+                is ApiResult.Error -> if (_uiState.value.projectTasksProjectId == projectId) {
+                    _uiState.value = _uiState.value.copy(
+                        detailLoading = false,
+                        error = result.error
+                    )
+                }
             }
         }
     }
@@ -99,8 +111,54 @@ class ProjectViewModel(
             selectedProject = null,
             openError = null,
             memberError = null,
-            createError = null
+            createError = null,
+            detailTab = ProjectDetailTab.OVERVIEW,
+            projectTasks = emptyList(),
+            projectTasksProjectId = null,
+            projectTasksLoading = false,
+            projectTasksError = null
         )
+    }
+
+    fun selectDetailTab(tab: ProjectDetailTab) {
+        _uiState.value = _uiState.value.copy(detailTab = tab)
+    }
+
+    /**
+     * Задачи выбранного проекта: сервер возвращает только разрешённые записи,
+     * отбор по projectId выполняется на клиенте по уже загруженным DTO.
+     * projectTasksProjectId фиксирует целевой проект загрузки: результат отбрасывается,
+     * если пользователь успел выбрать другой проект, а UI показывает задачи,
+     * только когда projectTasksProjectId совпадает с выбранным проектом.
+     */
+    fun loadProjectTasks(projectId: Long) {
+        _uiState.value = _uiState.value.copy(
+            projectTasks = emptyList(),
+            projectTasksProjectId = projectId,
+            projectTasksLoading = true,
+            projectTasksError = null
+        )
+        viewModelScope.launch {
+            when (val result = taskRepository.list()) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.projectTasksProjectId == projectId) {
+                        _uiState.value = _uiState.value.copy(
+                            projectTasks = result.data.filterByProject(projectId),
+                            projectTasksLoading = false,
+                            projectTasksError = null
+                        )
+                    }
+                }
+                is ApiResult.Error -> {
+                    if (_uiState.value.projectTasksProjectId == projectId) {
+                        _uiState.value = _uiState.value.copy(
+                            projectTasksLoading = false,
+                            projectTasksError = result.error
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun createProject() {
@@ -134,8 +192,10 @@ class ProjectViewModel(
                     _uiState.value = _uiState.value.copy(
                         createForm = ProjectCreateForm(),
                         createError = null,
-                        selectedProject = result.data
+                        selectedProject = result.data,
+                        detailTab = ProjectDetailTab.OVERVIEW
                     )
+                    loadProjectTasks(result.data.id)
                     loadProjects()
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(createError = result.error)
@@ -213,14 +273,18 @@ class ProjectViewModel(
     fun refreshSelectedProject(projectId: Long) {
         viewModelScope.launch {
             when (val result = projectRepository.get(projectId)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    selectedProject = result.data,
-                    detailLoading = false
-                )
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    detailLoading = false,
-                    openError = result.error
-                )
+                is ApiResult.Success -> if (_uiState.value.selectedProject?.id == projectId) {
+                    _uiState.value = _uiState.value.copy(
+                        selectedProject = result.data,
+                        detailLoading = false
+                    )
+                }
+                is ApiResult.Error -> if (_uiState.value.selectedProject?.id == projectId) {
+                    _uiState.value = _uiState.value.copy(
+                        detailLoading = false,
+                        openError = result.error
+                    )
+                }
             }
         }
     }
@@ -259,8 +323,19 @@ data class ProjectsUiState(
     val closeError: org.example.project.dto.ApiError? = null,
     val isClosing: Boolean = false,
     val createForm: ProjectCreateForm = ProjectCreateForm(),
-    val openForm: OpenProjectForm = OpenProjectForm()
+    val openForm: OpenProjectForm = OpenProjectForm(),
+    val detailTab: ProjectDetailTab = ProjectDetailTab.OVERVIEW,
+    val projectTasks: List<TaskDto> = emptyList(),
+    val projectTasksProjectId: Long? = null,
+    val projectTasksLoading: Boolean = false,
+    val projectTasksError: org.example.project.dto.ApiError? = null
 )
+
+enum class ProjectDetailTab(val label: String) {
+    OVERVIEW("Обзор"),
+    TASKS("Задачи"),
+    DISCUSSION("Обсуждение")
+}
 
 data class ProjectCreateForm(
     val name: String = "",

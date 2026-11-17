@@ -307,7 +307,7 @@ class ProductionService(
         return stageTransition(
             orderId, stageId, request, currentUser,
             fromStatuses = listOf("PENDING"), newStatus = "SKIPPED",
-            actualEndAt = OffsetDateTime.now(), skipReason = request.reason.trim()
+            actualEndAt = OffsetDateTime.now(), skipReason = request.reason!!.trim()
         )
     }
 

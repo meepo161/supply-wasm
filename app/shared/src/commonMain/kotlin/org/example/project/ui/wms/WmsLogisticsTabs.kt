@@ -1372,7 +1372,7 @@ private fun InventoryDetailDialog(
                             }
                             if (discrepancy?.kind != null) {
                                 PillBadge(
-                                    text = "${discrepancy.kind.localizedName()}: ${discrepancy.discrepancy}",
+                                    text = "${discrepancy.kind!!.localizedName()}: ${discrepancy.discrepancy}",
                                     accent = if (discrepancy.kind ==
                                         org.example.project.dto.InventoryDiscrepancyKind.SURPLUS
                                     ) {

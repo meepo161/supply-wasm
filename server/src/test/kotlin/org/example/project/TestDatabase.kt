@@ -48,7 +48,8 @@ object TestDatabase {
                   demand_procurements, demand_history, demand_line_history, demand_lines, demands,
                   audit_log, sessions, user_roles, permissions, roles,
                   attachments, notifications, task_chat_messages, task_status_history,
-                  task_participants, tasks, project_members, projects,
+                  task_participants, tasks, project_bom_revisions, project_products,
+                  project_members, projects,
                   bom_lines, product_revisions, product_models,
                   users, departments, login_attempts
                 RESTART IDENTITY CASCADE
@@ -80,6 +81,13 @@ object TestDatabase {
             user = USER
             password = PASSWORD
         }.connection.use { conn ->
+            conn.createStatement().execute(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid()
+                """.trimIndent()
+            )
             conn.createStatement().execute("DROP DATABASE IF EXISTS $DB_NAME")
             conn.createStatement().execute("CREATE DATABASE $DB_NAME")
         }

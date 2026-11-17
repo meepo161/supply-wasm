@@ -55,6 +55,27 @@ class ApplicationTest {
     }
 
     @Test
+    fun `emergency admin credentials restore an active database administrator`() = testApp {
+        val client = jsonClient()
+
+        val loginResponse = client.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("admin", "avem2416")))
+        }
+
+        assertEquals(HttpStatusCode.OK, loginResponse.status)
+        val loginBody = loginResponse.bodyAs<ApiResponse<LoginResponse>>()
+        assertEquals("admin", loginBody.data!!.user.login)
+        assertTrue(loginBody.data!!.user.permissions.contains("*:*"))
+
+        val meResponse = client.get("/api/auth/me")
+        assertEquals(HttpStatusCode.OK, meResponse.status)
+        val meBody = meResponse.bodyAs<ApiResponse<MeResponse>>()
+        assertEquals("admin", meBody.data!!.user.login)
+        assertTrue(meBody.data!!.user.permissions.contains("*:*"))
+    }
+
+    @Test
     fun `login error returns 401`() = testApp {
         val client = jsonClient()
         client.post("/api/admin/bootstrap") {

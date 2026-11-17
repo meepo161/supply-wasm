@@ -73,6 +73,7 @@ class ProjectRoutesTest {
         assertNotEquals(created.version, opened.version)
     }
 
+
     @Test
     fun `open rejects missing required fields`() = testApp {
         val admin = jsonClient()
@@ -294,7 +295,8 @@ class ProjectRoutesTest {
                 title = "Work after close",
                 area = TaskArea.PROJECT,
                 type = TaskWorkType.GENERAL,
-                projectId = project.id
+                projectId = project.id,
+                assigneeId = closer.id
             )))
         }
         assertEquals(HttpStatusCode.Conflict, newTask.status, newTask.bodyAsText())

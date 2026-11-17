@@ -4,6 +4,8 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.example.project.config.AppConfig
 import org.example.project.realtime.ChatEventBus
+import org.example.project.realtime.ConversationEventBus
+import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.*
 import org.example.project.service.*
 import org.jooq.DSLContext
@@ -65,7 +67,11 @@ fun appModule(config: AppConfig) = module {
     single { TaskService(get(), get(), get(), get(), get(), get()) }
     single { NotificationService(get()) }
     single { ChatEventBus() }
-    single { ChatService(get(), get(), get(), get(), get()) }
+    single { NotificationEventBus() }
+    single { ConversationRepository(get()) }
+    single { ConversationEventBus() }
+    single { ConversationService(get(), get(), get(), get(), get(), get(), get()) }
+    single { ChatService(get(), get(), get(), get(), get(), get(), get()) }
     single { SearchService(get(), get()) }
     single { WmsService(get(), get(), get()) }
     single { WmsTransferService(get(), get(), get()) }
@@ -77,7 +83,7 @@ fun appModule(config: AppConfig) = module {
     single { WmsInventoryService(get(), get(), get()) }
     single { ProductionRepository(get()) }
     single { ProductionService(get(), get(), get()) }
-    single { AttachmentService(get(), get(), get(), get(), get(), get()) }
+    single { AttachmentService(get(), get(), get(), get(), get(), get(), get()) }
     single { BomService(get(), get(), get()) }
     single { DocumentRepository(get()) }
     single { DocumentAccess(get(), get()) }

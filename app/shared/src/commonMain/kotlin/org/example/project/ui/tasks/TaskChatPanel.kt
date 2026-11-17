@@ -4,13 +4,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -23,10 +28,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import org.example.project.dto.AttachmentDto
 import org.example.project.dto.ChatMessageDto
 import org.example.project.dto.ChatMessageType
+import org.example.project.ui.conversations.AttachmentRow
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpIcon
+import org.example.project.ui.theme.ErpIconGlyph
 
 @Composable
 fun TaskChatPanel(
@@ -37,6 +47,9 @@ fun TaskChatPanel(
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onFilterChange: (ChatMessageFilter) -> Unit,
+    onPickFile: () -> Unit,
+    onClearFile: () -> Unit,
+    onDownloadAttachment: (AttachmentDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize().padding(8.dp)) {
@@ -117,7 +130,11 @@ fun TaskChatPanel(
                 items(visible, key = { it.id }) { message ->
                     when (message.type) {
                         ChatMessageType.SYSTEM -> SystemEventItem(message)
-                        ChatMessageType.USER -> UserMessageItem(message)
+                        ChatMessageType.USER -> UserMessageItem(
+                            message = message,
+                            downloadingAttachmentId = chat.downloadingAttachmentId,
+                            onDownloadAttachment = onDownloadAttachment
+                        )
                     }
                 }
                 if (visible.isEmpty()) {
@@ -139,6 +156,12 @@ fun TaskChatPanel(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
             )
         }
+        chat.downloadError?.let {
+            ErrorMessageCard(
+                error = it,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
 
         if (readOnly) {
             Surface(
@@ -154,6 +177,34 @@ fun TaskChatPanel(
                 )
             }
         } else {
+            val pendingFile = chat.pendingFile
+            if (pendingFile != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ErpIcon(
+                        ErpIconGlyph.Documents,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = pendingFile.fileName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ErpIcon(
+                        ErpIconGlyph.Close,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        Modifier
+                            .size(16.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onClearFile)
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -167,9 +218,12 @@ fun TaskChatPanel(
                     maxLines = 4,
                     modifier = Modifier.weight(1f)
                 )
+                TextButton(onClick = onPickFile, enabled = !chat.isSending) {
+                    Text("Файл")
+                }
                 Button(
                     onClick = onSend,
-                    enabled = chat.draft.isNotBlank() && !chat.isSending
+                    enabled = (chat.draft.isNotBlank() || chat.pendingFile != null) && !chat.isSending
                 ) {
                     Text(if (chat.isSending) "…" else "Отправить")
                 }
@@ -179,7 +233,12 @@ fun TaskChatPanel(
 }
 
 @Composable
-private fun UserMessageItem(message: ChatMessageDto, modifier: Modifier = Modifier) {
+private fun UserMessageItem(
+    message: ChatMessageDto,
+    downloadingAttachmentId: Long?,
+    onDownloadAttachment: (AttachmentDto) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Surface(
         modifier = modifier.widthIn(max = 480.dp),
         shape = MaterialTheme.shapes.medium,
@@ -206,6 +265,13 @@ private fun UserMessageItem(message: ChatMessageDto, modifier: Modifier = Modifi
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 4.dp)
             )
+            message.attachments.forEach { attachment ->
+                AttachmentRow(
+                    attachment = attachment,
+                    isDownloading = downloadingAttachmentId == attachment.id,
+                    onDownload = { onDownloadAttachment(attachment) }
+                )
+            }
         }
     }
 }

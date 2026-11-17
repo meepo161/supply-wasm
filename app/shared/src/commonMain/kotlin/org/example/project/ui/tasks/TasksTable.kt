@@ -7,12 +7,14 @@ import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
 import org.example.project.dto.UserDto
+import org.example.project.dto.ProjectDto
 import org.example.project.ui.theme.PillBadge
 
 @Composable
 fun TasksTable(
     tasks: List<TaskDto>,
     users: List<UserDto>,
+    projects: List<ProjectDto> = emptyList(),
     onTaskClick: (TaskDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -22,6 +24,9 @@ fun TasksTable(
         "Статус" to tasks.map { it.status.localizedName() },
         "Приоритет" to tasks.map { it.priority.localizedName() },
         "Исполнитель" to tasks.map { task -> task.assigneeId?.let { userName(users, it) } ?: "—" },
+        "Проект" to tasks.map { task -> task.projectId?.let { id ->
+            projects.find { it.id == id }?.let { "${it.number} · ${it.name}" } ?: "Проект #$id"
+        } ?: "—" },
         "Срок" to tasks.map { it.dueDate.toShortDate() }
     )
 

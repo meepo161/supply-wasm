@@ -3,12 +3,15 @@ package org.example.project.ui.projects
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -16,15 +19,19 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,9 +43,19 @@ import androidx.compose.ui.unit.dp
 import org.example.project.dto.AttachmentEntityType
 import org.example.project.dto.ProjectDto
 import org.example.project.dto.ProjectStatus
+import org.example.project.dto.TaskDto
 import org.example.project.dto.UserDto
 import org.example.project.dto.hasPermission
 import org.example.project.ui.attachments.AttachmentsSection
+import org.example.project.ui.conversations.ConversationPanel
+import org.example.project.ui.conversations.ConversationViewModel
+import org.example.project.ui.tasks.TaskCard
+import org.example.project.ui.tasks.filterMine
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.EmptyState
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.SkeletonLine
 
 @Composable
 fun ProjectDetailScreen(
@@ -51,6 +68,14 @@ fun ProjectDetailScreen(
     isClosing: Boolean,
     memberError: org.example.project.dto.ApiError?,
     openForm: OpenProjectForm,
+    activeTab: ProjectDetailTab,
+    projectTasks: List<TaskDto>,
+    projectTasksLoading: Boolean,
+    projectTasksError: org.example.project.dto.ApiError?,
+    onTabChange: (ProjectDetailTab) -> Unit,
+    onRefreshTasks: () -> Unit,
+    onOpenTask: (TaskDto) -> Unit,
+    conversationViewModel: ConversationViewModel,
     onOpenReasonChange: (String) -> Unit,
     onOpenProject: () -> Unit,
     onCloseProject: (String) -> Unit,
@@ -79,8 +104,7 @@ fun ProjectDetailScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(
@@ -107,44 +131,63 @@ fun ProjectDetailScreen(
             }
         }
 
-        ProjectHeader(project = project)
-
-        ProjectInfoSection(project = project)
-
-        if (canClose) {
-            OutlinedButton(
-                onClick = { closeRequested = true },
-                enabled = !isClosing,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isClosing) "Завершение…" else "Завершить проект")
+        PrimaryTabRow(selectedTabIndex = activeTab.ordinal) {
+            ProjectDetailTab.entries.forEach { tab ->
+                Tab(
+                    selected = activeTab == tab,
+                    onClick = { onTabChange(tab) },
+                    text = { Text(tab.label) }
+                )
             }
         }
 
-        if (project.status == ProjectStatus.DRAFT && isOwner) {
-            OpenProjectSection(
+        when (activeTab) {
+            ProjectDetailTab.OVERVIEW -> ProjectOverviewTab(
+                project = project,
+                currentUser = currentUser,
+                users = users,
+                canManageMembers = canManageMembers,
+                canClose = canClose,
+                isOwner = isOwner,
+                isClosing = isClosing,
+                openError = openError,
+                memberError = memberError,
                 openForm = openForm,
-                error = openError,
-                onReasonChange = onOpenReasonChange,
-                onOpen = onOpenProject
+                onCloseRequest = { closeRequested = true },
+                onOpenReasonChange = onOpenReasonChange,
+                onOpenProject = onOpenProject,
+                onAddMember = onAddMember,
+                onRemoveMember = onRemoveMember,
+                modifier = Modifier.weight(1f)
             )
+            ProjectDetailTab.TASKS -> ProjectTasksTab(
+                tasks = projectTasks,
+                users = users,
+                currentUserId = currentUser.id,
+                isLoading = projectTasksLoading,
+                error = projectTasksError,
+                onRefresh = onRefreshTasks,
+                onOpenTask = onOpenTask,
+                modifier = Modifier.weight(1f)
+            )
+            ProjectDetailTab.DISCUSSION -> {
+                val conversationState by conversationViewModel.uiState.collectAsState()
+                val chat = conversationState.selectedConversation
+                ConversationPanel(
+                    messages = conversationState.messages,
+                    canWrite = chat?.canWrite ?: true,
+                    readOnlyHint = "Обсуждение доступно только для чтения.",
+                    onDraftChange = conversationViewModel::updateDraft,
+                    onSend = conversationViewModel::sendMessage,
+                    onRefresh = { conversationViewModel.refreshMessages() },
+                    onLoadMore = conversationViewModel::loadMoreNewer,
+                    onPickFile = conversationViewModel::pickFile,
+                    onClearFile = conversationViewModel::clearPendingFile,
+                    onDownloadAttachment = conversationViewModel::downloadAttachment,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
-
-        MembersSection(
-            project = project,
-            users = users,
-            canManageMembers = canManageMembers,
-            error = memberError,
-            onAddMember = onAddMember,
-            onRemoveMember = onRemoveMember
-        )
-
-        AttachmentsSection(
-            entityType = AttachmentEntityType.PROJECT,
-            entityId = project.id,
-            canWrite = isOwner || currentUser.hasPermission("projects", "manage_members"),
-            readOnly = false
-        )
     }
 
     if (closeRequested) {
@@ -183,6 +226,149 @@ fun ProjectDetailScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ProjectOverviewTab(
+    project: ProjectDto,
+    currentUser: UserDto,
+    users: List<UserDto>,
+    canManageMembers: Boolean,
+    canClose: Boolean,
+    isOwner: Boolean,
+    isClosing: Boolean,
+    openError: org.example.project.dto.ApiError?,
+    memberError: org.example.project.dto.ApiError?,
+    openForm: OpenProjectForm,
+    onCloseRequest: () -> Unit,
+    onOpenReasonChange: (String) -> Unit,
+    onOpenProject: () -> Unit,
+    onAddMember: (Long) -> Unit,
+    onRemoveMember: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        ProjectHeader(project = project)
+
+        ProjectInfoSection(project = project)
+
+        if (canClose) {
+            OutlinedButton(
+                onClick = onCloseRequest,
+                enabled = !isClosing,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isClosing) "Завершение…" else "Завершить проект")
+            }
+        }
+
+        if (project.status == ProjectStatus.DRAFT && isOwner) {
+            OpenProjectSection(
+                openForm = openForm,
+                error = openError,
+                onReasonChange = onOpenReasonChange,
+                onOpen = onOpenProject
+            )
+        }
+
+        MembersSection(
+            project = project,
+            users = users,
+            canManageMembers = canManageMembers,
+            error = memberError,
+            onAddMember = onAddMember,
+            onRemoveMember = onRemoveMember
+        )
+
+        AttachmentsSection(
+            entityType = AttachmentEntityType.PROJECT,
+            entityId = project.id,
+            canWrite = isOwner || currentUser.hasPermission("projects", "manage_members"),
+            readOnly = false
+        )
+    }
+}
+
+@Composable
+private fun ProjectTasksTab(
+    tasks: List<TaskDto>,
+    users: List<UserDto>,
+    currentUserId: Long,
+    isLoading: Boolean,
+    error: org.example.project.dto.ApiError?,
+    onRefresh: () -> Unit,
+    onOpenTask: (TaskDto) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var mineOnly by remember(currentUserId) { mutableStateOf(false) }
+    val visibleTasks = if (mineOnly) tasks.filterMine(currentUserId) else tasks
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Задачи проекта · ${visibleTasks.size}",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(
+                    selected = mineOnly,
+                    onClick = { mineOnly = !mineOnly },
+                    label = { Text("Мои") }
+                )
+                TextButton(onClick = onRefresh, enabled = !isLoading) {
+                    Text("Обновить")
+                }
+            }
+        }
+
+        error?.let {
+            ErrorMessageCard(error = it)
+        }
+
+        when {
+            isLoading && tasks.isEmpty() -> Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                repeat(4) { SkeletonLine(height = 74.dp) }
+            }
+            visibleTasks.isEmpty() -> GlassCard(modifier = Modifier.fillMaxWidth()) {
+                EmptyState(
+                    title = if (tasks.isEmpty()) "В проекте пока нет задач" else "Среди задач проекта ваших нет",
+                    text = if (tasks.isEmpty()) "Задачи, привязанные к проекту, появятся здесь"
+                    else "Отключите фильтр «Мои», чтобы увидеть все задачи проекта",
+                    glyph = ErpIconGlyph.Tasks,
+                    accent = Brand.Blue
+                )
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                items(visibleTasks, key = { it.id }) { task ->
+                    TaskCard(
+                        task = task,
+                        users = users,
+                        currentUserId = currentUserId,
+                        onClick = { onOpenTask(task) }
+                    )
+                }
+            }
+        }
     }
 }
 

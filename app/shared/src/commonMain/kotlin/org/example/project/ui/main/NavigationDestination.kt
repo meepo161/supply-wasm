@@ -23,10 +23,12 @@ enum class NavigationDestination(
 ) {
     HOME("Главная", glyph = ErpIconGlyph.Home, group = NavGroup.WORK,
         gradient = Gradients.Primary, description = "Сводка дня"),
-    TASKS("Мои задачи", glyph = ErpIconGlyph.Tasks, group = NavGroup.WORK,
+    TASKS("Задачи", glyph = ErpIconGlyph.Tasks, group = NavGroup.WORK,
         gradient = Gradients.Ocean, description = "Задачи и приёмка"),
     PROJECTS("Проекты", glyph = ErpIconGlyph.Projects, group = NavGroup.WORK,
         gradient = Gradients.Aurora, description = "Портфель проектов"),
+    CHAT("Чат", glyph = ErpIconGlyph.Send, group = NavGroup.WORK,
+        gradient = Gradients.Ocean, description = "Личные и групповые разговоры"),
     WMS("Склад", listOf("wms:read"), glyph = ErpIconGlyph.Warehouse, group = NavGroup.SUPPLY,
         gradient = Gradients.Emerald, description = "Складской учёт"),
     BOM("Номенклатура и BOM", listOf("bom:read_any"), glyph = ErpIconGlyph.Layers, group = NavGroup.SUPPLY,

@@ -8,11 +8,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import org.example.project.ui.conversations.ConversationViewModel
 
 @Composable
 fun ProjectsScreen(
     currentUser: org.example.project.dto.UserDto,
     viewModel: ProjectViewModel,
+    conversationViewModel: ConversationViewModel,
+    onOpenTask: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -21,6 +24,17 @@ fun ProjectsScreen(
     LaunchedEffect(state.selectedProject) {
         if (showCreateDialog && state.selectedProject != null) {
             showCreateDialog = false
+        }
+    }
+
+    // Проектное обсуждение: get-or-create на сервере при выборе проекта,
+    // при смене/закрытии проекта панель сбрасывается, чужие сообщения не показываются.
+    LaunchedEffect(state.selectedProject?.id) {
+        val projectId = state.selectedProject?.id
+        if (projectId != null) {
+            conversationViewModel.openProjectChat(projectId)
+        } else {
+            conversationViewModel.closeConversation()
         }
     }
 
@@ -36,6 +50,14 @@ fun ProjectsScreen(
             isClosing = state.isClosing,
             memberError = state.memberError,
             openForm = state.openForm,
+            activeTab = state.detailTab,
+            projectTasks = if (state.projectTasksProjectId == selected.id) state.projectTasks else emptyList(),
+            projectTasksLoading = state.projectTasksLoading || state.projectTasksProjectId != selected.id,
+            projectTasksError = if (state.projectTasksProjectId == selected.id) state.projectTasksError else null,
+            onTabChange = viewModel::selectDetailTab,
+            onRefreshTasks = { viewModel.loadProjectTasks(selected.id) },
+            onOpenTask = { onOpenTask(it.id) },
+            conversationViewModel = conversationViewModel,
             onOpenReasonChange = { viewModel.updateOpenForm(state.openForm.copy(openingReason = it)) },
             onOpenProject = { viewModel.openProject(selected) },
             onCloseProject = { viewModel.closeProject(selected, it) },

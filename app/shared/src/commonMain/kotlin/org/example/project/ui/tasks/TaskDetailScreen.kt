@@ -98,6 +98,9 @@ fun TaskDetailScreen(
                         onRefresh = { viewModel.refreshChat(manual = true) },
                         onLoadMore = viewModel::loadMoreNewer,
                         onFilterChange = viewModel::setChatFilter,
+                        onPickFile = viewModel::pickChatFile,
+                        onClearFile = viewModel::clearChatPendingFile,
+                        onDownloadAttachment = viewModel::downloadChatAttachment,
                         modifier = Modifier.width(420.dp).fillMaxHeight()
                     )
                 }
@@ -134,6 +137,9 @@ fun TaskDetailScreen(
                             onRefresh = { viewModel.refreshChat(manual = true) },
                             onLoadMore = viewModel::loadMoreNewer,
                             onFilterChange = viewModel::setChatFilter,
+                            onPickFile = viewModel::pickChatFile,
+                            onClearFile = viewModel::clearChatPendingFile,
+                            onDownloadAttachment = viewModel::downloadChatAttachment,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -142,6 +148,8 @@ fun TaskDetailScreen(
         }
     }
 }
+
+/** Desktop task workspace реализован в TaskChatWorkspace.kt (D-51). */
 
 @Composable
 private fun TaskDescription(

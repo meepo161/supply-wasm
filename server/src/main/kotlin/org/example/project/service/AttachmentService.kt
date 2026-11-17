@@ -11,10 +11,25 @@ import org.example.project.exception.ValidationException
 import org.example.project.model.CurrentUser
 import org.example.project.repository.AttachmentRepository
 import org.example.project.repository.ChatRepository
+import org.example.project.repository.ConversationRepository
 import org.example.project.repository.ProjectRepository
 import org.jooq.DSLContext
 import java.nio.file.NoSuchFileException
 import java.util.UUID
+
+class IncomingMessageFile(
+    val originalFileName: String?,
+    val contentType: String?,
+    val channel: ByteReadChannel
+)
+
+class PreparedMessageFile(
+    val fileName: String,
+    val mimeType: String,
+    val relativePath: String,
+    val sizeBytes: Long,
+    val sha256: String?
+)
 
 class AttachmentService(
     private val attachmentRepository: AttachmentRepository,
@@ -22,7 +37,8 @@ class AttachmentService(
     private val projectRepository: ProjectRepository,
     private val fileStorage: FileStorage,
     private val auditService: AuditService,
-    private val dsl: DSLContext
+    private val dsl: DSLContext,
+    private val conversationRepository: ConversationRepository? = null
 ) {
 
     data class DownloadedAttachment(
@@ -40,7 +56,7 @@ class AttachmentService(
         channel: ByteReadChannel,
         currentUser: CurrentUser
     ): AttachmentDto {
-        requireWriteAccess(entityType, entityId, currentUser)
+        requireWriteAccess(entityType.name, entityId, currentUser)
         val fileName = validateFileName(originalFileName)
         val mimeType = validateMimeType(fileName, contentType)
         val content = readContentLimited(channel)
@@ -83,13 +99,52 @@ class AttachmentService(
     }
 
     fun list(entityType: AttachmentEntityType, entityId: Long, currentUser: CurrentUser): List<AttachmentDto> {
-        requireReadAccess(entityType, entityId, currentUser)
+        requireReadAccess(entityType.name, entityId, currentUser)
         return attachmentRepository.listForEntity(entityType.name, entityId).map { it.toDto() }
     }
 
+    fun listForMessageAttachments(entityType: String, messageIds: List<Long>): Map<Long, List<AttachmentDto>> {
+        if (messageIds.isEmpty()) return emptyMap()
+        return attachmentRepository.listForMessages(entityType, messageIds)
+            .map { it.toDto() }
+            .groupBy { it.entityId }
+    }
+
+    suspend fun prepareMessageFile(
+        originalFileName: String?,
+        contentType: String?,
+        channel: ByteReadChannel
+    ): PreparedMessageFile {
+        val fileName = validateFileName(originalFileName ?: "")
+        val mimeType = validateMimeType(fileName, contentType)
+        val content = readContentLimited(channel)
+        val stored = fileStorage.store("message/${UUID.randomUUID()}", content)
+        return PreparedMessageFile(fileName, mimeType, stored.relativePath, stored.sizeBytes, stored.sha256)
+    }
+
+    fun discardMessageFile(prepared: PreparedMessageFile) {
+        runCatching { fileStorage.delete(prepared.relativePath) }
+    }
+
+    fun attachPreparedFile(
+        prepared: PreparedMessageFile,
+        entityType: String,
+        entityId: Long,
+        uploadedBy: Long
+    ): Long = attachmentRepository.insert(
+        entityType = entityType,
+        entityId = entityId,
+        fileName = prepared.fileName,
+        storagePath = prepared.relativePath,
+        sizeBytes = prepared.sizeBytes,
+        mimeType = prepared.mimeType,
+        sha256 = prepared.sha256,
+        uploadedBy = uploadedBy
+    )
+
     fun download(id: Long, currentUser: CurrentUser): DownloadedAttachment {
         val row = attachmentRepository.findById(id) ?: throw NotFoundException("attachment", id)
-        requireReadAccess(AttachmentEntityType.valueOf(row.entityType), row.entityId, currentUser)
+        requireReadAccess(row.entityType, row.entityId, currentUser)
         val content = try {
             fileStorage.read(row.storagePath)
         } catch (e: NoSuchFileException) {
@@ -105,8 +160,7 @@ class AttachmentService(
 
     fun delete(id: Long, currentUser: CurrentUser): AttachmentDto {
         val row = attachmentRepository.findById(id) ?: throw NotFoundException("attachment", id)
-        val entityType = AttachmentEntityType.valueOf(row.entityType)
-        requireWriteAccess(entityType, row.entityId, currentUser)
+        requireWriteAccess(row.entityType, row.entityId, currentUser)
 
         val deleted = dsl.transactionResult(org.jooq.TransactionalCallable {
             if (!attachmentRepository.delete(id)) {
@@ -131,16 +185,16 @@ class AttachmentService(
         return deleted
     }
 
-    private fun requireReadAccess(entityType: AttachmentEntityType, entityId: Long, currentUser: CurrentUser) {
+    private fun requireReadAccess(entityType: String, entityId: Long, currentUser: CurrentUser) {
         when (entityType) {
-            AttachmentEntityType.TASK -> {
+            "TASK" -> {
                 chatRepository.findTaskById(entityId) ?: throw NotFoundException("task", entityId)
                 val hasReadAny = currentUser.hasPermission("tasks", "read_any")
                 if (!chatRepository.canRead(entityId, currentUser.userId, hasReadAny)) {
                     throw ForbiddenException("Access to task attachments denied")
                 }
             }
-            AttachmentEntityType.PROJECT -> {
+            "PROJECT" -> {
                 val project = projectRepository.findById(entityId) ?: throw NotFoundException("project", entityId)
                 val allowed = currentUser.hasPermission("projects", "read_any") ||
                     project.ownerId == currentUser.userId ||
@@ -149,12 +203,28 @@ class AttachmentService(
                     throw ForbiddenException("Access to project attachments denied")
                 }
             }
+            "TASK_CHAT_MESSAGE" -> {
+                val taskId = attachmentRepository.findTaskIdForChatMessage(entityId)
+                    ?: throw NotFoundException("attachment", entityId)
+                val hasReadAny = currentUser.hasPermission("tasks", "read_any")
+                if (!chatRepository.canRead(taskId, currentUser.userId, hasReadAny)) {
+                    throw ForbiddenException("Access to message attachments denied")
+                }
+            }
+            "CONVERSATION_MESSAGE" -> {
+                val message = conversationRepository?.findMessageRowById(entityId)
+                    ?: throw NotFoundException("attachment", entityId)
+                if (!hasConversationAccess(message.conversationId, currentUser.userId)) {
+                    throw ForbiddenException("Access to message attachments denied")
+                }
+            }
+            else -> throw NotFoundException("attachment", entityId)
         }
     }
 
-    private fun requireWriteAccess(entityType: AttachmentEntityType, entityId: Long, currentUser: CurrentUser) {
+    private fun requireWriteAccess(entityType: String, entityId: Long, currentUser: CurrentUser) {
         when (entityType) {
-            AttachmentEntityType.TASK -> {
+            "TASK" -> {
                 chatRepository.findTaskById(entityId) ?: throw NotFoundException("task", entityId)
                 val hasManage = currentUser.hasPermission("attachments", "manage")
                 if (!chatRepository.canWrite(entityId, currentUser.userId, hasManage)) {
@@ -164,7 +234,7 @@ class AttachmentService(
                     throw ForbiddenException("Task is closed")
                 }
             }
-            AttachmentEntityType.PROJECT -> {
+            "PROJECT" -> {
                 val project = projectRepository.findById(entityId) ?: throw NotFoundException("project", entityId)
                 val allowed = project.ownerId == currentUser.userId ||
                     currentUser.hasPermission("projects", "manage_members")
@@ -172,12 +242,44 @@ class AttachmentService(
                     throw ForbiddenException("Upload/delete of project attachments denied")
                 }
             }
+            "TASK_CHAT_MESSAGE" -> {
+                val taskId = attachmentRepository.findTaskIdForChatMessage(entityId)
+                    ?: throw NotFoundException("attachment", entityId)
+                val hasManage = currentUser.hasPermission("attachments", "manage")
+                if (!chatRepository.canWrite(taskId, currentUser.userId, hasManage)) {
+                    throw ForbiddenException("Delete of message attachments denied")
+                }
+                if (chatRepository.isTaskClosed(taskId)) {
+                    throw ForbiddenException("Task is closed")
+                }
+            }
+            "CONVERSATION_MESSAGE" -> {
+                val message = conversationRepository?.findMessageRowById(entityId)
+                    ?: throw NotFoundException("attachment", entityId)
+                if (!hasConversationAccess(message.conversationId, currentUser.userId)) {
+                    throw ForbiddenException("Delete of message attachments denied")
+                }
+            }
+            else -> throw NotFoundException("attachment", entityId)
+        }
+    }
+
+    private fun hasConversationAccess(conversationId: Long, userId: Long): Boolean {
+        val repository = conversationRepository ?: return false
+        val conversation = repository.findById(conversationId) ?: return false
+        return when (conversation.kind) {
+            "PROJECT" -> conversation.projectId != null &&
+                repository.isProjectMemberOrOwner(conversation.projectId, userId)
+            else -> repository.isParticipant(conversationId, userId)
         }
     }
 
     private fun AttachmentRepository.AttachmentRow.toDto(): AttachmentDto = AttachmentDto(
         id = id,
-        entityType = AttachmentEntityType.valueOf(entityType),
+        // Файлы сообщений хранятся с entityType TASK_CHAT_MESSAGE/CONVERSATION_MESSAGE;
+        // карточные типы остаются TASK/PROJECT, для DTO сообщений тип деградирует до TASK.
+        entityType = runCatching { AttachmentEntityType.valueOf(entityType) }
+            .getOrDefault(AttachmentEntityType.TASK),
         entityId = entityId,
         fileName = fileName,
         sizeBytes = sizeBytes,

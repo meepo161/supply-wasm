@@ -4,14 +4,44 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestTimeoutException
+import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readReason
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.Json
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
 import org.example.project.dto.NotificationDto
 import org.example.project.dto.NotificationPageDto
 
 class NotificationApiClient(private val client: HttpClient) : NotificationRepository {
+
+    private val realtimeJson = Json { ignoreUnknownKeys = true }
+
+    override fun observeNotifications(after: Long?): Flow<NotificationDto> = flow {
+        client.webSocket(
+            urlString = "/api/notifications/ws",
+            request = { after?.let { parameter("after", it) } }
+        ) {
+            for (frame in incoming) {
+                when (frame) {
+                    is Frame.Text ->
+                        parseNotificationRealtimeMessage(realtimeJson, frame.data.decodeToString())?.let { emit(it) }
+                    is Frame.Close -> {
+                        if (frame.readReason()?.code == CloseReason.Codes.VIOLATED_POLICY.code) {
+                            throw NotificationStreamEndedException()
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
 
     override suspend fun listNotifications(
         limit: Int,

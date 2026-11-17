@@ -39,6 +39,11 @@ class WmsWriteOffRoutesTest {
         val cell = createLocation(client, warehouse.id, "A-01")
         val nomenclature = createNomenclature(client, "MAT-1")
         postInitialStock(client, warehouse.id, cell.id, nomenclature.id, "10")
+        val limitSet = client.put("/api/wms/write-off-limit/${warehouse.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SetWriteOffLimitRequest("100")))
+        }
+        assertEquals(HttpStatusCode.OK, limitSet.status, limitSet.bodyAsText())
 
         val created = createWriteOff(client, warehouse.id, WriteOffReasonType.DAMAGE, "Повреждение при хранении", cell.id, nomenclature.id, "3")
         assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
@@ -236,6 +241,11 @@ class WmsWriteOffRoutesTest {
         val cell = createLocation(client, warehouse.id, "A-01")
         val nomenclature = createNomenclature(client, "MAT-1")
         postInitialStock(client, warehouse.id, cell.id, nomenclature.id, "10")
+        val limitSet = client.put("/api/wms/write-off-limit/${warehouse.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SetWriteOffLimitRequest("100")))
+        }
+        assertEquals(HttpStatusCode.OK, limitSet.status, limitSet.bodyAsText())
 
         val writeOff = createWriteOff(client, warehouse.id, WriteOffReasonType.EXPIRY, "Истёк срок годности", cell.id, nomenclature.id, "4", key = "create-1")
             .bodyAs<ApiResponse<WriteOffDto>>().data!!
@@ -502,7 +512,7 @@ class WmsWriteOffRoutesTest {
     private fun testApp(block: suspend ApplicationTestBuilder.() -> Unit) {
         testApplication {
             environment {
-                config = ApplicationConfig(
+                config = HoconApplicationConfig(
                     ConfigFactory.parseString(
                         """
                         ktor {
@@ -565,7 +575,7 @@ class WmsWriteOffRoutesTest {
         @JvmStatic
         @AfterClass
         fun teardown() {
-            TestDatabase.close()
+            TestDatabase.destroy()
         }
 
         private fun wmsPermissions() = listOf(

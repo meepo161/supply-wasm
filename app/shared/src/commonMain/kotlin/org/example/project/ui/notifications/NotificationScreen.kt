@@ -47,6 +47,8 @@ import org.example.project.ui.theme.SoftButton
 fun NotificationScreen(
     viewModel: NotificationViewModel,
     onOpenTask: (Long) -> Unit,
+    onOpenConversation: (Long) -> Unit,
+    onOpenProjectChat: (Long) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -123,9 +125,12 @@ fun NotificationScreen(
                         notification = notification,
                         onClick = {
                             viewModel.markRead(notification)
-                            if (notification.entityType.equals("TASK", ignoreCase = true)) {
-                                viewModel.openTask(notification.entityId, onOpenTask)
-                            }
+                            viewModel.openNotification(
+                                notification,
+                                onOpenTask,
+                                onOpenConversation,
+                                onOpenProjectChat
+                            )
                         }
                     )
                 }

@@ -14,8 +14,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.builtins.ListSerializer
 import org.example.project.dto.ChatMessageDto
+import org.example.project.dto.ReactionSummaryDto
 import org.example.project.exception.ForbiddenException
 import org.example.project.repository.ChatRepository
 import org.example.project.service.ChatService
@@ -24,6 +28,8 @@ import java.util.*
 
 private const val HISTORY_PAGE_SIZE = 200
 private const val EVENT_CATEGORY = "TASK_CHAT_MESSAGE"
+private const val EVENT_TYPING = "TASK_CHAT_TYPING"
+private const val TYPING_THROTTLE_MS = 3_000L
 
 fun Route.chatWebSocketRoutes(
     chatService: ChatService,
@@ -85,6 +91,19 @@ fun Route.chatWebSocketRoutes(
                     }
             }
 
+            val liveEventsJob = launch {
+                chatEventBus.workspaceEvents.collect { event ->
+                    if (event.taskId != taskId) return@collect
+                    if (!revalidate()) {
+                        close(refused)
+                        throw CancellationException("task chat session or access revoked")
+                    }
+                    sendLock.withLock { outgoing.send(frameFor(event)) }
+                }
+            }
+
+            var lastTypingAtMs = 0L
+
             try {
                 subscribed.await()
                 while (true) {
@@ -96,11 +115,37 @@ fun Route.chatWebSocketRoutes(
                     page.messages.forEach { deliver(it) }
                     if (!page.hasMore) break
                 }
-                incoming.consumeEach { }
+                incoming.consumeEach { frame ->
+                    if (frame is Frame.Text) {
+                        val action = runCatching {
+                            Json.parseToJsonElement(frame.data.decodeToString())
+                                .jsonObject["action"]?.jsonPrimitive?.content
+                        }.getOrNull()
+                        if (action == "TYPING") {
+                            val now = System.currentTimeMillis()
+                            if (now - lastTypingAtMs >= TYPING_THROTTLE_MS) {
+                                lastTypingAtMs = now
+                                if (!revalidate()) {
+                                    close(refused)
+                                    throw CancellationException("task chat session or access revoked")
+                                }
+                                chatEventBus.publishEvent(
+                                    ChatEventBus.WorkspaceEvent(
+                                        category = EVENT_TYPING,
+                                        taskId = taskId,
+                                        userId = user.userId,
+                                        fullName = user.fullName
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
             } catch (e: ForbiddenException) {
                 runCatching { close(refused) }
             } finally {
                 liveJob.cancel()
+                liveEventsJob.cancel()
             }
         }
     }
@@ -143,6 +188,22 @@ private fun frameFor(message: ChatMessageDto): Frame.Text {
         put("category", EVENT_CATEGORY)
         put("id", message.id)
         put("message", Json.encodeToJsonElement(ChatMessageDto.serializer(), message))
+    }
+    return Frame.Text(envelope.toString())
+}
+
+private fun frameFor(event: ChatEventBus.WorkspaceEvent): Frame.Text {
+    val envelope = buildJsonObject {
+        put("category", event.category)
+        put("taskId", event.taskId)
+        event.messageId?.let { put("messageId", it) }
+        event.userId?.let { put("userId", it) }
+        event.fullName?.let { put("fullName", it) }
+        event.lastReadMessageId?.let { put("lastReadMessageId", it) }
+        event.isPinned?.let { put("isPinned", it) }
+        event.reactions?.let {
+            put("reactions", Json.encodeToJsonElement(ListSerializer(ReactionSummaryDto.serializer()), it))
+        }
     }
     return Frame.Text(envelope.toString())
 }
