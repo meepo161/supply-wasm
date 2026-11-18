@@ -44,6 +44,11 @@ fun ConversationCreateDialog(
     var selectedMembers by remember { mutableStateOf(setOf<Long>()) }
 
     val candidates = userOptions.filter { it.id != currentUserId }
+    val canCreate = when (kind) {
+        ConversationKind.DIRECT -> selectedMembers.isNotEmpty()
+        ConversationKind.GROUP -> title.isNotBlank() && selectedMembers.isNotEmpty()
+        else -> false
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -134,10 +139,11 @@ fun ConversationCreateDialog(
                 onClick = {
                     when (kind) {
                         ConversationKind.DIRECT -> selectedMembers.firstOrNull()?.let(onCreateDirect)
-                        else -> onCreateGroup(title, selectedMembers.toList())
+                        ConversationKind.GROUP -> onCreateGroup(title.trim(), selectedMembers.toList())
+                        else -> Unit
                     }
                 },
-                enabled = selectedMembers.isNotEmpty()
+                enabled = canCreate
             ) {
                 Text("Создать")
             }

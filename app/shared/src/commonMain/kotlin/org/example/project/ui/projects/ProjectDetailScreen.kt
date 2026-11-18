@@ -176,6 +176,7 @@ fun ProjectDetailScreen(
                 ConversationPanel(
                     messages = conversationState.messages,
                     canWrite = chat?.canWrite ?: true,
+                    currentUserId = currentUser.id,
                     readOnlyHint = "Обсуждение доступно только для чтения.",
                     onDraftChange = conversationViewModel::updateDraft,
                     onSend = conversationViewModel::sendMessage,

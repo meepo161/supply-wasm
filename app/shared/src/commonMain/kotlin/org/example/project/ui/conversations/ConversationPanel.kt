@@ -35,6 +35,7 @@ import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.tasks.toShortDateTime
 import org.example.project.ui.theme.ErpIcon
 import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Avatar
 
 fun formatAttachmentSize(sizeBytes: Long): String = when {
     sizeBytes >= 1024 * 1024 -> "${sizeBytes / (1024 * 1024)} МБ"
@@ -50,6 +51,7 @@ fun formatAttachmentSize(sizeBytes: Long): String = when {
 fun ConversationPanel(
     messages: ConversationMessagesUiState,
     canWrite: Boolean,
+    currentUserId: Long,
     readOnlyHint: String,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
@@ -115,6 +117,7 @@ fun ConversationPanel(
                 items(messages.messages, key = { it.id }) { message ->
                     ConversationMessageItem(
                         message = message,
+                        currentUserId = currentUserId,
                         downloadingAttachmentId = messages.downloadingAttachmentId,
                         onDownloadAttachment = onDownloadAttachment
                     )
@@ -217,24 +220,33 @@ fun ConversationPanel(
 @Composable
 private fun ConversationMessageItem(
     message: ConversationMessageDto,
+    currentUserId: Long,
     downloadingAttachmentId: Long?,
     onDownloadAttachment: (AttachmentDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.widthIn(max = 480.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest
+    val isOwn = message.author?.userId == currentUserId
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = if (isOwn) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Surface(
+            modifier = Modifier.widthIn(max = 620.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = if (isOwn) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainerLowest
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Avatar(name = message.author?.fullName ?: "—", size = 24.dp)
                 Text(
-                    text = message.author?.fullName ?: "—",
+                    text = if (isOwn) "Вы" else message.author?.fullName ?: "—",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = if (isOwn) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = message.createdAt.toShortDateTime(),
@@ -253,6 +265,7 @@ private fun ConversationMessageItem(
                     isDownloading = downloadingAttachmentId == attachment.id,
                     onDownload = { onDownloadAttachment(attachment) }
                 )
+            }
             }
         }
     }

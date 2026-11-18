@@ -91,6 +91,7 @@ fun TaskChatWorkspaceScreen(
     currentUser: UserDto,
     state: TasksUiState,
     viewModel: TaskViewModel,
+    showChatList: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -98,16 +99,18 @@ fun TaskChatWorkspaceScreen(
             mutableStateOf(!taskChatContextCollapsed(maxWidth.value.toInt()))
         }
         Row(modifier = Modifier.fillMaxSize()) {
-            TaskChatListColumn(
-                state = state,
-                selectedTaskId = task.id,
-                onSelect = viewModel::openTaskById,
-                onTogglePin = viewModel::toggleChatPin,
-                onQueryChange = viewModel::updateChatListQuery,
-                onFilterChange = viewModel::setChatListFilter,
-                modifier = Modifier.width(280.dp).fillMaxHeight()
-            )
-            VerticalDivider()
+            if (showChatList) {
+                TaskChatListColumn(
+                    state = state,
+                    selectedTaskId = task.id,
+                    onSelect = viewModel::openTaskById,
+                    onTogglePin = viewModel::toggleChatPin,
+                    onQueryChange = viewModel::updateChatListQuery,
+                    onFilterChange = viewModel::setChatListFilter,
+                    modifier = Modifier.width(280.dp).fillMaxHeight()
+                )
+                VerticalDivider()
+            }
             TaskChatCenterColumn(
                 task = task,
                 currentUser = currentUser,
