@@ -171,6 +171,58 @@ class WmsService(
         return records.map { it.toDto(barcodes) }
     }
 
+    fun getNomenclatureDetails(id: Long, currentUser: CurrentUser): NomenclatureDetailsDto {
+        currentUser.requirePermission("wms", "read")
+        val nomenclature = wmsRepository.findNomenclatureById(id)
+            ?: throw NotFoundException("nomenclature", id)
+        val stock = wmsRepository.selectStock(null, id)
+        return NomenclatureDetailsDto(
+            item = nomenclature.toDto(loadBarcodes(listOf(id))),
+            physicalQty = stock.fold(BigDecimal.ZERO) { total, row -> total.add(row.balance.physicalQty) }.toPlainString(),
+            reservedQty = stock.fold(BigDecimal.ZERO) { total, row -> total.add(row.balance.reservedQty) }.toPlainString(),
+            availableQty = stock.fold(BigDecimal.ZERO) { total, row -> total.add(row.balance.availableQty) }.toPlainString(),
+            stock = stock.map { it.toDto() },
+            lots = wmsRepository.listLots(id).map { lot ->
+                LotDto(
+                    id = lot.id,
+                    nomenclatureId = lot.nomenclatureId,
+                    lotNumber = lot.lotNumber,
+                    manufactureDate = lot.manufactureDate?.toString(),
+                    expiryDate = lot.expiryDate?.toString(),
+                    createdAt = lot.createdAt?.toString()
+                )
+            },
+            serials = wmsRepository.listSerials(id).map { serial ->
+                SerialItemDto(
+                    id = serial.id,
+                    nomenclatureId = serial.nomenclatureId,
+                    lotId = serial.lotId,
+                    serialNumber = serial.serialNumber,
+                    createdAt = serial.createdAt?.toString()
+                )
+            },
+            movements = wmsRepository.listMovements(id).map { row ->
+                val movement = row.movement
+                StockMovementDto(
+                    id = movement.id,
+                    type = StockMovementType.valueOf(movement.movementType),
+                    nomenclatureId = movement.nomenclatureId,
+                    lotNumber = row.lotNumber,
+                    serialNumber = row.serialNumber,
+                    fromLocationCode = row.fromLocationCode,
+                    toLocationCode = row.toLocationCode,
+                    quantity = movement.quantity.toPlainString(),
+                    documentType = movement.documentType,
+                    documentId = movement.documentId,
+                    note = movement.note,
+                    createdBy = movement.createdBy,
+                    createdByName = row.createdByName,
+                    createdAt = movement.createdAt?.toString()
+                )
+            }
+        )
+    }
+
     fun archiveNomenclature(id: Long, currentUser: CurrentUser): NomenclatureDto {
         currentUser.requirePermission("wms", "manage")
         if (wmsRepository.findNomenclatureById(id) == null) {

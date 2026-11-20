@@ -58,6 +58,8 @@ The D-51 **Task Chat workspace** provides a 280dp dialog list, flexible message 
 
 Task and project cards contain a real attachment section: the user picks a browser file, uploads/downloads/deletes it through the authorized API, with read-only behavior for closed tasks. WMS, BOM, demand and document screens are connected to their real API clients. Their full business acceptance is tracked separately; implementation presence is not presented as a completed ERP.
 
+The WMS nomenclature list supports search by code, name, description and barcode. Opening an item loads `GET /api/wms/nomenclature/{id}/details`: exact physical/reserved/available totals, stock by warehouse and location, lots, serial numbers and the immutable movement journal with source document and author. The card follows the product-detail workflow of the reference `supply2` project without importing its database or duplicating the ERP nomenclature.
+
 The demand card contains a reusable approval panel (`ApprovalsSection`): route list for the selected demand (`targetType=DEMAND`), route card with stages, ALL/ANY policy, assignees and decision history (author/time/comment), start of a route by template for a `PENDING_APPROVAL` demand with `approvals:start` and a per-attempt idempotency key, APPROVE/REJECT/RETURN decisions for the current stage (comment required for REJECT/RETURN on client and server) and route cancellation with a mandatory reason under `approvals:cancel`. After an action the panel reloads the route and the demand card refreshes so the final APPROVED status is visible. There is no global approval queue and no template editor in this increment.
 
 Relevant sources:

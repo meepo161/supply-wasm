@@ -25,7 +25,8 @@ data class ReplyPreviewDto(
 data class ReactionSummaryDto(
     val emoji: String,
     val count: Int,
-    val reactedByMe: Boolean
+    val reactedByMe: Boolean,
+    val reactedBy: List<ChatAuthorDto> = emptyList()
 )
 
 @Serializable
@@ -41,6 +42,7 @@ data class ChatMessageDto(
     val reactions: List<ReactionSummaryDto> = emptyList(),
     val mentionedUserIds: List<Long> = emptyList(),
     val readByCount: Int = 0,
+    val readBy: List<ChatAuthorDto> = emptyList(),
     val editedAt: String? = null,
     val revokedAt: String? = null,
     val source: MessageSourceDto? = null,

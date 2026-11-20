@@ -29,6 +29,10 @@ fun TasksScreen(
         if (showCreateDialog && state.selectedTask != null) {
             showCreateDialog = false
         }
+        val selectedTaskId = state.selectedTask?.id
+        if (selectedTaskId != null && openedFromTaskListId == null) {
+            openedFromTaskListId = selectedTaskId
+        }
     }
 
     val selected = state.selectedTask?.takeIf { it.id == openedFromTaskListId }

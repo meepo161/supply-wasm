@@ -1,5 +1,6 @@
 package org.example.project.repository
 
+import org.example.project.dto.ChatAuthorDto
 import org.example.project.dto.ChatMessageType
 import org.example.project.dto.ReactionSummaryDto
 import org.example.project.generated.jooq.tables.ProjectMembers.PROJECT_MEMBERS
@@ -389,27 +390,36 @@ class ChatRepository(private val dsl: DSLContext) {
 
     fun reactionsForMessages(messageIds: Collection<Long>, viewerId: Long): Map<Long, List<ReactionSummaryDto>> {
         if (messageIds.isEmpty()) return emptyMap()
-        val my = DSL.boolOr(DSL.`when`(TASK_CHAT_REACTIONS.USER_ID.eq(viewerId), DSL.inline(true)))
-        return dsl.select(
+        val rows = dsl.select(
             TASK_CHAT_REACTIONS.MESSAGE_ID,
             TASK_CHAT_REACTIONS.EMOJI,
-            DSL.count(),
-            my
+            TASK_CHAT_REACTIONS.USER_ID
         )
             .from(TASK_CHAT_REACTIONS)
             .where(TASK_CHAT_REACTIONS.MESSAGE_ID.`in`(messageIds))
-            .groupBy(TASK_CHAT_REACTIONS.MESSAGE_ID, TASK_CHAT_REACTIONS.EMOJI)
-            .orderBy(TASK_CHAT_REACTIONS.MESSAGE_ID.asc(), TASK_CHAT_REACTIONS.EMOJI.asc())
-            .fetch { record ->
-                val messageId = record.get(TASK_CHAT_REACTIONS.MESSAGE_ID)!!
-                val summary = ReactionSummaryDto(
-                    emoji = record.get(TASK_CHAT_REACTIONS.EMOJI)!!,
-                    count = record.get(DSL.count()),
-                    reactedByMe = record.get(my) == true
+            .orderBy(
+                TASK_CHAT_REACTIONS.MESSAGE_ID.asc(),
+                TASK_CHAT_REACTIONS.EMOJI.asc(),
+                TASK_CHAT_REACTIONS.USER_ID.asc()
+            )
+            .fetch {
+                Triple(
+                    it.get(TASK_CHAT_REACTIONS.MESSAGE_ID)!!,
+                    it.get(TASK_CHAT_REACTIONS.EMOJI)!!,
+                    it.get(TASK_CHAT_REACTIONS.USER_ID)!!
                 )
-                messageId to summary
             }
-            .groupBy({ it.first }, { it.second })
+        val names = userNames(rows.map { it.third }.distinct())
+        return rows.groupBy({ it.first }, { it.second to it.third }).mapValues { (_, reactions) ->
+            reactions.groupBy({ it.first }, { it.second }).map { (emoji, userIds) ->
+                ReactionSummaryDto(
+                    emoji = emoji,
+                    count = userIds.size,
+                    reactedByMe = viewerId in userIds,
+                    reactedBy = userIds.map { ChatAuthorDto(it, names[it].orEmpty()) }
+                )
+            }
+        }
     }
 
     fun isDialogPinned(taskId: Long, userId: Long): Boolean =

@@ -47,6 +47,12 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listNomenclature(call.currentUser())))
         }
 
+        get("/nomenclature/{id}/details") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getNomenclatureDetails(id, call.currentUser())))
+        }
+
         post("/nomenclature/{id}/archive") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid nomenclature id")

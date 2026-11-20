@@ -81,7 +81,8 @@ class TaskViewModel(
     private val currentUserId: Long,
     coroutineScope: CoroutineScope? = null,
     private val reconnectDelay: suspend (Long) -> Unit = { delay(it) },
-    private val chatFilePicker: ((AttachmentFileData) -> Unit, (String) -> Unit, Int, Long) -> Unit = ::pickAttachmentFile
+    private val chatFilePicker: ((AttachmentFileData) -> Unit, (String) -> Unit, Int, Long) -> Unit = ::pickAttachmentFile,
+    private val conversationRepository: org.example.project.data.ConversationRepository? = null
 ) : ViewModel() {
 
     private val coroutineScope = coroutineScope ?: viewModelScope
@@ -96,6 +97,8 @@ class TaskViewModel(
     private var taskOpenGeneration = 0L
     private var chatGeneration = 0L
     private var chatListGeneration = 0L
+    private var shareGeneration = 0L
+    private var shareIdempotencyKey: String? = null
     private val chatHistoryJobs = mutableSetOf<Job>()
     private val chatEventCursors = mutableMapOf<Long, TaskChatEventCursor>()
     private val pendingCommands = ConversationLocalStateStore()
@@ -107,6 +110,7 @@ class TaskViewModel(
     init {
         loadTasks()
         loadUsers()
+        loadShareUsers()
         loadProjects()
         loadChatList()
     }
@@ -350,6 +354,96 @@ class TaskViewModel(
 
     fun updateCreateForm(form: TaskCreateForm) {
         _uiState.value = _uiState.value.copy(createForm = form)
+    }
+
+    fun loadShareUsers() {
+        _uiState.value = _uiState.value.copy(shareUsersLoading = true, shareUsersError = null)
+        coroutineScope.launch {
+            when (val result = userRepository.listOptions()) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    shareUsers = result.data.filter { it.id != currentUserId },
+                    shareUsersLoading = false,
+                    shareUsersError = null
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    shareUsersLoading = false,
+                    shareUsersError = result.error
+                )
+            }
+        }
+    }
+
+    fun beginTaskShare() {
+        shareGeneration++
+        shareIdempotencyKey = newIdempotencyKey()
+        _uiState.value = _uiState.value.copy(
+            sharingTaskId = null,
+            sharedTaskId = null,
+            isSharingTask = false,
+            shareError = null
+        )
+        if (_uiState.value.shareUsers.isEmpty() && !_uiState.value.shareUsersLoading) loadShareUsers()
+    }
+
+    fun finishTaskShare() {
+        shareGeneration++
+        shareIdempotencyKey = null
+        _uiState.value = _uiState.value.copy(
+            sharingTaskId = null,
+            sharedTaskId = null,
+            isSharingTask = false,
+            shareError = null
+        )
+    }
+
+    fun shareTask(task: TaskDto, recipientId: Long) {
+        val repository = conversationRepository
+        if (repository == null || recipientId == currentUserId || _uiState.value.isSharingTask) return
+        val generation = shareGeneration
+        val idempotencyKey = shareIdempotencyKey ?: newIdempotencyKey().also { shareIdempotencyKey = it }
+        _uiState.value = _uiState.value.copy(
+            sharingTaskId = task.id,
+            sharedTaskId = null,
+            isSharingTask = true,
+            shareError = null
+        )
+        coroutineScope.launch {
+            val conversationResult = repository.create(
+                org.example.project.dto.CreateConversationRequest(
+                    kind = ConversationKind.DIRECT,
+                    memberIds = listOf(recipientId)
+                )
+            )
+            when (conversationResult) {
+                is ApiResult.Error -> if (generation == shareGeneration) {
+                    _uiState.value = _uiState.value.copy(isSharingTask = false, shareError = conversationResult.error)
+                }
+                is ApiResult.Success -> {
+                    if (generation != shareGeneration) return@launch
+                    val result = repository.sendMessage(
+                        conversationResult.data.id,
+                        SendChatMessageRequest(taskShareContent(task), idempotencyKey),
+                        file = null
+                    )
+                    if (generation != shareGeneration) return@launch
+                    _uiState.value = when (result) {
+                        is ApiResult.Success -> {
+                            shareIdempotencyKey = null
+                            _uiState.value.copy(
+                                sharingTaskId = task.id,
+                                sharedTaskId = task.id,
+                                isSharingTask = false,
+                                shareError = null
+                            )
+                        }
+                        is ApiResult.Error -> _uiState.value.copy(
+                            isSharingTask = false,
+                            shareError = result.error
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun updateAssigneePicker(userId: Long?) {
@@ -1361,6 +1455,13 @@ data class TasksUiState(
     val error: ApiError? = null,
     val actionError: ApiError? = null,
     val createError: ApiError? = null,
+    val shareUsers: List<org.example.project.dto.UserOptionDto> = emptyList(),
+    val shareUsersLoading: Boolean = false,
+    val shareUsersError: ApiError? = null,
+    val sharingTaskId: Long? = null,
+    val sharedTaskId: Long? = null,
+    val isSharingTask: Boolean = false,
+    val shareError: ApiError? = null,
     val createForm: TaskCreateForm = TaskCreateForm(),
     val assigneePickerId: Long? = null,
     val resultDraft: String = "",

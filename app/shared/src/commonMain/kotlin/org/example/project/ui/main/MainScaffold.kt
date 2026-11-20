@@ -122,7 +122,8 @@ fun MainScaffold(
     val taskViewModel = remember(user.id) {
         TaskViewModel(
             taskRepository, chatRepository, userRepository, projectRepository,
-            attachmentRepository, documentRepository, user.id
+            attachmentRepository, documentRepository, user.id,
+            conversationRepository = conversationRepository
         )
     }
     val homeViewModel = remember(user.id) {
@@ -876,7 +877,8 @@ private fun MainContent(
         NavigationDestination.CHAT -> ConversationsScreen(
             viewModel = conversationViewModel,
             taskViewModel = taskViewModel,
-            currentUser = user
+            currentUser = user,
+            onOpenTask = onOpenTask
         )
 
         NavigationDestination.WMS -> wmsViewModel?.let {

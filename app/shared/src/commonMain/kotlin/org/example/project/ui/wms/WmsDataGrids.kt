@@ -2,7 +2,7 @@ package org.example.project.ui.wms
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.unchil.un7datagrid.Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.StockBalanceDto

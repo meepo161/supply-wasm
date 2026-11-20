@@ -165,6 +165,29 @@ fun InventoryDiscrepancyKind.localizedName(): String = when (this) {
     InventoryDiscrepancyKind.SHORTAGE -> "Недостача"
 }
 
+fun org.example.project.dto.StockMovementType.localizedName(): String = when (this) {
+    org.example.project.dto.StockMovementType.RECEIPT -> "Приёмка"
+    org.example.project.dto.StockMovementType.ISSUE -> "Выдача"
+    org.example.project.dto.StockMovementType.RETURN -> "Возврат"
+    org.example.project.dto.StockMovementType.WRITE_OFF -> "Списание"
+    org.example.project.dto.StockMovementType.TRANSFER -> "Перемещение"
+    org.example.project.dto.StockMovementType.ADJUSTMENT_IN -> "Корректировка: приход"
+    org.example.project.dto.StockMovementType.ADJUSTMENT_OUT -> "Корректировка: расход"
+}
+
+fun filterNomenclature(
+    items: List<org.example.project.dto.NomenclatureDto>,
+    query: String
+): List<org.example.project.dto.NomenclatureDto> {
+    val normalized = query.trim().lowercase()
+    if (normalized.isEmpty()) return items
+    return items.filter { item ->
+        listOfNotNull(item.code, item.name, item.description)
+            .plus(item.barcodes.map { it.barcode })
+            .any { it.lowercase().contains(normalized) }
+    }
+}
+
 fun String?.toShortDate(): String {
     if (this.isNullOrBlank()) return "—"
     return substringBefore("T")

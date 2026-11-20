@@ -22,8 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.foundation.background
-import androidx.compose.ui.draw.clip
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,6 +41,7 @@ import org.example.project.ui.attachments.AttachmentsSection
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.PageHeader
+import org.example.project.ui.theme.PillBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,23 +55,12 @@ fun TaskDetailScreen(
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         PageHeader(
-            title = "Задача ${task.number}",
+            title = "Задача",
             glyph = ErpIconGlyph.Tasks,
             gradient = Gradients.Ocean,
             subtitle = task.title,
             onBack = onBack,
-            actions = {
-                Text(
-                    text = task.status.localizedName(),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                    color = task.status.accentColor(),
-                    modifier = Modifier
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                        .background(task.status.accentColor().copy(alpha = 0.12f))
-                        .padding(horizontal = 12.dp, vertical = 5.dp)
-                )
-            }
+            actions = { TaskShareAction(task, state, viewModel) }
         )
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -167,19 +155,16 @@ private fun TaskDescription(
         }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = task.title,
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.weight(1f),
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis
-        )
-        TaskStatusChip(status = task.status)
+    TaskSummary(task, state.users)
+
+    task.description?.takeIf { it.isNotBlank() }?.let {
+        TaskTextSection(title = "Описание", text = it)
+    }
+    task.acceptanceCriteria?.takeIf { it.isNotBlank() }?.let {
+        TaskTextSection(title = "Критерии приёмки", text = it)
+    }
+    task.result?.takeIf { it.isNotBlank() }?.let {
+        TaskTextSection(title = "Результат выполнения", text = it)
     }
 
     Card(
@@ -192,6 +177,9 @@ private fun TaskDescription(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Text("Детали задачи", style = MaterialTheme.typography.titleMedium)
+
+            TaskSectionLabel("Контекст")
             TaskDetailRow("Область", task.area.localizedName())
             task.projectId?.let { projectId ->
                 val projectName = state.projects.find { it.id == projectId }
@@ -200,9 +188,10 @@ private fun TaskDescription(
             }
             task.departmentId?.let { TaskDetailRow("Подразделение", "ID $it") }
             TaskDetailRow("Тип работы", task.type.localizedName())
-            TaskDetailRow("Приоритет", task.priority.localizedName())
+
+            TaskSectionLabel("Участники")
             TaskDetailRow("Инициатор", userName(state.users, task.initiatorId))
-            TaskDetailRow("Исполнитель", task.assigneeId?.let { userName(state.users, it) } ?: "—")
+            TaskDetailRow("Исполнитель", task.assigneeId?.let { userName(state.users, it) } ?: "Не назначен")
             if (task.coexecutorIds.isNotEmpty()) {
                 TaskDetailRow(
                     "Соисполнители",
@@ -216,31 +205,33 @@ private fun TaskDescription(
                 )
             }
             task.reviewerId?.let { TaskDetailRow("Проверяющий", userName(state.users, it)) }
-            TaskDetailRow("Плановое начало", task.plannedStartAt.toShortDate())
-            TaskDetailRow("Срок выполнения", task.dueDate.toShortDate())
-            TaskDetailRow("Создана", task.createdAt.toShortDateTime())
-            task.closedAt?.let { TaskDetailRow("Завершена", it.toShortDateTime()) }
+
             if (task.status == TaskStatus.BLOCKED) {
-                task.blockedReason?.let { TaskDetailRow("Причина блокировки", it) }
+                TaskSectionLabel("Блокировка")
+                task.blockedReason?.let { TaskDetailRow("Причина", it) }
                 task.blockedBy?.let { TaskDetailRow("Заблокировал", userName(state.users, it)) }
-                task.blockedAt?.let { TaskDetailRow("Время блокировки", it.toShortDateTime()) }
+                task.blockedAt?.let { TaskDetailRow("Время", it.toShortDateTime()) }
                 task.unblockResponsibleId?.let {
                     TaskDetailRow("Ответственный за снятие", userName(state.users, it))
                 }
             }
+
+            TaskSectionLabel("Сроки и история")
+            TaskDetailRow("Плановое начало", task.plannedStartAt.toShortDate())
+            TaskDetailRow("Срок выполнения", task.dueDate.toShortDate())
+            TaskDetailRow("Создана", task.createdAt.toShortDateTime())
+            task.closedAt?.let { TaskDetailRow("Завершена", it.toShortDateTime()) }
             TaskDetailRow("Версия", task.version.toString())
         }
     }
 
-    task.description?.takeIf { it.isNotBlank() }?.let {
-        TaskTextSection(title = "Описание", text = it)
-    }
-    task.acceptanceCriteria?.takeIf { it.isNotBlank() }?.let {
-        TaskTextSection(title = "Критерии приёмки", text = it)
-    }
-    task.result?.takeIf { it.isNotBlank() }?.let {
-        TaskTextSection(title = "Результат выполнения", text = it)
-    }
+    TaskActionsSection(
+        task = task,
+        currentUser = currentUser,
+        users = state.users,
+        state = state,
+        viewModel = viewModel
+    )
 
     AttachmentsSection(
         entityType = AttachmentEntityType.TASK,
@@ -253,15 +244,92 @@ private fun TaskDescription(
         readOnly = task.isClosedLike()
     )
 
-    TaskActionsSection(
-        task = task,
-        currentUser = currentUser,
-        users = state.users,
-        state = state,
-        viewModel = viewModel
-    )
-
     HorizontalDivider()
+}
+
+@Composable
+private fun TaskSummary(task: TaskDto, users: List<UserDto>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        )
+    ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            val fourColumns = maxWidth >= 620.dp
+            Column {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    TaskSummaryItem("Статус", Modifier.weight(1f)) {
+                        TaskStatusChip(task.status)
+                    }
+                    TaskSummaryItem("Приоритет", Modifier.weight(1f)) {
+                        PillBadge(text = task.priority.localizedName(), accent = task.priority.accentColor())
+                    }
+                    if (fourColumns) {
+                        TaskSummaryItem("Исполнитель", Modifier.weight(1f)) {
+                            SummaryPerson(task.assigneeId?.let { userName(users, it) } ?: "Не назначен")
+                        }
+                        TaskSummaryItem("Срок выполнения", Modifier.weight(1f)) {
+                            SummaryValue(task.dueDate.toShortDate())
+                        }
+                    }
+                }
+                if (!fourColumns) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        TaskSummaryItem("Исполнитель", Modifier.weight(1f)) {
+                            SummaryPerson(task.assigneeId?.let { userName(users, it) } ?: "Не назначен")
+                        }
+                        TaskSummaryItem("Срок выполнения", Modifier.weight(1f)) {
+                            SummaryValue(task.dueDate.toShortDate())
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskSummaryItem(
+    label: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = modifier.padding(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Box(modifier = Modifier.padding(top = 5.dp)) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SummaryPerson(value: String) {
+    Text(
+        text = value,
+        style = MaterialTheme.typography.titleSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun SummaryValue(value: String) {
+    Text(text = value, style = MaterialTheme.typography.titleSmall)
+}
+
+@Composable
+private fun TaskSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 6.dp)
+    )
 }
 
 @Composable
@@ -278,7 +346,7 @@ private fun TaskTextSection(title: String, text: String, modifier: Modifier = Mo
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Text(
+            LinkifiedText(
                 text = text,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 8.dp)
@@ -291,13 +359,15 @@ private fun TaskTextSection(title: String, text: String, modifier: Modifier = Mo
 private fun TaskDetailRow(label: String, value: String, modifier: Modifier = Modifier) {
     Row(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = "$label: ",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(140.dp)
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
         )
     }
 }

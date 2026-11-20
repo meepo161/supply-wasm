@@ -66,7 +66,10 @@ class ConversationExperienceRoutesTest {
         }
         assertEquals(HttpStatusCode.OK, add.status, add.bodyAsText())
         val added = add.bodyAs<ApiResponse<List<ReactionSummaryDto>>>().data!!
-        assertEquals(ReactionSummaryDto("👍", 1, true), added.single())
+        assertEquals(1, added.single().count)
+        assertTrue(added.single().reactedByMe)
+        assertEquals(listOf(member.id), added.single().reactedBy.map { it.userId })
+        assertEquals("Reply Member", added.single().reactedBy.single().fullName)
 
         val remove = memberClient.post("/api/conversations/${conversation.id}/messages/${reply.id}/reactions") {
             jsonBody(ReactionRequest("👍"))
@@ -117,6 +120,8 @@ class ConversationExperienceRoutesTest {
         val history = memberClient.get("/api/conversations/${conversation.id}/messages")
             .bodyAs<ApiResponse<ConversationMessagePageDto>>().data!!
         assertEquals(listOf(1, 1), history.messages.map { it.readByCount })
+        assertTrue(history.messages.all { it.readBy.map { reader -> reader.userId } == listOf(member.id) })
+        assertTrue(history.messages.all { it.readBy.single().fullName == "Read Member" })
         val foreign = send(authorClient, createDirect(authorClient, member.id).id, "X", "cex-read-3")
         val invalid = memberClient.post("/api/conversations/${conversation.id}/read") {
             jsonBody(MarkChatReadRequest(foreign.id))

@@ -42,6 +42,60 @@ class WmsRepository(private val dsl: DSLContext) {
         val serialNumber: String?
     )
 
+    data class MovementRow(
+        val movement: org.example.project.generated.jooq.tables.records.StockMovementRecord,
+        val lotNumber: String?,
+        val serialNumber: String?,
+        val fromLocationCode: String?,
+        val toLocationCode: String?,
+        val createdByName: String
+    )
+
+    fun listLots(nomenclatureId: Long): List<LotsRecord> {
+        return dsl.selectFrom(LOTS)
+            .where(LOTS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(LOTS.CREATED_AT.desc(), LOTS.ID.desc())
+            .fetch()
+    }
+
+    fun listSerials(nomenclatureId: Long): List<SerialItemsRecord> {
+        return dsl.selectFrom(SERIAL_ITEMS)
+            .where(SERIAL_ITEMS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(SERIAL_ITEMS.CREATED_AT.desc(), SERIAL_ITEMS.ID.desc())
+            .fetch()
+    }
+
+    fun listMovements(nomenclatureId: Long): List<MovementRow> {
+        val fromLocations = STORAGE_LOCATIONS.`as`("from_locations")
+        val toLocations = STORAGE_LOCATIONS.`as`("to_locations")
+        return dsl.select(
+            STOCK_MOVEMENT.asterisk(),
+            LOTS.LOT_NUMBER,
+            SERIAL_ITEMS.SERIAL_NUMBER,
+            fromLocations.CODE,
+            toLocations.CODE,
+            USERS.FULL_NAME
+        )
+            .from(STOCK_MOVEMENT)
+            .leftJoin(LOTS).on(LOTS.ID.eq(STOCK_MOVEMENT.LOT_ID))
+            .leftJoin(SERIAL_ITEMS).on(SERIAL_ITEMS.ID.eq(STOCK_MOVEMENT.SERIAL_ID))
+            .leftJoin(fromLocations).on(fromLocations.ID.eq(STOCK_MOVEMENT.FROM_LOCATION_ID))
+            .leftJoin(toLocations).on(toLocations.ID.eq(STOCK_MOVEMENT.TO_LOCATION_ID))
+            .join(USERS).on(USERS.ID.eq(STOCK_MOVEMENT.CREATED_BY))
+            .where(STOCK_MOVEMENT.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(STOCK_MOVEMENT.CREATED_AT.desc(), STOCK_MOVEMENT.ID.desc())
+            .fetch { record ->
+                MovementRow(
+                    movement = record.into(STOCK_MOVEMENT),
+                    lotNumber = record.get(LOTS.LOT_NUMBER),
+                    serialNumber = record.get(SERIAL_ITEMS.SERIAL_NUMBER),
+                    fromLocationCode = record.get(fromLocations.CODE),
+                    toLocationCode = record.get(toLocations.CODE),
+                    createdByName = record.get(USERS.FULL_NAME)
+                )
+            }
+    }
+
     // Склады
 
     fun findWarehouseById(id: Long): WarehousesRecord? {

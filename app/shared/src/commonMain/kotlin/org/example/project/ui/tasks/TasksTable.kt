@@ -2,7 +2,7 @@ package org.example.project.ui.tasks
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.unchil.un7datagrid.Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
@@ -19,7 +19,6 @@ fun TasksTable(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "Номер" to tasks.map { it.number },
         "Название" to tasks.map { it.title },
         "Статус" to tasks.map { it.status.localizedName() },
         "Приоритет" to tasks.map { it.priority.localizedName() },
@@ -39,8 +38,9 @@ fun TasksTable(
             defaultPageSizeListIndex = 0
         ),
         onClick = { selected ->
-            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
-            tasks.firstOrNull { it.number == number }?.let(onTaskClick)
+            selected.firstOrNull()?.first?.let { index ->
+                tasks.getOrNull(index)?.let(onTaskClick)
+            }
         }
     )
 }

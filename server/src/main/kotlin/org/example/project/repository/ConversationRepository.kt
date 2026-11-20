@@ -1,5 +1,6 @@
 package org.example.project.repository
 
+import org.example.project.dto.ChatAuthorDto
 import org.example.project.dto.ReactionSummaryDto
 import org.example.project.generated.jooq.tables.ConversationEventLog.CONVERSATION_EVENT_LOG
 import org.example.project.generated.jooq.tables.ConversationMentions.CONVERSATION_MENTIONS
@@ -308,20 +309,36 @@ class ConversationRepository(private val dsl: DSLContext) {
 
     fun reactionsForMessages(messageIds: Collection<Long>, viewerId: Long): Map<Long, List<ReactionSummaryDto>> {
         if (messageIds.isEmpty()) return emptyMap()
-        val my = DSL.boolOr(DSL.`when`(CONVERSATION_REACTIONS.USER_ID.eq(viewerId), DSL.inline(true)))
-        return dsl.select(CONVERSATION_REACTIONS.MESSAGE_ID, CONVERSATION_REACTIONS.EMOJI, DSL.count(), my)
+        val rows = dsl.select(
+            CONVERSATION_REACTIONS.MESSAGE_ID,
+            CONVERSATION_REACTIONS.EMOJI,
+            CONVERSATION_REACTIONS.USER_ID
+        )
             .from(CONVERSATION_REACTIONS)
             .where(CONVERSATION_REACTIONS.MESSAGE_ID.`in`(messageIds))
-            .groupBy(CONVERSATION_REACTIONS.MESSAGE_ID, CONVERSATION_REACTIONS.EMOJI)
-            .orderBy(CONVERSATION_REACTIONS.MESSAGE_ID.asc(), CONVERSATION_REACTIONS.EMOJI.asc())
+            .orderBy(
+                CONVERSATION_REACTIONS.MESSAGE_ID.asc(),
+                CONVERSATION_REACTIONS.EMOJI.asc(),
+                CONVERSATION_REACTIONS.USER_ID.asc()
+            )
             .fetch {
-                it.get(CONVERSATION_REACTIONS.MESSAGE_ID)!! to ReactionSummaryDto(
+                Triple(
+                    it.get(CONVERSATION_REACTIONS.MESSAGE_ID)!!,
                     it.get(CONVERSATION_REACTIONS.EMOJI)!!,
-                    it.get(DSL.count()),
-                    it.get(my) == true
+                    it.get(CONVERSATION_REACTIONS.USER_ID)!!
                 )
             }
-            .groupBy({ it.first }, { it.second })
+        val names = userNames(rows.map { it.third }.distinct())
+        return rows.groupBy({ it.first }, { it.second to it.third }).mapValues { (_, reactions) ->
+            reactions.groupBy({ it.first }, { it.second }).map { (emoji, userIds) ->
+                ReactionSummaryDto(
+                    emoji = emoji,
+                    count = userIds.size,
+                    reactedByMe = viewerId in userIds,
+                    reactedBy = userIds.map { ChatAuthorDto(it, names[it].orEmpty()) }
+                )
+            }
+        }
     }
 
     fun insertMentions(messageId: Long, userIds: Collection<Long>) {

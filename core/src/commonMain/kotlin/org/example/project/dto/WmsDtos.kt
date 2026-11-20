@@ -167,6 +167,66 @@ data class NomenclatureDto(
 )
 
 @Serializable
+data class LotDto(
+    val id: Long,
+    val nomenclatureId: Long,
+    val lotNumber: String,
+    val manufactureDate: String? = null,
+    val expiryDate: String? = null,
+    val createdAt: String? = null
+)
+
+@Serializable
+data class SerialItemDto(
+    val id: Long,
+    val nomenclatureId: Long,
+    val lotId: Long? = null,
+    val serialNumber: String,
+    val createdAt: String? = null
+)
+
+@Serializable
+enum class StockMovementType {
+    RECEIPT,
+    ISSUE,
+    RETURN,
+    WRITE_OFF,
+    TRANSFER,
+    ADJUSTMENT_IN,
+    ADJUSTMENT_OUT
+}
+
+@Serializable
+data class StockMovementDto(
+    val id: Long,
+    val type: StockMovementType,
+    val nomenclatureId: Long,
+    val lotNumber: String? = null,
+    val serialNumber: String? = null,
+    val fromLocationCode: String? = null,
+    val toLocationCode: String? = null,
+    val quantity: String,
+    val documentType: String,
+    val documentId: Long,
+    val note: String? = null,
+    val createdBy: Long,
+    val createdByName: String,
+    val createdAt: String? = null
+)
+
+@Serializable
+data class NomenclatureDetailsDto(
+    val item: NomenclatureDto,
+    val physicalQty: String = "0",
+    val reservedQty: String = "0",
+    val availableQty: String = "0",
+    val stock: List<StockBalanceDto> = emptyList(),
+    val lots: List<LotDto> = emptyList(),
+    val serials: List<SerialItemDto> = emptyList(),
+    val movements: List<StockMovementDto> = emptyList()
+)
+
+@Serializable
 data class CreateNomenclatureRequest(
     val code: String,
     val name: String,

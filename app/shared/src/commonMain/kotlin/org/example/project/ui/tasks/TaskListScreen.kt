@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,10 +76,10 @@ fun TaskListScreen(
     currentUserId: Long? = null,
     modifier: Modifier = Modifier
 ) {
-    var statusFilter by remember { mutableStateOf(TaskStatusFilter.ALL) }
-    var areaFilter by remember { mutableStateOf(TaskAreaFilter.ALL) }
-    var mineOnly by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var statusFilter by rememberSaveable { mutableStateOf(TaskStatusFilter.ALL) }
+    var areaFilter by rememberSaveable { mutableStateOf(TaskAreaFilter.ALL) }
+    var mineOnly by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     val filtered = remember(tasks, statusFilter, areaFilter, mineOnly, currentUserId, query) {
         tasks
             .filterByStatuses(statusFilter.statuses)
@@ -139,8 +141,18 @@ fun TaskListScreen(
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            label = { Text("Поиск по номеру или названию") },
+            label = { Text("Поиск по названию") },
             singleLine = true,
+            leadingIcon = {
+                ErpIcon(ErpIconGlyph.Search, modifier = Modifier.size(18.dp))
+            },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }, modifier = Modifier.size(36.dp)) {
+                        ErpIcon(ErpIconGlyph.Close, modifier = Modifier.size(16.dp))
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
         )
 
@@ -185,6 +197,18 @@ fun TaskListScreen(
                     count = tasks.filterMine(currentUserId).size,
                     selected = mineOnly,
                     onClick = { mineOnly = !mineOnly }
+                )
+            }
+            if (statusFilter != TaskStatusFilter.ALL || areaFilter != TaskAreaFilter.ALL || mineOnly || query.isNotBlank()) {
+                SoftButton(
+                    text = "Сбросить",
+                    onClick = {
+                        statusFilter = TaskStatusFilter.ALL
+                        areaFilter = TaskAreaFilter.ALL
+                        mineOnly = false
+                        query = ""
+                    },
+                    leadingIcon = ErpIconGlyph.Close
                 )
             }
         }
@@ -374,17 +398,6 @@ internal fun TaskCard(
 @Composable
 private fun TaskCardHeader(task: TaskDto, accent: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = task.number,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = accent,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(accent.copy(alpha = 0.12f))
-                .padding(horizontal = 7.dp, vertical = 2.dp)
-        )
-        Spacer(Modifier.width(10.dp))
         Text(
             text = task.title,
             style = MaterialTheme.typography.titleSmall,

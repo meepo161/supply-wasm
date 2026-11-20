@@ -1,6 +1,5 @@
 package org.example.project.ui.tasks
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -13,22 +12,17 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -36,47 +30,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
-import org.example.project.data.chatMemberIds
-import org.example.project.dto.AttachmentDto
-import org.example.project.dto.ChatMessageDto
-import org.example.project.dto.ChatMessageType
-import org.example.project.dto.ConversationKind
 import org.example.project.dto.ConversationListItemDto
 import org.example.project.dto.TaskChatListFilter
 import org.example.project.dto.TaskChatListItemDto
 import org.example.project.dto.TaskDto
 import org.example.project.dto.UserDto
 import org.example.project.ui.conversations.AttachmentRow
-import org.example.project.ui.conversations.ChatReactionRow
-import org.example.project.ui.conversations.DecodedImagePreview
-import org.example.project.ui.conversations.PendingAttachmentRow
-import org.example.project.ui.conversations.formattedChatText
+import org.example.project.ui.conversations.ConversationPanel
+import org.example.project.ui.conversations.ConversationViewModel
+import org.example.project.ui.conversations.ConversationsUiState
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Avatar
 import org.example.project.ui.theme.Brand
@@ -96,6 +68,8 @@ fun TaskChatWorkspaceScreen(
     currentUser: UserDto,
     state: TasksUiState,
     viewModel: TaskViewModel,
+    conversationState: ConversationsUiState,
+    conversationViewModel: ConversationViewModel,
     showChatList: Boolean = true,
     unifiedForwardTargets: List<ConversationListItemDto> = emptyList(),
     modifier: Modifier = Modifier
@@ -122,6 +96,8 @@ fun TaskChatWorkspaceScreen(
                 currentUser = currentUser,
                 state = state,
                 viewModel = viewModel,
+                conversationState = conversationState,
+                conversationViewModel = conversationViewModel,
                 unifiedForwardTargets = unifiedForwardTargets,
                 contextOpen = contextOpen,
                 onToggleContext = { contextOpen = !contextOpen },
@@ -286,43 +262,21 @@ private fun TaskChatCenterColumn(
     currentUser: UserDto,
     state: TasksUiState,
     viewModel: TaskViewModel,
+    conversationState: ConversationsUiState,
+    conversationViewModel: ConversationViewModel,
     unifiedForwardTargets: List<ConversationListItemDto>,
     contextOpen: Boolean,
     onToggleContext: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val chat = state.chat
-    var searchOpen by rememberSaveable(task.id) { mutableStateOf(false) }
-    val searchFocus = remember { FocusRequester() }
-
-    LaunchedEffect(searchOpen) {
-        if (searchOpen) searchFocus.requestFocus()
-    }
-
-    Column(
-        modifier = modifier.onPreviewKeyEvent { event ->
-            when {
-                event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.F -> {
-                    searchOpen = true
-                    true
-                }
-                event.type == KeyEventType.KeyDown && event.key == Key.Escape && searchOpen -> {
-                    searchOpen = false
-                    viewModel.updateChatSearchQuery("")
-                    true
-                }
-                else -> false
-            }
-        }
-    ) {
-        // Шапка чата
+    Column(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "${task.number} · ${task.title}",
+                    text = task.title,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -330,9 +284,7 @@ private fun TaskChatCenterColumn(
             }
             PillBadge(text = task.status.localizedName(), accent = task.status.accentColor())
             Spacer(Modifier.width(8.dp))
-            TextButton(onClick = { searchOpen = !searchOpen }) {
-                Text(if (searchOpen) "Скрыть поиск" else "Поиск")
-            }
+            TaskShareAction(task, state, viewModel)
             TextButton(onClick = onToggleContext) {
                 Text(if (contextOpen) "Скрыть сведения" else "Сведения")
             }
@@ -341,519 +293,31 @@ private fun TaskChatCenterColumn(
             }
         }
 
-        if (searchOpen) {
-            Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-                OutlinedTextField(
-                    value = chat.searchQuery,
-                    onValueChange = viewModel::updateChatSearchQuery,
-                    label = { Text("Поиск по сообщениям") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocus)
-                )
-                chat.searchError?.let { ErrorMessageCard(error = it) }
-                if (chat.searchLoading) {
-                    Text(
-                        text = "Поиск…",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-                if (chat.searchQuery.isNotBlank() && !chat.searchLoading) {
-                    if (chat.searchResults.isEmpty()) {
-                        Text(
-                            text = "Ничего не найдено.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 180.dp)
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            chat.searchResults.forEach { result ->
-                                Text(
-                                    text = "${result.author?.fullName ?: "—"} · " +
-                                        "${result.createdAt.toShortDateTime()} · " +
-                                        chatSnippet(result.content, 100),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { viewModel.scrollToSearchResult(result.messageId) }
-                                        .padding(vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        chat.error?.let {
-            ErrorMessageCard(error = it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-        }
-
-        // Сообщения
-        if (chat.isLoading && chat.messages.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else {
-            val listStates = remember { mutableStateMapOf<Long, LazyListState>() }
-            val listState = listStates.getOrPut(task.id) { LazyListState() }
-            val initializedScroll = remember { mutableSetOf<Long>() }
-            var previousMessages by remember(task.id) { mutableStateOf(chat.messages) }
-            var pendingNewCount by remember(task.id) { mutableIntStateOf(0) }
-            val scrollScope = rememberCoroutineScope()
-            LaunchedEffect(chat.messages) {
-                val old = previousMessages
-                val current = chat.messages
-                if (current.isNotEmpty() && initializedScroll.add(task.id)) {
-                    listState.scrollToItem(current.lastIndex)
-                } else if (old.isNotEmpty() && current.isNotEmpty()) {
-                    val oldFirstId = old.first().id
-                    val prependedIndex = current.indexOfFirst { it.id == oldFirstId }
-                    if (current.first().id != oldFirstId && prependedIndex > 0) {
-                        val firstVisibleMessageId = old.getOrNull(listState.firstVisibleItemIndex)?.id ?: oldFirstId
-                        val restored = restoreTaskChatPrependAnchor(
-                            anchor = TaskChatScrollAnchor(
-                                firstVisibleMessageId,
-                                listState.firstVisibleItemIndex,
-                                listState.firstVisibleItemScrollOffset
-                            ),
-                            oldMessageIds = old.map { it.id },
-                            newMessageIds = current.map { it.id }
-                        )
-                        listState.scrollToItem(restored.index, restored.offset)
-                    } else if (current.size > old.size && current.last().id != old.last().id) {
-                        val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                        val isOwn = current.last().author?.userId == currentUser.id
-                        if (shouldAutoScrollToNew(lastVisible, old.size, isOwn)) {
-                            listState.animateScrollToItem(current.lastIndex)
-                            pendingNewCount = 0
-                        } else {
-                            pendingNewCount += current.size - old.size
-                        }
-                    }
-                }
-                previousMessages = current
-            }
-            LaunchedEffect(chat.scrollToMessageId) {
-                val targetId = chat.scrollToMessageId ?: return@LaunchedEffect
-                val index = chat.messages.indexOfFirst { it.id == targetId }
-                if (index >= 0) listState.animateScrollToItem(index)
-                viewModel.clearScrollToMessage()
-            }
-            LaunchedEffect(listState, task.id, chat.messages) {
-                snapshotFlow {
-                    listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index to listState.layoutInfo.totalItemsCount
-                }.distinctUntilChanged().collect { (lastVisible, totalCount) ->
-                    val lastVisibleIndex = lastVisible ?: -1
-                    viewModel.updateChatVisibleRange(
-                        lastVisibleMessageId = chat.messages.getOrNull(lastVisibleIndex)?.id,
-                        viewingLatest = totalCount > 0 && lastVisibleIndex >= totalCount - 1
-                    )
-                }
-            }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(chat.messages, key = { it.id }) { message ->
-                    val index = chat.messages.indexOfFirst { it.id == message.id }
-                    val previous = chat.messages.getOrNull(index - 1)
-                    if (previous?.createdAt?.substringBefore('T') != message.createdAt.substringBefore('T')) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            HorizontalDivider(Modifier.weight(1f))
-                            Text(message.createdAt.substringBefore('T'), style = MaterialTheme.typography.labelSmall)
-                            HorizontalDivider(Modifier.weight(1f))
-                        }
-                    }
-                    if (chat.firstUnreadMessageId == message.id) {
-                        Text("Непрочитанные", color = MaterialTheme.colorScheme.primary)
-                    }
-                    when (message.type) {
-                        ChatMessageType.SYSTEM -> WorkspaceSystemEvent(message)
-                        ChatMessageType.USER -> WorkspaceMessageItem(
-                            message = message,
-                            currentUserId = currentUser.id,
-                            canWrite = !task.isClosedLike(),
-                            highlighted = chat.highlightedMessageId == message.id,
-                            searchQuery = chat.searchQuery,
-                            imagePreviews = chat.imagePreviews,
-                            downloadingAttachmentId = chat.downloadingAttachmentId,
-                            onDownloadAttachment = viewModel::downloadChatAttachment,
-                            onLoadImage = viewModel::loadChatImagePreview,
-                            onReply = { viewModel.setReplyTo(message) },
-                            onToggleReaction = { emoji -> viewModel.toggleReaction(message.id, emoji) },
-                            onEdit = viewModel::editChatMessage,
-                            onRevoke = viewModel::revokeChatMessage,
-                            forwardTargets = unifiedForwardTargets.ifEmpty {
-                                state.chatList.filter { it.status !in setOf("CLOSED", "CANCELLED") }.map {
-                                    ConversationListItemDto(
-                                        kind = ConversationKind.TASK,
-                                        id = it.taskId,
-                                        title = "${it.number} · ${it.title}"
-                                    )
-                                }
-                            },
-                            onForward = viewModel::forwardChatMessage
-                        )
-                    }
-                }
-                if (chat.messages.isEmpty()) {
-                    item(key = "empty") {
-                        Text(
-                            text = "Сообщений пока нет. Напишите первым.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(8.dp)
-                        )
-                    }
-                }
-            }
-            if (pendingNewCount > 0) {
-                TextButton(onClick = {
-                    scrollScope.launch { listState.animateScrollToItem(chat.messages.lastIndex) }
-                    pendingNewCount = 0
-                }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("Новые сообщения: $pendingNewCount")
-                }
-            }
-        }
-
-        if (chat.typingUsers.isNotEmpty()) {
-            Text(
-                text = chat.typingUsers.joinToString(", ") + " печатает…",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp)
-            )
-        }
-
-        chat.sendError?.let {
-            ErrorMessageCard(error = it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-            if (!task.isClosedLike()) {
-                TextButton(onClick = viewModel::sendMessage, enabled = !chat.isSending) { Text("Повторить отправку") }
-            }
-        }
-        chat.actionError?.let {
-            ErrorMessageCard(error = it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-        }
-        chat.downloadError?.let {
-            ErrorMessageCard(error = it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-        }
-        chat.attachmentPickerError?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp))
-        }
-
-        if (task.isClosedLike()) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Text(
-                    text = "Задача закрыта. Обсуждение доступно только для чтения.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(12.dp)
-                )
-            }
-        } else {
-            WorkspaceComposer(
-                task = task,
-                state = state,
-                chat = chat,
-                viewModel = viewModel
-            )
-        }
-    }
-}
-
-@Composable
-private fun WorkspaceComposer(
-    task: TaskDto,
-    state: TasksUiState,
-    chat: ChatUiState,
-    viewModel: TaskViewModel
-) {
-    chat.replyTo?.let { reply ->
-        Surface(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.secondaryContainer
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Ответ: ${reply.author?.fullName ?: "—"}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Text(
-                        text = reply.contentPreview,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-                ErpIcon(
-                    ErpIconGlyph.Close,
-                    MaterialTheme.colorScheme.onSecondaryContainer,
-                    Modifier
-                        .size(16.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = viewModel::clearReply)
-                )
-            }
-        }
-    }
-
-    val participants = state.users
-        .filter { it.id in task.chatMemberIds() }
-        .map { org.example.project.dto.UserOptionDto(it.id, it.fullName) }
-    val suggestions = mentionSuggestions(participants, chat.draft)
-    if (suggestions.isNotEmpty()) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            suggestions.take(5).forEach { user ->
-                Text(
-                    text = user.fullName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { viewModel.updateChatDraft(insertMention(chat.draft, user.fullName)) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                )
-            }
-        }
-    }
-
-    chat.pendingFiles.forEach { file ->
-        PendingAttachmentRow(file = file, onRemove = { viewModel.removeChatPendingFile(file) })
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Bottom
-    ) {
-        OutlinedTextField(
-            value = chat.draft,
-            onValueChange = viewModel::updateChatDraft,
-            label = { Text("Сообщение (Ctrl+Enter — отправить)") },
-            minLines = 1,
-            maxLines = 4,
-            modifier = Modifier
-                .weight(1f)
-                .onPreviewKeyEvent { event ->
-                    when {
-                        event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Enter -> {
-                            viewModel.sendMessage()
-                            true
-                        }
-                        event.type == KeyEventType.KeyDown && event.key == Key.Escape -> {
-                            viewModel.clearReply()
-                            chat.replyTo != null
-                        }
-                        else -> false
-                    }
-                }
-        )
-        TextButton(onClick = viewModel::pickChatFile, enabled = !chat.isSending) {
-            Text("Файлы")
-        }
-        Button(
-            onClick = viewModel::sendMessage,
-            enabled = (chat.draft.isNotBlank() || chat.pendingFiles.isNotEmpty()) && !chat.isSending
-        ) {
-            Text(if (chat.isSending) "Отправка…" else "Отправить")
-        }
-    }
-}
-
-@Composable
-private fun WorkspaceSystemEvent(message: ChatMessageDto, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = message.content,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        conversationState.selectedConversation?.let { conversation ->
+            ConversationPanel(
+                messages = conversationState.messages,
+                canWrite = conversation.canWrite && !task.isClosedLike(),
+                currentUserId = currentUser.id,
+                readOnlyHint = "Задача закрыта. Обсуждение доступно только для чтения.",
+                onDraftChange = {
+                    conversationViewModel.updateDraft(it)
+                    if (it.isNotBlank()) viewModel.notifyTyping()
+                },
+                onSend = conversationViewModel::sendMessage,
+                onRefresh = { conversationViewModel.refreshMessages() },
+                onLoadMore = conversationViewModel::loadMoreNewer,
+                onPickFile = conversationViewModel::pickFile,
+                onClearFile = conversationViewModel::clearPendingFile,
+                onDownloadAttachment = conversationViewModel::downloadAttachment,
+                onOpenTask = viewModel::openTaskById,
+                conversationKey = "${conversation.kind}:${conversation.id}",
+                participants = conversation.members,
+                forwardTargets = unifiedForwardTargets,
+                typingUsers = state.chat.typingUsers,
+                viewModel = conversationViewModel,
                 modifier = Modifier.weight(1f)
             )
-            Text(
-                text = message.createdAt.toShortDateTime(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
-    }
-}
-
-@Composable
-private fun WorkspaceMessageItem(
-    message: ChatMessageDto,
-    currentUserId: Long,
-    canWrite: Boolean,
-    highlighted: Boolean,
-    searchQuery: String,
-    imagePreviews: Map<Long, ByteArray>,
-    downloadingAttachmentId: Long?,
-    onDownloadAttachment: (AttachmentDto) -> Unit,
-    onLoadImage: (AttachmentDto) -> Unit,
-    onReply: () -> Unit,
-    onToggleReaction: (String) -> Unit,
-    onEdit: (ChatMessageDto, String) -> Unit,
-    onRevoke: (ChatMessageDto) -> Unit,
-    forwardTargets: List<ConversationListItemDto>,
-    onForward: (ChatMessageDto, ConversationListItemDto) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val own = message.author?.userId == currentUserId
-    var reactionPickerOpen by remember(message.id) { mutableStateOf(false) }
-    var editing by remember(message.id) { mutableStateOf(false) }
-    var revoking by remember(message.id) { mutableStateOf(false) }
-    var forwarding by remember(message.id) { mutableStateOf(false) }
-    var editDraft by remember(message.id, message.version) { mutableStateOf(message.content) }
-    Box(modifier.fillMaxWidth(), contentAlignment = if (own) Alignment.CenterEnd else Alignment.CenterStart) {
-        Surface(
-            modifier = Modifier.widthIn(max = 560.dp),
-            shape = MaterialTheme.shapes.medium,
-            color = when {
-                highlighted -> MaterialTheme.colorScheme.tertiaryContainer
-                own -> MaterialTheme.colorScheme.primaryContainer
-                else -> MaterialTheme.colorScheme.surfaceContainerLowest
-            }
-        ) {
-            Column(Modifier.padding(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(message.author?.fullName ?: "—", size = 24.dp)
-                    Text(if (own) "Вы" else message.author?.fullName ?: "—", style = MaterialTheme.typography.labelLarge)
-                    Text(message.createdAt.toShortDateTime(), style = MaterialTheme.typography.labelSmall)
-                    if (message.editedAt != null) Text("изменено", style = MaterialTheme.typography.labelSmall)
-                    if (own && message.revokedAt == null) {
-                        Text("Доставлено", style = MaterialTheme.typography.labelSmall)
-                        if (message.readByCount > 0) Text("Прочитано: ${message.readByCount}", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                message.source?.let { source ->
-                    Text("Переслано от ${source.author?.fullName ?: "—"}", style = MaterialTheme.typography.labelSmall)
-                }
-                message.replyTo?.let { reply ->
-                    Surface(Modifier.fillMaxWidth().padding(top = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Text("${reply.author?.fullName ?: "—"}: ${reply.contentPreview}", Modifier.padding(8.dp), maxLines = 2)
-                    }
-                }
-                if (message.revokedAt != null) {
-                    Text("Сообщение удалено", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    Text(formattedChatText(message.content, searchQuery), style = MaterialTheme.typography.bodyMedium)
-                    message.attachments.forEach { attachment ->
-                        if (isPreviewableImage(attachment.mimeType, attachment.sizeBytes)) {
-                            LaunchedEffect(attachment.id) { onLoadImage(attachment) }
-                            imagePreviews[attachment.id]?.let { DecodedImagePreview(it) }
-                        }
-                        AttachmentRow(
-                            attachment = attachment,
-                            isDownloading = downloadingAttachmentId == attachment.id,
-                            onDownload = { onDownloadAttachment(attachment) }
-                        )
-                    }
-                }
-                ChatReactionRow(
-                    reactions = message.reactions,
-                    canWrite = canWrite && message.revokedAt == null,
-                    pickerOpen = reactionPickerOpen,
-                    onPickerToggle = { reactionPickerOpen = !reactionPickerOpen },
-                    onToggle = {
-                        onToggleReaction(it)
-                        reactionPickerOpen = false
-                    }
-                )
-                if (canWrite && message.revokedAt == null) {
-                    Row {
-                        TextButton(onClick = onReply) { Text("Ответить") }
-                        TextButton(onClick = { forwarding = true }) { Text("Переслать") }
-                        if (canEditChatMessage(own, canWrite, message.revokedAt != null)) {
-                            TextButton(onClick = { editing = true }) { Text("Изменить") }
-                            TextButton(onClick = { revoking = true }) { Text("Удалить") }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (editing) {
-        AlertDialog(
-            onDismissRequest = { editing = false },
-            title = { Text("Изменить сообщение") },
-            text = { OutlinedTextField(editDraft, { editDraft = it }, minLines = 3) },
-            confirmButton = {
-                TextButton(onClick = {
-                    onEdit(message, editDraft)
-                    editing = false
-                }, enabled = editDraft.isNotBlank()) { Text("Сохранить") }
-            },
-            dismissButton = { TextButton(onClick = { editing = false }) { Text("Отмена") } }
-        )
-    }
-    if (revoking) {
-        AlertDialog(
-            onDismissRequest = { revoking = false },
-            title = { Text("Удалить сообщение?") },
-            text = { Text("Текст будет скрыт, а системный след сохранится.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onRevoke(message)
-                    revoking = false
-                }) { Text("Удалить") }
-            },
-            dismissButton = { TextButton(onClick = { revoking = false }) { Text("Отмена") } }
-        )
-    }
-    if (forwarding) {
-        AlertDialog(
-            onDismissRequest = { forwarding = false },
-            title = { Text("Переслать сообщение") },
-            text = {
-                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                    forwardTargets.filter { it.canWrite }.forEach { target ->
-                        TextButton(onClick = {
-                            onForward(message, target)
-                            forwarding = false
-                        }, modifier = Modifier.fillMaxWidth()) {
-                            Text(target.title ?: "${target.kind} #${target.id}")
-                        }
-                    }
-                    if (forwardTargets.none { it.canWrite }) Text("Нет доступных чатов для пересылки.")
-                }
-            },
-            confirmButton = { TextButton(onClick = { forwarding = false }) { Text("Отмена") } }
-        )
     }
 }
 
@@ -890,7 +354,21 @@ private fun TaskChatContextPanel(
             )
         }
 
-        ContextRow("Номер", task.number)
+        Text("Описание", style = MaterialTheme.typography.titleSmall)
+        if (task.description.isNullOrBlank()) {
+            Text(
+                text = "Описание не заполнено.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            LinkifiedText(task.description!!, style = MaterialTheme.typography.bodyMedium)
+        }
+        task.acceptanceCriteria?.takeIf { it.isNotBlank() }?.let {
+            Text("Критерии приёмки", style = MaterialTheme.typography.titleSmall)
+            LinkifiedText(it, style = MaterialTheme.typography.bodyMedium)
+        }
+
         ContextRow("Название", task.title)
         ContextRow("Статус", task.status.localizedName())
         ContextRow("Приоритет", task.priority.localizedName())

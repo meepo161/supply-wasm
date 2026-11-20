@@ -55,6 +55,7 @@ interface WmsRepository {
     suspend fun createLocation(request: CreateStorageLocationRequest): ApiResult<StorageLocationDto>
 
     suspend fun listNomenclature(): ApiResult<List<NomenclatureDto>>
+    suspend fun getNomenclatureDetails(id: Long): ApiResult<org.example.project.dto.NomenclatureDetailsDto>
     suspend fun createNomenclature(request: CreateNomenclatureRequest): ApiResult<NomenclatureDto>
     suspend fun archiveNomenclature(id: Long): ApiResult<NomenclatureDto>
 

@@ -34,10 +34,7 @@ fun List<TaskDto>.filterByProject(projectId: Long?): List<TaskDto> =
 fun List<TaskDto>.filterByQuery(query: String): List<TaskDto> {
     val normalized = query.trim()
     if (normalized.isEmpty()) return this
-    return filter { task ->
-        task.number.contains(normalized, ignoreCase = true) ||
-            task.title.contains(normalized, ignoreCase = true)
-    }
+    return filter { task -> task.title.contains(normalized, ignoreCase = true) }
 }
 
 fun List<TaskDto>.filterMine(currentUserId: Long?): List<TaskDto> =

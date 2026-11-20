@@ -301,7 +301,38 @@ class WmsViewModel(
     }
 
     fun selectNomenclature(nomenclature: NomenclatureDto?) {
-        _uiState.value = _uiState.value.copy(selectedNomenclature = nomenclature, operationError = null)
+        _uiState.value = _uiState.value.copy(
+            selectedNomenclature = nomenclature,
+            nomenclatureDetails = null,
+            nomenclatureDetailsLoading = nomenclature != null,
+            operationError = null
+        )
+        nomenclature ?: return
+        viewModelScope.launch {
+            when (val result = repository.getNomenclatureDetails(nomenclature.id)) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.selectedNomenclature?.id == nomenclature.id) {
+                        _uiState.value = _uiState.value.copy(
+                            selectedNomenclature = result.data.item,
+                            nomenclatureDetails = result.data,
+                            nomenclatureDetailsLoading = false
+                        )
+                    }
+                }
+                is ApiResult.Error -> {
+                    if (_uiState.value.selectedNomenclature?.id == nomenclature.id) {
+                        _uiState.value = _uiState.value.copy(
+                            nomenclatureDetailsLoading = false,
+                            operationError = result.error
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun updateNomenclatureSearch(value: String) {
+        _uiState.value = _uiState.value.copy(nomenclatureSearch = value)
     }
 
     fun loadStock() {
@@ -1860,6 +1891,9 @@ data class WmsUiState(
     val receiptFilters: ReceiptFilters = ReceiptFilters(),
     val currentReservation: org.example.project.dto.ReservationDto? = null,
     val selectedNomenclature: org.example.project.dto.NomenclatureDto? = null,
+    val nomenclatureDetails: org.example.project.dto.NomenclatureDetailsDto? = null,
+    val nomenclatureDetailsLoading: Boolean = false,
+    val nomenclatureSearch: String = "",
     val selectedTab: WmsTab = WmsTab.WAREHOUSES,
     val isLoading: Boolean = false,
     val operationError: ApiError? = null,

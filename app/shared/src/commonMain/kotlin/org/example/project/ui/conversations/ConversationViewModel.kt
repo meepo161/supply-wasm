@@ -1,5 +1,6 @@
 package org.example.project.ui.conversations
 
+import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlin.random.Random
@@ -235,24 +236,11 @@ class ConversationViewModel(
         selectConversation(conversation)
     }
 
-    /** Task Chat обслуживается отдельным API; не запускаем его через Conversations API. */
+    /** Task Chat использует общий экран; репозиторий направляет вызовы в Task Chat API. */
     fun openTaskChat(conversation: ConversationDto) {
         if (released) return
         require(conversation.kind == ConversationKind.TASK)
-        navigationGate.next()
-        messageSearchGeneration++
-        messageSearchJob?.cancel()
-        realtimeJob?.cancel()
-        realtimeJob = null
-        historyJob?.cancel()
-        historyJob = null
-        realtimeMerger = ConversationRealtimeMerger(
-            initialEventId = reconnectCursors[conversation.localKey()]?.lastEventId ?: 0
-        )
-        _uiState.value = _uiState.value.copy(
-            selectedConversation = conversation,
-            messages = restoredMessages(conversation)
-        )
+        selectConversation(conversation)
     }
 
     fun selectConversation(conversation: ConversationDto) {
@@ -459,33 +447,49 @@ class ConversationViewModel(
         val selected = _uiState.value.selectedConversation ?: return
         val key = selected.localKey()
         pickAttachmentFile(
-            onPicked = { file ->
-                val currentFiles = localState.files(key)
-                val validationError = validateAttachmentSelection(
-                    currentFiles.map { it.bytes.size.toLong() } + file.bytes.size.toLong()
-                )
-                if (validationError == null) {
-                    localState.setFiles(key, currentFiles + file)
-                }
-                if (isSameConversation(_uiState.value.selectedConversation, selected.id, selected.kind)) {
-                    _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages.copy(
-                            pendingFiles = localState.files(key),
-                            attachmentPickerError = validationError
-                        )
-                    )
-                }
-            },
-            onError = { error ->
-                if (isSameConversation(_uiState.value.selectedConversation, selected.id, selected.kind)) {
-                    _uiState.value = _uiState.value.copy(
-                        messages = _uiState.value.messages.copy(attachmentPickerError = error)
-                    )
-                }
-            },
+            onPicked = { addPendingFile(selected, key, it) },
+            onError = { showAttachmentError(selected, it) },
             existingFileCount = localState.files(key).size,
             existingTotalBytes = localState.files(key).sumOf { it.bytes.size.toLong() }
         )
+    }
+
+    fun dropFiles(event: DragAndDropEvent): Boolean {
+        val selected = _uiState.value.selectedConversation ?: return false
+        if (!selected.canWrite || _uiState.value.messages.isSending) return false
+        val key = selected.localKey()
+        return event.readAttachmentFiles(
+            onPicked = { addPendingFile(selected, key, it) },
+            onError = { showAttachmentError(selected, it) },
+            existingFileCount = localState.files(key).size,
+            existingTotalBytes = localState.files(key).sumOf { it.bytes.size.toLong() }
+        )
+    }
+
+    private fun addPendingFile(selected: ConversationDto, key: String, file: AttachmentFileData) {
+        val currentFiles = localState.files(key)
+        val validationError = validateAttachmentSelection(
+            currentFiles.map { it.bytes.size.toLong() } + file.bytes.size.toLong()
+        )
+        if (validationError == null) {
+            localState.setFiles(key, currentFiles + file)
+        }
+        if (isSameConversation(_uiState.value.selectedConversation, selected.id, selected.kind)) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.copy(
+                    pendingFiles = localState.files(key),
+                    attachmentPickerError = validationError
+                )
+            )
+        }
+    }
+
+    private fun showAttachmentError(selected: ConversationDto, error: String) {
+        if (isSameConversation(_uiState.value.selectedConversation, selected.id, selected.kind)) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.copy(attachmentPickerError = error)
+            )
+        }
     }
 
     fun clearPendingFile() {
@@ -507,9 +511,47 @@ class ConversationViewModel(
 
     fun setReplyToMessageId(messageId: Long?) {
         val selected = _uiState.value.selectedConversation ?: return
+        if (messageId != null && _uiState.value.messages.editingMessageId != null) {
+            cancelEditingMessage()
+        }
         localState.setReplyTo(selected.localKey(), messageId)
         _uiState.value = _uiState.value.copy(
             messages = _uiState.value.messages.copy(replyToMessageId = messageId)
+        )
+    }
+
+    fun startEditingMessage(message: ConversationMessageDto) {
+        val selected = _uiState.value.selectedConversation ?: return
+        if (!selected.canWrite || message.author?.userId != currentUser.id || message.revokedAt != null) return
+        val key = selected.localKey()
+        val current = _uiState.value.messages
+        val draftBackup = if (current.editingMessageId == null) current.draft else current.draftBeforeEditing
+        localState.setDraft(key, message.content)
+        localState.setReplyTo(key, null)
+        _uiState.value = _uiState.value.copy(
+            messages = current.copy(
+                draft = message.content,
+                replyToMessageId = null,
+                editingMessageId = message.id,
+                draftBeforeEditing = draftBackup,
+                sendError = null
+            )
+        )
+    }
+
+    fun cancelEditingMessage() {
+        val selected = _uiState.value.selectedConversation ?: return
+        val current = _uiState.value.messages
+        if (current.editingMessageId == null) return
+        val restoredDraft = current.draftBeforeEditing.orEmpty()
+        localState.setDraft(selected.localKey(), restoredDraft)
+        _uiState.value = _uiState.value.copy(
+            messages = current.copy(
+                draft = restoredDraft,
+                editingMessageId = null,
+                draftBeforeEditing = null,
+                sendError = null
+            )
         )
     }
 
@@ -535,7 +577,6 @@ class ConversationViewModel(
     }
 
     private fun markConversationRead(selected: ConversationDto, messageId: Long) {
-        if (selected.kind == ConversationKind.TASK) return
         val key = selected.localKey()
         if (messageId <= (lastReadRequests[key] ?: 0L)) return
         lastReadRequests[key] = messageId
@@ -718,17 +759,46 @@ class ConversationViewModel(
     fun editMessage(message: ConversationMessageDto, content: String) {
         val selected = _uiState.value.selectedConversation ?: return
         if (!selected.canWrite || message.author?.userId != currentUser.id || message.revokedAt != null) return
-        if (content.isBlank()) return
+        if (content.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.copy(
+                    sendError = ApiError("VALIDATION_ERROR", "Текст сообщения не может быть пустым")
+                )
+            )
+            return
+        }
         val client = conversationRepository as? ConversationApiClient ?: return
+        val key = selected.localKey()
+        val restoredDraft = _uiState.value.messages.draftBeforeEditing.orEmpty()
+        _uiState.value = _uiState.value.copy(
+            messages = _uiState.value.messages.copy(isSending = true, sendError = null)
+        )
         coroutineScope.launch {
             when (val result = client.editMessage(selected.id, message.id, EditMessageRequest(content.trim(), message.version))) {
-                is ApiResult.Success -> applyRealtimeEvent(
-                    selected.id,
-                    selected.kind,
-                    ConversationRealtimeEvent.Message(result.data, ConversationMessageEventType.EDITED)
-                )
+                is ApiResult.Success -> {
+                    applyRealtimeEvent(
+                        selected.id,
+                        selected.kind,
+                        ConversationRealtimeEvent.Message(result.data, ConversationMessageEventType.EDITED)
+                    )
+                    if (localState.draft(key) == content) localState.setDraft(key, restoredDraft)
+                    if (
+                        isSameConversation(_uiState.value.selectedConversation, selected.id, selected.kind) &&
+                        _uiState.value.messages.editingMessageId == message.id
+                    ) {
+                        _uiState.value = _uiState.value.copy(
+                            messages = _uiState.value.messages.copy(
+                                draft = restoredDraft,
+                                editingMessageId = null,
+                                draftBeforeEditing = null,
+                                isSending = false,
+                                sendError = null
+                            )
+                        )
+                    }
+                }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    messages = _uiState.value.messages.copy(error = result.error)
+                    messages = _uiState.value.messages.copy(isSending = false, sendError = result.error)
                 )
             }
         }
@@ -820,6 +890,16 @@ class ConversationViewModel(
         if (!selected.canWrite) return
         val key = selected.localKey()
         val content = localState.draft(key)
+        val editingMessageId = _uiState.value.messages.editingMessageId
+        if (editingMessageId != null) {
+            val editingMessage = _uiState.value.messages.messages.find { it.id == editingMessageId }
+            if (editingMessage == null) {
+                cancelEditingMessage()
+            } else {
+                editMessage(editingMessage, content)
+            }
+            return
+        }
         val files = localState.files(key)
         if (content.isBlank() && files.isEmpty()) {
             _uiState.value = _uiState.value.copy(
@@ -1274,6 +1354,8 @@ data class ConversationMessagesUiState(
     val draft: String = "",
     val pendingFiles: List<AttachmentFileData> = emptyList(),
     val replyToMessageId: Long? = null,
+    val editingMessageId: Long? = null,
+    val draftBeforeEditing: String? = null,
     val scrollPosition: Int = 0,
     val readCursors: Map<Long, Long> = emptyMap(),
     val isPinned: Boolean = false,

@@ -114,7 +114,7 @@ class TaskListFilteringTest {
 
     @Test
     fun `text query finds a task by its number or title without changing its order`() {
-        assertEquals(listOf(2L), tasks.filterByQuery("2026-2").map { it.id })
+        assertTrue(tasks.filterByQuery("2026-2").isEmpty())
         assertEquals(listOf(3L), tasks.filterByQuery("задача 3").map { it.id })
         assertEquals(listOf(1L, 2L, 3L, 4L), tasks.filterByQuery("задача").map { it.id })
     }

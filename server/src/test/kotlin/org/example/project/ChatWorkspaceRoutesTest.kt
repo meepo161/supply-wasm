@@ -104,6 +104,7 @@ class ChatWorkspaceRoutesTest {
         val historyAfterRead = adminClient.get("/api/tasks/$taskId/chat/messages")
             .bodyAs<ApiResponse<ChatMessagePageDto>>().data!!
         assertEquals(1, historyAfterRead.messages.last().readByCount)
+        assertEquals(listOf(adminUser.id), historyAfterRead.messages.last().readBy.map { it.userId })
     }
 
     @Test

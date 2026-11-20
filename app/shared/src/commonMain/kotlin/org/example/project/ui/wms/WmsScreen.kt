@@ -318,6 +318,7 @@ private fun NomenclatureTab(
     state: WmsUiState,
     viewModel: WmsViewModel
 ) {
+    val visibleItems = filterNomenclature(state.nomenclature, state.nomenclatureSearch)
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -328,14 +329,23 @@ private fun NomenclatureTab(
             onRefresh = viewModel::loadNomenclature,
             createLabel = "Создать номенклатуру"
         )
+        OutlinedTextField(
+            value = state.nomenclatureSearch,
+            onValueChange = viewModel::updateNomenclatureSearch,
+            label = { Text("Поиск по коду, названию, описанию или штрихкоду") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.nomenclature.isEmpty()) {
             LoadingOverlay()
         } else if (state.nomenclature.isEmpty()) {
             EmptyState("Нет номенклатуры. Создайте первую позицию.")
+        } else if (visibleItems.isEmpty()) {
+            EmptyState("По запросу ничего не найдено.")
         } else {
             NomenclatureGrid(
-                items = state.nomenclature,
+                items = visibleItems,
                 onClick = { viewModel.selectNomenclature(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
@@ -343,7 +353,12 @@ private fun NomenclatureTab(
         if (state.selectedNomenclature != null) {
             NomenclatureDetailDialog(
                 item = state.selectedNomenclature!!,
+                details = state.nomenclatureDetails,
+                loading = state.nomenclatureDetailsLoading,
+                error = state.operationError,
+                warehouses = state.warehouses,
                 onArchive = { viewModel.archiveNomenclature(state.selectedNomenclature!!) },
+                onRetry = { viewModel.selectNomenclature(state.selectedNomenclature!!) },
                 onClose = { viewModel.selectNomenclature(null) }
             )
         }
@@ -353,29 +368,130 @@ private fun NomenclatureTab(
 @Composable
 private fun NomenclatureDetailDialog(
     item: org.example.project.dto.NomenclatureDto,
+    details: org.example.project.dto.NomenclatureDetailsDto?,
+    loading: Boolean,
+    error: org.example.project.dto.ApiError?,
+    warehouses: List<WarehouseDto>,
     onArchive: () -> Unit,
+    onRetry: () -> Unit,
     onClose: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(item.name) },
+        title = { Text("${item.code} — ${item.name}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(text = "Код: ${item.code}", style = MaterialTheme.typography.bodyMedium)
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(text = "Тип: ${item.type.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Ед.изм.: ${item.unit}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Единица измерения: ${item.unit}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Статус: ${if (item.archived) "Архив" else "Активна"}")
+                item.description?.takeIf { it.isNotBlank() }?.let { Text(it) }
                 if (item.barcodes.isNotEmpty()) {
-                    Text("Штрихкоды:", style = MaterialTheme.typography.labelLarge)
+                    Text("Штрихкоды", style = MaterialTheme.typography.titleSmall)
                     item.barcodes.forEach { barcode ->
                         Text(
-                            text = "${barcode.barcode} (${barcode.packageType.localizedName()}, ${barcode.quantityInPackage})",
+                            text = "${barcode.barcode} · ${barcode.packageType.localizedName()} · ${barcode.quantityInPackage} ${item.unit}",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
+                if (loading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                } else if (details == null) {
+                    error?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
+                    Button(onClick = onRetry) { Text("Загрузить данные") }
+                } else {
+                    HorizontalDivider()
+                    Text("Остатки", style = MaterialTheme.typography.titleMedium)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Физически", style = MaterialTheme.typography.labelMedium)
+                            Text("${details.physicalQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Резерв", style = MaterialTheme.typography.labelMedium)
+                            Text("${details.reservedQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Доступно", style = MaterialTheme.typography.labelMedium)
+                            Text("${details.availableQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
+                    if (details.stock.isEmpty()) {
+                        Text("На складах остатка нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        details.stock.forEach { stock ->
+                            val warehouse = warehouses.find { it.id == stock.warehouseId }
+                            Text(
+                                text = "${warehouse?.name ?: "Склад ${stock.warehouseId}"} · ${stock.locationCode} · ${stock.locationPurpose.localizedName()}\n" +
+                                    "Физ. ${stock.physicalQty}, резерв ${stock.reservedQty}, доступно ${stock.availableQty} ${item.unit}" +
+                                    (stock.lotNumber?.let { "\nПартия: $it" } ?: "") +
+                                    (stock.serialNumber?.let { "\nСерия: $it" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                    Text("Партии (${details.lots.size})", style = MaterialTheme.typography.titleMedium)
+                    details.lots.forEach { lot ->
+                        Text(
+                            text = lot.lotNumber +
+                                (lot.manufactureDate?.let { " · изготовлена $it" } ?: "") +
+                                (lot.expiryDate?.let { " · годна до $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (item.lotTracked && details.lots.isEmpty()) {
+                        Text("Партии ещё не зарегистрированы.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (item.serialTracked) {
+                        Text("Серийные номера (${details.serials.size})", style = MaterialTheme.typography.titleMedium)
+                        if (details.serials.isEmpty()) {
+                            Text("Серийные номера ещё не зарегистрированы.", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            details.serials.forEach { serial ->
+                                Text(serial.serialNumber, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                    Text("Журнал движений (${details.movements.size})", style = MaterialTheme.typography.titleMedium)
+                    if (details.movements.isEmpty()) {
+                        Text("Движений пока нет.", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        details.movements.forEach { movement ->
+                            val direction = when {
+                                movement.fromLocationCode != null && movement.toLocationCode != null ->
+                                    "${movement.fromLocationCode} → ${movement.toLocationCode}"
+                                movement.fromLocationCode != null -> "из ${movement.fromLocationCode}"
+                                movement.toLocationCode != null -> "в ${movement.toLocationCode}"
+                                else -> ""
+                            }
+                            Text(
+                                text = "${movement.createdAt.toShortDate()} · ${movement.type.localizedName()} · ${movement.quantity} ${item.unit}\n" +
+                                    listOf(
+                                        direction,
+                                        "${movement.documentType} #${movement.documentId}",
+                                        movement.createdByName,
+                                        movement.note.orEmpty()
+                                    ).filter { it.isNotBlank() }.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
             }
         },
-        confirmButton = { Button(onClick = onArchive) { Text("Архивировать") } },
+        confirmButton = {
+            if (!item.archived) {
+                Button(onClick = onArchive, enabled = !loading) { Text("Архивировать") }
+            }
+        },
         dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
     )
 }

@@ -115,13 +115,14 @@ class ConversationUnifiedListTest {
             id = 10,
             taskId = 5,
             author = null,
-            type = ChatMessageType.USER,
+            type = ChatMessageType.SYSTEM,
             content = "привет",
             createdAt = "2026-11-17T10:00:00Z"
         )
         val mapped = chatMessage.toConversationMessage()
         assertEquals(10L, mapped.id)
         assertEquals(-5L, mapped.conversationId)
+        assertEquals(ChatMessageType.SYSTEM, mapped.type)
         assertEquals("привет", mapped.content)
         assertTrue(mapped.attachments.isEmpty())
     }

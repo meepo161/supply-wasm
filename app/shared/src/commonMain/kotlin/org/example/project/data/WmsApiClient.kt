@@ -74,6 +74,9 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
 
     override suspend fun listNomenclature(): ApiResult<List<NomenclatureDto>> = get("/api/wms/nomenclature")
 
+    override suspend fun getNomenclatureDetails(id: Long): ApiResult<org.example.project.dto.NomenclatureDetailsDto> =
+        get("/api/wms/nomenclature/$id/details")
+
     override suspend fun createNomenclature(request: CreateNomenclatureRequest): ApiResult<NomenclatureDto> =
         post("/api/wms/nomenclature", request)
 

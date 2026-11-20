@@ -674,6 +674,7 @@ class ConversationService(
         val reactionsMap = conversationRepository.reactionsForMessages(ids, viewerId)
         val mentionsMap = conversationRepository.mentionedUserIdsForMessages(ids)
         val cursors = conversationRepository.readCursors(rows.first().conversationId)
+        val readerNames = conversationRepository.userNames(cursors.map { it.first })
         val replyMap = conversationRepository.listMessageRowsByIds(rows.mapNotNull { it.replyToId }.distinct())
             .associateBy { it.id }
         val sourceAuthorNames = conversationRepository.userNames(rows.mapNotNull { it.sourceAuthorId }.distinct())
@@ -696,6 +697,9 @@ class ConversationService(
                 reactions = reactionsMap[row.id] ?: emptyList(),
                 mentionedUserIds = mentionsMap[row.id] ?: emptyList(),
                 readByCount = cursors.count { it.second >= row.id },
+                readBy = cursors.filter { it.second >= row.id }.map { (userId, _) ->
+                    ChatAuthorDto(userId, readerNames[userId].orEmpty())
+                },
                 editedAt = row.editedAt?.toString(),
                 revokedAt = row.revokedAt?.toString(),
                 source = row.sourceMessageId?.let { sourceId ->
