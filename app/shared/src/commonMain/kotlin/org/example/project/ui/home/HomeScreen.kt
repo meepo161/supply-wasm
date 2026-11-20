@@ -63,6 +63,8 @@ import org.example.project.ui.theme.SoftButton
 fun HomeScreen(
     viewModel: HomeViewModel,
     onOpenTask: (Long) -> Unit,
+    onOpenConversation: (Long) -> Unit,
+    onOpenProjectChat: (Long) -> Unit,
     onOpenNotifications: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -174,7 +176,9 @@ fun HomeScreen(
                             notifications = unreadNotifications,
                             loading = state.isLoadingNotifications,
                             onClick = { notification ->
-                                viewModel.openNotificationEntity(notification, onOpenTask)
+                                viewModel.openNotificationEntity(
+                                    notification, onOpenTask, onOpenConversation, onOpenProjectChat
+                                )
                             },
                             onOpenAll = onOpenNotifications
                         )
@@ -218,7 +222,9 @@ fun HomeScreen(
                     notifications = unreadNotifications,
                     loading = state.isLoadingNotifications,
                     onClick = { notification ->
-                        viewModel.openNotificationEntity(notification, onOpenTask)
+                        viewModel.openNotificationEntity(
+                            notification, onOpenTask, onOpenConversation, onOpenProjectChat
+                        )
                     },
                     onOpenAll = onOpenNotifications
                 )

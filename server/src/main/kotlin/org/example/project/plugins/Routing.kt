@@ -4,8 +4,13 @@ import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import org.example.project.config.AppConfig
 import org.example.project.realtime.ChatEventBus
+import org.example.project.realtime.ConversationEventBus
+import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.ChatRepository
+import org.example.project.repository.ConversationRepository
 import org.example.project.realtime.chatWebSocketRoutes
+import org.example.project.realtime.conversationWebSocketRoutes
+import org.example.project.realtime.notificationWebSocketRoutes
 import org.example.project.route.*
 import org.example.project.service.*
 import org.koin.ktor.ext.inject
@@ -22,6 +27,7 @@ fun Application.configureRouting() {
     val taskService: TaskService by inject()
     val chatService: ChatService by inject()
     val notificationService: NotificationService by inject()
+    val pushService: PushService by inject()
     val searchService: SearchService by inject()
     val wmsService: WmsService by inject()
     val receiptService: ReceiptService by inject()
@@ -38,7 +44,12 @@ fun Application.configureRouting() {
     val demandService: DemandService by inject()
     val approvalService: ApprovalService by inject()
     val chatEventBus: ChatEventBus by inject()
+    val notificationEventBus: NotificationEventBus by inject()
+    val conversationEventBus: ConversationEventBus by inject()
     val chatRepository: ChatRepository by inject()
+    val conversationRepository: ConversationRepository by inject()
+    val conversationService: ConversationService by inject()
+    val unifiedChatListService: UnifiedChatListService by inject()
     val config: AppConfig by inject()
 
     routing {
@@ -52,8 +63,13 @@ fun Application.configureRouting() {
         taskRoutes(taskService)
         chatRoutes(chatService)
         notificationRoutes(notificationService)
+        pushRoutes(pushService)
         searchRoutes(searchService)
         chatWebSocketRoutes(chatService, chatRepository, sessionService, chatEventBus, config.cookieName, config.allowedOrigins)
+        notificationWebSocketRoutes(notificationService, sessionService, notificationEventBus, config.cookieName, config.allowedOrigins)
+        conversationRoutes(conversationService)
+        unifiedChatRoutes(unifiedChatListService)
+        conversationWebSocketRoutes(conversationService, conversationRepository, sessionService, conversationEventBus, config.cookieName, config.allowedOrigins)
         wmsRoutes(wmsService)
         receiptRoutes(receiptService)
         wmsTransferRoutes(wmsTransferService)

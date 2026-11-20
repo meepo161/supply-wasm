@@ -47,6 +47,12 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listNomenclature(call.currentUser())))
         }
 
+        get("/nomenclature/{id}/details") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getNomenclatureDetails(id, call.currentUser())))
+        }
+
         post("/nomenclature/{id}/archive") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid nomenclature id")
@@ -63,6 +69,10 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             }
             call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getStock(warehouseId, nomenclatureId, call.currentUser())))
         }
+
+        // Приёмки обрабатываются в receiptRoutes: там же находятся основания,
+        // расхождения, проведение и поздние связи. Путь /api/wms/receipts* не
+        // должен дублироваться в wmsRoutes, иначе Ktor выберет первый обработчик.
 
         post("/reservations") {
             val request = call.receive<CreateReservationRequest>()

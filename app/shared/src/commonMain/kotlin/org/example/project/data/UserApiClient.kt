@@ -8,10 +8,13 @@ import io.ktor.client.request.get
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
 import org.example.project.dto.UserDto
+import org.example.project.dto.UserOptionDto
 
 class UserApiClient(private val client: HttpClient) : UserRepository {
 
     override suspend fun list(): ApiResult<List<UserDto>> = get("/api/users")
+
+    override suspend fun listOptions(): ApiResult<List<UserOptionDto>> = get("/api/users/options")
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         try {

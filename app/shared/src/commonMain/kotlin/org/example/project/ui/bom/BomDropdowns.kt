@@ -16,7 +16,30 @@ import org.example.project.dto.BomLineDto
 import org.example.project.dto.BomRevisionStatus
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ProductModelStatus
+import org.example.project.dto.UserOptionDto
 import org.example.project.dto.WarehouseDto
+import org.example.project.ui.components.SearchableDropdown
+
+@Composable
+fun UserOptionDropdown(
+    users: List<UserOptionDto>,
+    selected: UserOptionDto?,
+    onSelect: (UserOptionDto) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Сотрудник"
+) {
+    SearchableDropdown(
+        items = users,
+        selected = selected,
+        onSelect = onSelect,
+        onClear = onClear,
+        label = label,
+        itemText = { it.fullName },
+        modifier = modifier,
+        emptyText = "Нет активных сотрудников"
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

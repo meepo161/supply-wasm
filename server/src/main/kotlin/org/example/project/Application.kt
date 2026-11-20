@@ -3,6 +3,7 @@ package org.example.project
 import io.ktor.server.application.*
 import io.ktor.server.netty.EngineMain
 import io.ktor.server.websocket.WebSockets
+import kotlinx.coroutines.launch
 import com.zaxxer.hikari.HikariDataSource
 import org.example.project.config.AppConfig
 import org.example.project.di.appModule
@@ -16,12 +17,12 @@ fun main(args: Array<String>) {
     EngineMain.main(args)
 }
 
-fun Application.module() {
+fun Application.module(pushTransport: org.example.project.service.PushTransport? = null) {
     val config = AppConfig.load(environment.config)
 
     install(Koin) {
         slf4jLogger()
-        modules(appModule(config))
+        modules(appModule(config, pushTransport))
     }
 
     monitor.subscribe(ApplicationStopped) {
@@ -38,4 +39,10 @@ fun Application.module() {
     configureHTTP(config)
     configureStatusPages()
     configureRouting()
+
+    val notificationEventBus = getKoin().get<org.example.project.realtime.NotificationEventBus>()
+    val pushService = getKoin().get<org.example.project.service.PushService>()
+    launch {
+        notificationEventBus.notifications.collect { event -> pushService.send(event) }
+    }
 }

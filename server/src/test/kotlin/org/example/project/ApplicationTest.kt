@@ -16,6 +16,7 @@ import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -51,6 +52,27 @@ class ApplicationTest {
         val meBody = meResponse.bodyAs<ApiResponse<MeResponse>>()
         assertTrue(meBody.success)
         assertEquals("admin", meBody.data!!.user.login)
+    }
+
+    @Test
+    fun `emergency admin credentials restore an active database administrator`() = testApp {
+        val client = jsonClient()
+
+        val loginResponse = client.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("admin", "avem2416")))
+        }
+
+        assertEquals(HttpStatusCode.OK, loginResponse.status)
+        val loginBody = loginResponse.bodyAs<ApiResponse<LoginResponse>>()
+        assertEquals("admin", loginBody.data!!.user.login)
+        assertTrue(loginBody.data!!.user.permissions.contains("*:*"))
+
+        val meResponse = client.get("/api/auth/me")
+        assertEquals(HttpStatusCode.OK, meResponse.status)
+        val meBody = meResponse.bodyAs<ApiResponse<MeResponse>>()
+        assertEquals("admin", meBody.data!!.user.login)
+        assertTrue(meBody.data!!.user.permissions.contains("*:*"))
     }
 
     @Test
@@ -532,6 +554,81 @@ class ApplicationTest {
 
         val after = ivanClient.get("/api/auth/me")
         assertEquals(HttpStatusCode.Unauthorized, after.status)
+    }
+
+    @Test
+    fun `user options are available without users read_any and contain only id and fullName`() = testApp {
+        val adminClient = jsonClient()
+        adminClient.post("/api/admin/bootstrap") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(BootstrapRequest("admin", "admin123", "Admin User")))
+        }
+        adminClient.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("admin", "admin123")))
+        }
+        val createResponse = adminClient.post("/api/users") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(CreateUserRequest("ivan", "password", "Ivan Ivanov")))
+        }
+        assertEquals(HttpStatusCode.Created, createResponse.status)
+
+        val ivanClient = jsonClient()
+        val loginResponse = ivanClient.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("ivan", "password")))
+        }
+        assertEquals(HttpStatusCode.OK, loginResponse.status)
+
+        val response = ivanClient.get("/api/users/options")
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        val raw = response.bodyAsText()
+        assertFalse(raw.contains("\"login\""))
+        assertFalse(raw.contains("\"email\""))
+        assertFalse(raw.contains("\"permissions\""))
+        val options = response.bodyAs<ApiResponse<List<UserOptionDto>>>().data!!
+        assertEquals(setOf("Admin User", "Ivan Ivanov"), options.map { it.fullName }.toSet())
+        assertEquals(options.map { it.fullName }.sorted(), options.map { it.fullName })
+    }
+
+    @Test
+    fun `user options exclude inactive users`() = testApp {
+        val adminClient = jsonClient()
+        adminClient.post("/api/admin/bootstrap") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(BootstrapRequest("admin", "admin123", "Admin User")))
+        }
+        adminClient.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("admin", "admin123")))
+        }
+        val createResponse = adminClient.post("/api/users") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(CreateUserRequest("ivan", "password", "Ivan Ivanov")))
+        }
+        assertEquals(HttpStatusCode.Created, createResponse.status)
+        val created = createResponse.bodyAs<ApiResponse<UserDto>>().data!!
+
+        val before = adminClient.get("/api/users/options")
+            .bodyAs<ApiResponse<List<UserOptionDto>>>().data!!
+        assertTrue(before.any { it.id == created.id })
+
+        val deactivate = adminClient.put("/api/users/${created.id}/active") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SetActiveRequest(false, created.version)))
+        }
+        assertEquals(HttpStatusCode.OK, deactivate.status)
+
+        val after = adminClient.get("/api/users/options")
+            .bodyAs<ApiResponse<List<UserOptionDto>>>().data!!
+        assertTrue(after.none { it.id == created.id })
+        assertTrue(after.any { it.fullName == "Admin User" })
+    }
+
+    @Test
+    fun `user options require authentication`() = testApp {
+        val response = jsonClient().get("/api/users/options")
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
     }
 
     private fun testApp(

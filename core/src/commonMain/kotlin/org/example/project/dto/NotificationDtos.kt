@@ -10,7 +10,8 @@ data class NotificationDto(
     val entityId: Long,
     val title: String,
     val isRead: Boolean,
-    val createdAt: String
+    val createdAt: String,
+    val taskId: Long? = null
 )
 
 @Serializable

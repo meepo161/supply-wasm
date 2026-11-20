@@ -12,6 +12,8 @@ import org.example.project.data.BomApiClient
 import org.example.project.data.BomRepository
 import org.example.project.data.ChatApiClient
 import org.example.project.data.ChatRepository
+import org.example.project.data.ConversationApiClient
+import org.example.project.data.ConversationRepository
 import org.example.project.data.DemandApiClient
 import org.example.project.data.DemandRepository
 import org.example.project.data.DocumentApiClient
@@ -47,6 +49,7 @@ val sharedModule = module {
     singleOf(::AttachmentApiClient) bind AttachmentRepository::class
     singleOf(::TaskApiClient) bind TaskRepository::class
     singleOf(::ChatApiClient) bind ChatRepository::class
+    singleOf(::ConversationApiClient) bind ConversationRepository::class
     singleOf(::WmsApiClient) bind WmsRepository::class
     singleOf(::BomApiClient) bind BomRepository::class
     singleOf(::DemandApiClient) bind DemandRepository::class

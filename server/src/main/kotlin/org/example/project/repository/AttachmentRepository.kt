@@ -1,6 +1,7 @@
 package org.example.project.repository
 
 import org.example.project.generated.jooq.tables.Attachments.ATTACHMENTS
+import org.example.project.generated.jooq.tables.TaskChatMessages.TASK_CHAT_MESSAGES
 import org.example.project.generated.jooq.tables.Users.USERS
 import org.jooq.DSLContext
 import org.jooq.Record
@@ -34,6 +35,22 @@ class AttachmentRepository(private val dsl: DSLContext) {
             .and(ATTACHMENTS.ENTITY_ID.eq(entityId))
             .orderBy(ATTACHMENTS.ID.asc())
             .fetch { mapRow(it) }
+    }
+
+    fun listForMessages(entityType: String, messageIds: List<Long>): List<AttachmentRow> {
+        if (messageIds.isEmpty()) return emptyList()
+        return baseQuery()
+            .where(ATTACHMENTS.ENTITY_TYPE.eq(entityType))
+            .and(ATTACHMENTS.ENTITY_ID.`in`(messageIds))
+            .orderBy(ATTACHMENTS.ID.asc())
+            .fetch { mapRow(it) }
+    }
+
+    fun findTaskIdForChatMessage(messageId: Long): Long? {
+        return dsl.select(TASK_CHAT_MESSAGES.TASK_ID)
+            .from(TASK_CHAT_MESSAGES)
+            .where(TASK_CHAT_MESSAGES.ID.eq(messageId))
+            .fetchOne(TASK_CHAT_MESSAGES.TASK_ID)
     }
 
     fun insert(

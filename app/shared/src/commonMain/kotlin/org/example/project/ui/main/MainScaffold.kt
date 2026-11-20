@@ -32,6 +32,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,8 +48,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.example.project.data.AdminRepository
+import org.example.project.data.AttachmentRepository
 import org.example.project.data.BomRepository
 import org.example.project.data.ChatRepository
+import org.example.project.data.ConversationRepository
 import org.example.project.data.DemandRepository
 import org.example.project.data.DocumentRepository
 import org.example.project.data.NotificationRepository
@@ -64,6 +68,8 @@ import org.example.project.ui.admin.AdminScreen
 import org.example.project.ui.admin.AdminViewModel
 import org.example.project.ui.bom.BomScreen
 import org.example.project.ui.bom.BomViewModel
+import org.example.project.ui.conversations.ConversationViewModel
+import org.example.project.ui.conversations.ConversationsScreen
 import org.example.project.ui.demand.DemandScreen
 import org.example.project.ui.demand.DemandViewModel
 import org.example.project.ui.documents.DocumentViewModel
@@ -73,6 +79,7 @@ import org.example.project.ui.home.HomeViewModel
 import org.example.project.ui.notifications.NotificationScreen
 import org.example.project.ui.notifications.NotificationViewModel
 import org.example.project.ui.projects.ProjectViewModel
+import org.example.project.ui.projects.ProjectTab
 import org.example.project.ui.projects.ProjectsScreen
 import org.example.project.ui.search.GlobalSearchBox
 import org.example.project.ui.search.SearchViewModel
@@ -116,21 +123,58 @@ fun MainScaffold(
     val demandRepository: DemandRepository = koinInject()
     val documentRepository: DocumentRepository = koinInject()
     val notificationRepository: NotificationRepository = koinInject()
+    val conversationRepository: ConversationRepository = koinInject()
+    val attachmentRepository: AttachmentRepository = koinInject()
     val adminRepository: AdminRepository = koinInject()
     val searchRepository: SearchRepository = koinInject()
 
     val projectViewModel = remember(user.id) {
-        ProjectViewModel(projectRepository, userRepository)
+        ProjectViewModel(projectRepository, userRepository, taskRepository)
     }
     val taskViewModel = remember(user.id) {
-        TaskViewModel(taskRepository, chatRepository, userRepository, projectRepository)
+        TaskViewModel(
+            taskRepository, chatRepository, userRepository, projectRepository,
+            attachmentRepository, documentRepository, user.id,
+            conversationRepository = conversationRepository
+        )
     }
     val homeViewModel = remember(user.id) {
-        HomeViewModel(taskRepository, notificationRepository, user)
+        HomeViewModel(taskRepository, notificationRepository, conversationRepository, user)
     }
     val searchViewModel = remember(user.id) { SearchViewModel(searchRepository) }
     val notificationViewModel = remember(user.id) {
-        NotificationViewModel(notificationRepository, taskRepository, user)
+        NotificationViewModel(notificationRepository, taskRepository, conversationRepository, user)
+    }
+    val conversationViewModel = remember(user.id) {
+        ConversationViewModel(
+            conversationRepository, taskRepository, projectRepository,
+            attachmentRepository, userRepository, user
+        )
+    }
+    val projectUiState by projectViewModel.uiState.collectAsState()
+    val projectConversationViewModel = remember(
+        user.id,
+        projectUiState.selectedProject?.id,
+        selected == NavigationDestination.PROJECTS
+    ) {
+        ConversationViewModel(
+            conversationRepository, taskRepository, projectRepository,
+            attachmentRepository, userRepository, user
+        )
+    }
+    DisposableEffect(conversationViewModel) {
+        onDispose { conversationViewModel.close() }
+    }
+    DisposableEffect(projectConversationViewModel) {
+        onDispose { projectConversationViewModel.close() }
+    }
+    androidx.compose.runtime.LaunchedEffect(notificationViewModel) {
+        notificationViewModel.uiState.collect { state ->
+            if (!state.isLoading) {
+                homeViewModel.onNotificationsUpdated(state.notifications)
+                taskViewModel.onNotificationsUpdated(state.notifications)
+            }
+        }
     }
     val wmsViewModel = if (NavigationDestination.WMS in destinations) {
         remember(user.id) { WmsViewModel(wmsRepository, user.id) }
@@ -138,7 +182,7 @@ fun MainScaffold(
         null
     }
     val bomViewModel = if (NavigationDestination.BOM in destinations) {
-        remember(user) { BomViewModel(bomRepository, wmsRepository, user) }
+        remember(user) { BomViewModel(bomRepository, wmsRepository, userRepository, user) }
     } else {
         null
     }
@@ -205,6 +249,15 @@ fun MainScaffold(
     }
     val onOpenProject: (Long) -> Unit = { projectId ->
         projectViewModel.openProjectById(projectId)
+        selected = NavigationDestination.PROJECTS
+    }
+    val onOpenConversation: (Long) -> Unit = { conversationId ->
+        conversationViewModel.openConversationById(conversationId)
+        selected = NavigationDestination.CHAT
+    }
+    val onOpenProjectChat: (Long) -> Unit = { projectId ->
+        projectViewModel.openProjectById(projectId)
+        projectViewModel.selectDetailTab(ProjectTab.DISCUSSION)
         selected = NavigationDestination.PROJECTS
     }
     val onOpenNotifications: () -> Unit = {
@@ -285,6 +338,8 @@ fun MainScaffold(
                         projectViewModel = projectViewModel,
                         taskViewModel = taskViewModel,
                         notificationViewModel = notificationViewModel,
+                        conversationViewModel = conversationViewModel,
+                        projectConversationViewModel = projectConversationViewModel,
                         wmsViewModel = wmsViewModel,
                         bomViewModel = bomViewModel,
                         productionViewModel = productionViewModel,
@@ -294,6 +349,8 @@ fun MainScaffold(
                         documentViewModel = documentViewModel,
                         adminViewModel = adminViewModel,
                         onOpenTask = onOpenTask,
+                        onOpenConversation = onOpenConversation,
+                        onOpenProjectChat = onOpenProjectChat,
                         onOpenNotifications = onOpenNotifications,
                         onBackFromNotifications = onBackFromNotifications
                     )
@@ -836,6 +893,8 @@ private fun MainContent(
     projectViewModel: ProjectViewModel,
     taskViewModel: TaskViewModel,
     notificationViewModel: NotificationViewModel,
+    conversationViewModel: ConversationViewModel,
+    projectConversationViewModel: ConversationViewModel,
     wmsViewModel: WmsViewModel?,
     bomViewModel: BomViewModel?,
     productionViewModel: ProductionViewModel?,
@@ -845,6 +904,8 @@ private fun MainContent(
     documentViewModel: DocumentViewModel,
     adminViewModel: AdminViewModel?,
     onOpenTask: (Long) -> Unit,
+    onOpenConversation: (Long) -> Unit,
+    onOpenProjectChat: (Long) -> Unit,
     onOpenNotifications: () -> Unit,
     onBackFromNotifications: () -> Unit
 ) {
@@ -852,6 +913,8 @@ private fun MainContent(
         NavigationDestination.HOME -> HomeScreen(
             viewModel = homeViewModel,
             onOpenTask = onOpenTask,
+            onOpenConversation = onOpenConversation,
+            onOpenProjectChat = onOpenProjectChat,
             onOpenNotifications = onOpenNotifications
         )
 
@@ -864,7 +927,15 @@ private fun MainContent(
             currentUser = user,
             viewModel = projectViewModel,
             // Задача из вкладки «Задачи» проекта открывается в разделе задач.
-            onTaskOpen = onOpenTask
+            onOpenTask = onOpenTask,
+            conversationViewModel = projectConversationViewModel
+        )
+
+        NavigationDestination.CHAT -> ConversationsScreen(
+            viewModel = conversationViewModel,
+            taskViewModel = taskViewModel,
+            currentUser = user,
+            onOpenTask = onOpenTask
         )
 
         NavigationDestination.WMS -> wmsViewModel?.let {
@@ -896,6 +967,8 @@ private fun MainContent(
         NavigationDestination.NOTIFICATIONS -> NotificationScreen(
             viewModel = notificationViewModel,
             onOpenTask = onOpenTask,
+            onOpenConversation = onOpenConversation,
+            onOpenProjectChat = onOpenProjectChat,
             onBack = onBackFromNotifications
         )
 

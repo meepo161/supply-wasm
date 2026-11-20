@@ -4,13 +4,21 @@ import org.example.project.dto.NotificationDto
 import org.example.project.dto.NotificationPageDto
 import org.example.project.exception.NotFoundException
 import org.example.project.model.CurrentUser
+import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.NotificationRepository
 
 class NotificationService(private val notificationRepository: NotificationRepository) {
 
-    fun createForNewMessage(taskId: Long, messageId: Long, authorId: Long) {
+    fun createForNewMessage(taskId: Long, messageId: Long, authorId: Long): List<NotificationEventBus.Event> =
         notificationRepository.insertForMessage(taskId, messageId, authorId)
-    }
+            .map { NotificationEventBus.Event(it.userId, it.toDto()) }
+
+    fun createForNewConversationMessage(
+        conversationId: Long,
+        recipientIds: List<Long>
+    ): List<NotificationEventBus.Event> =
+        notificationRepository.insertForConversation(conversationId, recipientIds)
+            .map { NotificationEventBus.Event(it.userId, it.toDto()) }
 
     fun list(after: Long?, before: Long?, limit: Int, currentUser: CurrentUser): NotificationPageDto {
         val effectiveLimit = limit.coerceIn(1, 200)
@@ -57,7 +65,8 @@ class NotificationService(private val notificationRepository: NotificationReposi
         entityId = entityId,
         title = title,
         isRead = isRead,
-        createdAt = createdAt.toString()
+        createdAt = createdAt.toString(),
+        taskId = taskId
     )
 
     private fun org.example.project.generated.jooq.tables.records.NotificationsRecord.toDto(): NotificationDto = NotificationDto(
@@ -67,6 +76,8 @@ class NotificationService(private val notificationRepository: NotificationReposi
         entityId = entityId!!,
         title = title!!,
         isRead = isRead ?: false,
-        createdAt = createdAt?.toString() ?: ""
+        createdAt = createdAt?.toString() ?: "",
+        taskId = entityId?.takeIf { entityType == "TASK_CHAT_MESSAGE" }
+            ?.let(notificationRepository::findTaskIdByMessageId)
     )
 }

@@ -76,6 +76,9 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
 
     override suspend fun listNomenclature(): ApiResult<List<NomenclatureDto>> = get("/api/wms/nomenclature")
 
+    override suspend fun getNomenclatureDetails(id: Long): ApiResult<org.example.project.dto.NomenclatureDetailsDto> =
+        get("/api/wms/nomenclature/$id/details")
+
     override suspend fun createNomenclature(request: CreateNomenclatureRequest): ApiResult<NomenclatureDto> =
         post("/api/wms/nomenclature", request)
 
@@ -92,15 +95,17 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
         )
 
     override suspend fun listReceipts(
+        warehouseId: Long?,
         purchaseOrderId: Long?,
         status: ReceiptStatus?
-    ): ApiResult<List<ReceiptDto>> {
-        val params = buildMap {
+    ): ApiResult<List<ReceiptDto>> = getWithParams(
+        path = "/api/wms/receipts",
+        params = buildMap {
+            warehouseId?.let { put("warehouseId", it.toString()) }
             purchaseOrderId?.let { put("purchaseOrderId", it.toString()) }
             status?.let { put("status", it.name) }
         }
-        return getWithParams("/api/wms/receipts", params)
-    }
+    )
 
     override suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto> =
         post("/api/wms/receipts", request)

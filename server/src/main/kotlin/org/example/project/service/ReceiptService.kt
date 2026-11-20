@@ -59,12 +59,13 @@ class ReceiptService(
     }
 
     fun listReceipts(
+        warehouseId: Long?,
         purchaseOrderId: Long?,
         status: ReceiptStatus?,
         currentUser: CurrentUser
     ): List<ReceiptDto> {
         currentUser.requirePermission("wms", "read")
-        val receipts = wmsRepository.listReceipts(purchaseOrderId, status?.name)
+        val receipts = wmsRepository.listReceipts(warehouseId, purchaseOrderId, status?.name)
         if (receipts.isEmpty()) return emptyList()
         return receipts.map { build(it) }
     }

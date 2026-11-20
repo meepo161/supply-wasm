@@ -27,6 +27,10 @@ fun Route.userRoutes(userService: UserService) {
             call.respond(HttpStatusCode.Created, ApiResponse.success(user))
         }
 
+        get("/options") {
+            call.respond(HttpStatusCode.OK, ApiResponse.success(userService.listOptions()))
+        }
+
         get("/{id}") {
             val id = call.parameters["id"]?.toLongOrNull() ?: throw org.example.project.exception.ValidationException("Invalid user id")
             val user = userService.get(id, call.currentUser())

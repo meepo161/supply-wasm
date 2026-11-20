@@ -68,6 +68,7 @@ class NotificationRoutesTest {
         assertEquals("NEW_TASK_MESSAGE", notification.type)
         assertEquals("TASK_CHAT_MESSAGE", notification.entityType)
         assertEquals(sent.id, notification.entityId)
+        assertEquals(taskId, notification.taskId)
         assertEquals(false, notification.isRead)
         assertFalse(notification.title.contains("Secret text"))
         assertFalse(notification.title.contains("Notification task"))

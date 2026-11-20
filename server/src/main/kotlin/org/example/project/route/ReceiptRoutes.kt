@@ -21,6 +21,9 @@ fun Route.receiptRoutes(receiptService: ReceiptService) {
         install(RequireAuthPlugin) {}
 
         get {
+            val warehouseId = call.request.queryParameters["warehouseId"]?.let {
+                it.toLongOrNull() ?: throw ValidationException("Invalid warehouseId")
+            }
             val orderId = call.request.queryParameters["purchaseOrderId"]?.let {
                 it.toLongOrNull() ?: throw ValidationException("Invalid purchaseOrderId")
             }
@@ -33,7 +36,9 @@ fun Route.receiptRoutes(receiptService: ReceiptService) {
             }
             call.respond(
                 HttpStatusCode.OK,
-                ApiResponse.success(receiptService.listReceipts(orderId, status, call.currentUser()))
+                ApiResponse.success(
+                    receiptService.listReceipts(warehouseId, orderId, status, call.currentUser())
+                )
             )
         }
 

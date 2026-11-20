@@ -20,8 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.NotificationDto
+import org.example.project.ui.home.BrowserNotifications
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.tasks.toShortDate
 import org.example.project.ui.theme.Brand
@@ -47,11 +52,21 @@ import org.example.project.ui.theme.SoftButton
 fun NotificationScreen(
     viewModel: NotificationViewModel,
     onOpenTask: (Long) -> Unit,
+    onOpenConversation: (Long) -> Unit,
+    onOpenProjectChat: (Long) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
     val unread = state.notifications.count { !it.isRead }
+    var pushEnabled by remember { mutableStateOf(BrowserNotifications.isGranted()) }
+
+    LaunchedEffect(viewModel) {
+        BrowserNotifications.setPendingOpenListener {
+            viewModel.openPendingNotification(onOpenTask, onOpenConversation, onOpenProjectChat)
+        }
+        viewModel.openPendingNotification(onOpenTask, onOpenConversation, onOpenProjectChat)
+    }
 
     Column(
         modifier = modifier
@@ -80,6 +95,15 @@ fun NotificationScreen(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!pushEnabled) {
+                    SoftButton(
+                        text = if (BrowserNotifications.isSupported()) "Включить push" else "Push недоступны",
+                        onClick = { BrowserNotifications.enablePush { pushEnabled = it } },
+                        enabled = BrowserNotifications.isSupported(),
+                        leadingIcon = ErpIconGlyph.Bell
+                    )
+                    Spacer(Modifier.width(10.dp))
+                }
                 SoftButton(
                     text = "Обновить",
                     onClick = viewModel::loadNotifications,
@@ -123,9 +147,12 @@ fun NotificationScreen(
                         notification = notification,
                         onClick = {
                             viewModel.markRead(notification)
-                            if (notification.entityType.equals("TASK", ignoreCase = true)) {
-                                viewModel.openTask(notification.entityId, onOpenTask)
-                            }
+                            viewModel.openNotification(
+                                notification,
+                                onOpenTask,
+                                onOpenConversation,
+                                onOpenProjectChat
+                            )
                         }
                     )
                 }

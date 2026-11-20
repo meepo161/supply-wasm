@@ -19,7 +19,9 @@ import org.example.project.dto.CreateStorageLocationRequest
 import org.example.project.dto.CreateWarehouseRequest
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.PostReceiptRequest
+import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReceiptLineInput
+import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
@@ -301,7 +303,38 @@ class WmsViewModel(
     }
 
     fun selectNomenclature(nomenclature: NomenclatureDto?) {
-        _uiState.value = _uiState.value.copy(selectedNomenclature = nomenclature, operationError = null)
+        _uiState.value = _uiState.value.copy(
+            selectedNomenclature = nomenclature,
+            nomenclatureDetails = null,
+            nomenclatureDetailsLoading = nomenclature != null,
+            operationError = null
+        )
+        nomenclature ?: return
+        viewModelScope.launch {
+            when (val result = repository.getNomenclatureDetails(nomenclature.id)) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.selectedNomenclature?.id == nomenclature.id) {
+                        _uiState.value = _uiState.value.copy(
+                            selectedNomenclature = result.data.item,
+                            nomenclatureDetails = result.data,
+                            nomenclatureDetailsLoading = false
+                        )
+                    }
+                }
+                is ApiResult.Error -> {
+                    if (_uiState.value.selectedNomenclature?.id == nomenclature.id) {
+                        _uiState.value = _uiState.value.copy(
+                            nomenclatureDetailsLoading = false,
+                            operationError = result.error
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun updateNomenclatureSearch(value: String) {
+        _uiState.value = _uiState.value.copy(nomenclatureSearch = value)
     }
 
     fun loadStock() {
@@ -331,13 +364,19 @@ class WmsViewModel(
             )
             return
         }
-        val validLines = form.lines.mapIndexedNotNull { index, line ->
+        val validLines = form.lines.mapIndexed { index, line ->
             val nomId = line.nomenclatureId
             val locId = line.locationId
             val qty = line.expectedQuantity
             if (nomId == null || locId == null || qty.isBlank()) {
                 _uiState.value = _uiState.value.copy(
-                    operationError = ApiError("VALIDATION_ERROR", "В строке ${index + 1} не заполнены номенклатура, ячейка или количество")
+                    operationError = ApiError("VALIDATION_ERROR", "В строке ${index + 1} не заполнены номенклатура, ячейка или ожидаемое количество")
+                )
+                return
+            }
+            if (_uiState.value.nomenclature.find { it.id == nomId }?.lotTracked == true && line.lotNumber.isBlank()) {
+                _uiState.value = _uiState.value.copy(
+                    operationError = ApiError("VALIDATION_ERROR", "В строке ${index + 1} укажите номер партии")
                 )
                 return
             }
@@ -346,11 +385,11 @@ class WmsViewModel(
                 nomenclatureId = nomId,
                 expectedQuantity = qty.trim(),
                 receivedQuantity = line.receivedQuantity.takeIf { it.isNotBlank() }?.trim(),
-                lotNumber = line.lotNumber.takeIf { it.isNotBlank() },
+                lotNumber = line.lotNumber.takeIf { it.isNotBlank() }?.trim(),
                 locationId = locId,
-                note = line.note.takeIf { it.isNotBlank() },
+                note = line.note.takeIf { it.isNotBlank() }?.trim(),
                 purchaseOrderLineId = line.purchaseOrderLineId,
-                discrepancyReason = line.discrepancyReason.takeIf { it.isNotBlank() }
+                discrepancyReason = line.discrepancyReason.takeIf { it.isNotBlank() }?.trim()
             )
         }
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
@@ -358,14 +397,14 @@ class WmsViewModel(
             when (val result = repository.createReceipt(
                 CreateReceiptRequest(
                     sourceType = form.sourceType,
-                    sourceRef = form.sourceRef.takeIf { it.isNotBlank() },
-                    sourceDocumentNo = form.sourceDocumentNo.takeIf { it.isNotBlank() },
-                    sourceDocumentDate = form.sourceDocumentDate.takeIf { it.isNotBlank() },
+                    sourceRef = form.sourceRef.takeIf { it.isNotBlank() }?.trim(),
+                    sourceDocumentNo = form.sourceDocumentNo.takeIf { it.isNotBlank() }?.trim(),
+                    sourceDocumentDate = form.sourceDocumentDate.takeIf { it.isNotBlank() }?.trim(),
                     purchaseOrderId = form.purchaseOrderId,
                     purchaseDeliveryId = form.purchaseDeliveryId,
                     warehouseId = warehouseId,
-                    expectedAt = form.expectedAt.takeIf { it.isNotBlank() },
-                    note = form.note.takeIf { it.isNotBlank() },
+                    expectedAt = form.expectedAt.takeIf { it.isNotBlank() }?.trim(),
+                    note = form.note.takeIf { it.isNotBlank() }?.trim(),
                     lines = validLines
                 )
             )) {
@@ -415,6 +454,28 @@ class WmsViewModel(
         openReceipt(id)
     }
 
+    fun selectReceipt(receipt: ReceiptDto) {
+        _uiState.value = _uiState.value.copy(currentReceipt = receipt, operationError = null)
+    }
+
+    fun updateLoadReceiptId(value: String) {
+        _uiState.value = _uiState.value.copy(loadReceiptId = value, operationError = null)
+    }
+
+    fun updateReceiptWarehouseFilter(warehouseId: Long?) {
+        _uiState.value = _uiState.value.copy(
+            receiptFilters = _uiState.value.receiptFilters.copy(warehouseId = warehouseId)
+        )
+        loadReceipts()
+    }
+
+    fun updateReceiptStatusFilter(status: ReceiptStatus?) {
+        _uiState.value = _uiState.value.copy(
+            receiptFilters = _uiState.value.receiptFilters.copy(status = status)
+        )
+        loadReceipts()
+    }
+
     fun postReceipt() {
         val receipt = _uiState.value.currentReceipt ?: return
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
@@ -427,8 +488,8 @@ class WmsViewModel(
                         operationError = null,
                         successMessage = "Приёмка ${result.data.number} проведена, остаток обновлён"
                     )
-                    loadStock()
                     loadReceipts()
+                    loadStock()
                     loadExpectedReceipts()
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
@@ -440,21 +501,23 @@ class WmsViewModel(
     }
 
     fun clearCurrentReceipt() {
-        _uiState.value = _uiState.value.copy(currentReceipt = null, loadReceiptId = "")
+        _uiState.value = _uiState.value.copy(currentReceipt = null)
     }
 
     fun dismissSuccess() {
         _uiState.value = _uiState.value.copy(successMessage = null)
     }
 
-    /** Список приёмок: сервер фильтрует по заказу и статусу. */
+    /** Список приёмок: сервер фильтрует по складу и статусу. */
     fun loadReceipts() {
+        val filters = _uiState.value.receiptFilters
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
-            when (val result = repository.listReceipts()) {
+            when (val result = repository.listReceipts(warehouseId = filters.warehouseId, status = filters.status)) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
                     receipts = result.data,
-                    isLoading = false
+                    isLoading = false,
+                    operationError = null
                 )
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -1939,10 +2002,6 @@ class WmsViewModel(
         warehouseId?.let { loadLocations(it) }
     }
 
-    fun updateLoadReceiptId(value: String) {
-        _uiState.value = _uiState.value.copy(loadReceiptId = value)
-    }
-
     fun updateReleaseReason(value: String) {
         _uiState.value = _uiState.value.copy(releaseReason = value)
     }
@@ -1956,6 +2015,8 @@ data class WmsUiState(
     val reservations: List<org.example.project.dto.ReservationDto> = emptyList(),
     val currentReceipt: org.example.project.dto.ReceiptDto? = null,
     val receipts: List<org.example.project.dto.ReceiptDto> = emptyList(),
+    val loadReceiptId: String = "",
+    val receiptFilters: ReceiptFilters = ReceiptFilters(),
     val expectedReceipts: List<org.example.project.dto.ExpectedReceiptLineDto> = emptyList(),
     val receiptLinkOrderId: String = "",
     val receiptLinkDocumentNo: String = "",
@@ -1963,6 +2024,9 @@ data class WmsUiState(
     val successMessage: String? = null,
     val currentReservation: org.example.project.dto.ReservationDto? = null,
     val selectedNomenclature: org.example.project.dto.NomenclatureDto? = null,
+    val nomenclatureDetails: org.example.project.dto.NomenclatureDetailsDto? = null,
+    val nomenclatureDetailsLoading: Boolean = false,
+    val nomenclatureSearch: String = "",
     val selectedTab: WmsTab = WmsTab.WAREHOUSES,
     val isLoading: Boolean = false,
     val operationError: ApiError? = null,
@@ -1975,7 +2039,6 @@ data class WmsUiState(
     val stockFilters: StockFilters = StockFilters(),
     val reservationFilters: ReservationFilters = ReservationFilters(),
     val activeDialog: WmsDialog? = null,
-    val loadReceiptId: String = "",
     val releaseReason: String = "",
     val receiptLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
     val reservationLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
@@ -2117,6 +2180,11 @@ data class CreateReceiptLineForm(
     val purchaseOrderLineId: Long? = null,
     /** Обоснование расхождения — обязательно, если принято не столько, сколько ожидалось. */
     val discrepancyReason: String = ""
+)
+
+data class ReceiptFilters(
+    val warehouseId: Long? = null,
+    val status: ReceiptStatus? = null
 )
 
 data class CreateReservationForm(

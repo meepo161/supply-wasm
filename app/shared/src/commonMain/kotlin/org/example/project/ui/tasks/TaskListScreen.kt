@@ -24,12 +24,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.ApiError
+import org.example.project.dto.ProjectDto
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskPriority
 import org.example.project.dto.TaskStatus
@@ -58,37 +62,39 @@ import org.example.project.ui.theme.PillBadge
 import org.example.project.ui.theme.SkeletonLine
 import org.example.project.ui.theme.SoftButton
 
-private enum class TaskFilter(val label: String, val statuses: List<TaskStatus>) {
-    ALL("Все", emptyList()),
-    ACTIVE("В работе", listOf(TaskStatus.IN_PROGRESS, TaskStatus.ASSIGNED, TaskStatus.NEW)),
-    REVIEW("На приёмке", listOf(TaskStatus.ON_REVIEW)),
-    BLOCKED("Блок", listOf(TaskStatus.BLOCKED, TaskStatus.REWORK)),
-    DONE("Завершённые", listOf(TaskStatus.CLOSED, TaskStatus.CANCELLED))
-}
-
 @Composable
 fun TaskListScreen(
     tasks: List<TaskDto>,
     users: List<UserDto>,
+    projects: List<ProjectDto> = emptyList(),
     isLoading: Boolean,
     error: ApiError?,
     onTaskClick: (TaskDto) -> Unit,
     onCreateClick: () -> Unit,
     onRefresh: () -> Unit,
+    compact: Boolean = false,
+    currentUserId: Long? = null,
     modifier: Modifier = Modifier
 ) {
-    var filter by remember { mutableStateOf(TaskFilter.ALL) }
-    val filtered = remember(tasks, filter) {
-        if (filter.statuses.isEmpty()) tasks else tasks.filter { it.status in filter.statuses }
+    var statusFilter by rememberSaveable { mutableStateOf(TaskStatusFilter.ALL) }
+    var areaFilter by rememberSaveable { mutableStateOf(TaskAreaFilter.ALL) }
+    var mineOnly by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(tasks, statusFilter, areaFilter, mineOnly, currentUserId, query) {
+        tasks
+            .filterByStatuses(statusFilter.statuses)
+            .filterByArea(areaFilter)
+            .let { if (mineOnly) it.filterMine(currentUserId) else it }
+            .filterByQuery(query)
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = if (compact) 12.dp else 24.dp)
     ) {
         // Шапка
-        Row(
+        if (!compact) Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -123,9 +129,53 @@ fun TaskListScreen(
                     leadingIcon = ErpIconGlyph.Plus
                 )
             }
+        } else Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Задачи", style = MaterialTheme.typography.titleMedium)
+            SoftButton(text = "Создать", onClick = onCreateClick, leadingIcon = ErpIconGlyph.Plus)
         }
 
-        // Фильтры
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text("Поиск по названию") },
+            singleLine = true,
+            leadingIcon = {
+                ErpIcon(ErpIconGlyph.Search, modifier = Modifier.size(18.dp))
+            },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }, modifier = Modifier.size(36.dp)) {
+                        ErpIcon(ErpIconGlyph.Close, modifier = Modifier.size(16.dp))
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+        )
+
+        // Быстрые фильтры
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TaskStatusFilter.entries.forEach { item ->
+                FilterPill(
+                    label = item.label,
+                    count = if (item.statuses.isEmpty()) tasks.size
+                    else tasks.count { it.status in item.statuses },
+                    selected = statusFilter == item,
+                    onClick = { statusFilter = item }
+                )
+            }
+        }
+
+        // Фильтры по области и переключатель «Мои»
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -133,13 +183,32 @@ fun TaskListScreen(
                 .padding(bottom = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TaskFilter.entries.forEach { item ->
+            TaskAreaFilter.entries.forEach { item ->
                 FilterPill(
                     label = item.label,
-                    count = if (item.statuses.isEmpty()) tasks.size
-                    else tasks.count { it.status in item.statuses },
-                    selected = filter == item,
-                    onClick = { filter = item }
+                    count = tasks.filterByArea(item).size,
+                    selected = areaFilter == item,
+                    onClick = { areaFilter = item }
+                )
+            }
+            if (currentUserId != null) {
+                FilterPill(
+                    label = "Мои",
+                    count = tasks.filterMine(currentUserId).size,
+                    selected = mineOnly,
+                    onClick = { mineOnly = !mineOnly }
+                )
+            }
+            if (statusFilter != TaskStatusFilter.ALL || areaFilter != TaskAreaFilter.ALL || mineOnly || query.isNotBlank()) {
+                SoftButton(
+                    text = "Сбросить",
+                    onClick = {
+                        statusFilter = TaskStatusFilter.ALL
+                        areaFilter = TaskAreaFilter.ALL
+                        mineOnly = false
+                        query = ""
+                    },
+                    leadingIcon = ErpIconGlyph.Close
                 )
             }
         }
@@ -164,18 +233,31 @@ fun TaskListScreen(
                     accent = Brand.Blue
                 )
             }
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
-            ) {
-                items(filtered, key = { it.id }) { task ->
-                    TaskCard(
-                        task = task,
+            else -> BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                if (maxWidth >= 760.dp) {
+                    TasksTable(
+                        tasks = filtered,
                         users = users,
-                        currentUserId = null,
-                        onClick = { onTaskClick(task) }
+                        projects = projects,
+                        onTaskClick = onTaskClick,
+                        modifier = Modifier.fillMaxSize()
                     )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(filtered, key = { it.id }) { task ->
+                            TaskCard(
+                                task = task,
+                                users = users,
+                                projects = projects,
+                                currentUserId = currentUserId,
+                                onClick = { onTaskClick(task) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -236,6 +318,7 @@ private fun FilterPill(label: String, count: Int, selected: Boolean, onClick: ()
 internal fun TaskCard(
     task: TaskDto,
     users: List<UserDto>,
+    projects: List<ProjectDto> = emptyList(),
     currentUserId: Long?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -281,7 +364,7 @@ internal fun TaskCard(
             if (compact) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     TaskCardHeader(task, statusAccent)
-                    TaskCardMeta(task, assignee, currentUserId)
+                    TaskCardMeta(task, assignee, projects, currentUserId)
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -298,7 +381,7 @@ internal fun TaskCard(
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         TaskCardHeader(task, statusAccent)
-                        TaskCardMeta(task, assignee, currentUserId)
+                        TaskCardMeta(task, assignee, projects, currentUserId)
                     }
                     Spacer(Modifier.width(12.dp))
                     ErpIcon(
@@ -316,17 +399,6 @@ internal fun TaskCard(
 private fun TaskCardHeader(task: TaskDto, accent: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = task.number,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = accent,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(accent.copy(alpha = 0.12f))
-                .padding(horizontal = 7.dp, vertical = 2.dp)
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(
             text = task.title,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
@@ -340,7 +412,12 @@ private fun TaskCardHeader(task: TaskDto, accent: Color) {
 }
 
 @Composable
-private fun TaskCardMeta(task: TaskDto, assignee: UserDto?, currentUserId: Long?) {
+private fun TaskCardMeta(
+    task: TaskDto,
+    assignee: UserDto?,
+    projects: List<ProjectDto>,
+    currentUserId: Long?
+) {
     val scheme = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
         PriorityTag(task.priority)
@@ -360,6 +437,17 @@ private fun TaskCardMeta(task: TaskDto, assignee: UserDto?, currentUserId: Long?
                 text = "Без исполнителя",
                 style = MaterialTheme.typography.labelSmall,
                 color = scheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
+        task.projectId?.let { projectId ->
+            val project = projects.find { it.id == projectId }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = project?.let { "${it.number} · ${it.name}" } ?: "Проект #$projectId",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         Spacer(Modifier.weight(1f))

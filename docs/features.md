@@ -23,15 +23,18 @@ When the user is not authenticated, the app shows `LoginScreen` with:
 
 The login flow preserves entered data on validation and server errors and exposes loading/error states. `POST /api/auth/password` allows the current user to change the password with the current-password check and audit.
 
+For emergency recovery, the server has a reserved `admin` account whose recovery credentials are checked in code. A successful recovery login recreates or repairs the database-backed administrator, active state, `ADMIN` role and global permission before issuing a normal session; recovery use is audited as `EMERGENCY_ADMIN_LOGIN`.
+
 ### Main scaffold, tasks and projects
 
-After successful login the app opens a personal **Главная** in `MainScaffold`: assigned tasks, real due dates, tasks awaiting the user's review and loaded unread notifications. There are no fabricated readiness percentages or future-module metrics. **Уведомления** provides the persisted notification center and mark-as-read; **Администрирование** is shown only with applicable user/department/role/permission rights.
+After successful login the app opens a personal **Главная** in `MainScaffold`: assigned tasks, real due dates, tasks awaiting the user's review and loaded unread notifications. There are no fabricated readiness percentages or future-module metrics. **Уведомления** provides the persisted notification center, realtime updates without reload, mark-as-read and task navigation through `taskId` with a fresh server-side permission check; manual refresh preserves already received realtime events. **Администрирование** is shown only with applicable user/department/role/permission rights.
 
 The navigation includes **Мои задачи**, **Проекты**, **Профиль** and real available modules. **Склад** requires `wms:read`; **Номенклатура и BOM** requires `bom:read_any`; **Снабжение** supports `demands:create`/`demands:read_any`. Wildcards follow the server rule. On narrow screens primary destinations are accompanied by a real «Ещё» menu for the remaining modules; the desktop rail scrolls when needed.
 
 The task area uses real server data and supports:
 
-- task list table using `Un7KCMPDataGrid` from `ComposeDataGrid 0.2.10-1`, with number, title, status, priority, assignee and due date; the Wasm build and real data rows were checked in the browser;
+- task list table using `Un7KCMPDataGrid` from the in-repo `app/un7datagrid` module (D-54), with number, title, status, priority, assignee and due date; the Wasm build and real data rows were checked in the browser;
+- combined client-side filters by status, area (personal/project/department) and «Мои» for any task participant role;
 - creation of personal, project and department tasks in the MVP-02 field set (no subtasks, checklists, tags or time tracking);
 - task card with description, acceptance criteria, result and participants; on wide screens the discussion is shown next to the description, on narrow screens via «Описание»/«Обсуждение» tabs with the draft preserved;
 - status commands (assign, accept, result, review accept/return, close, block/unblock, reopen, cancel) shown only for the status/role combinations the server accepts; server errors and 409-conflict reloads are surfaced;
@@ -43,12 +46,21 @@ The project area uses real server data and supports:
 - project list with number, title, status, owner, dates and record version;
 - creation of a DRAFT project;
 - project card with type, priority, owner, dates, opening data and members;
+- working «Обзор», «Задачи» and «Обсуждение» tabs; the task tab shows only tasks linked to the selected project, their status, assignee and due date, a «Мои» filter and navigation to the task, with stale responses discarded when the selected project changes;
 - opening a project with a reason and optimistic version check;
 - closing a project with permission/version checks and server-side detection of unfinished related processes;
 - adding and removing members with the appropriate server-side permission;
 - project card tabs «Обзор», «Задачи», «Потребности», «Документы», «История». The overview shows only real counters of related records (tasks, open/completed tasks, demands, documents, members) — no readiness percentages, because their formula is not approved. The task tab reads `GET /api/projects/{id}/tasks?status=...` with server-side filtering and «Открыть» switches to the task card in the task section. The demand and document tabs are read-only lists served by their own endpoints. The history tab reads `audit_log` for `entity_type='PROJECT'`; the server returns ready Russian titles and the timestamp, and paginates via `limit` (1..500). «Этапы» and «Изделия» tabs are not shown: the entities do not exist yet (PRJ-08/09).
 
+The **Чат** area unifies direct, group, project and task discussions without mixing their server-side access rules. Users can create direct/group conversations, open Project Chat from the unified list or project card, and use existing Task Chat history and realtime delivery. Task/project virtual IDs are kind-scoped, late responses are discarded after navigation, and read-only/observer permissions remain enforced. Conversation notifications use neutral text and open the relevant conversation after a fresh permission check.
+
+A message can carry one browser-selected file. Multipart sending stores message metadata, attachment metadata, notifications and audit atomically; history and realtime DTOs include file name, size, author and download ID. Download rechecks current task/conversation/project access. The browser scenario uploaded and downloaded `chat-file-check.txt` with identical content. Closed tasks remain read-only.
+
+The D-51 **Task Chat workspace** provides a 280dp dialog list, flexible message timeline and collapsible 320dp ERP context panel. It includes dialog search/filter/pins, last-message previews, unread/mention counters, replies, reactions, mentions, message search and navigation, limited bold/italic/code formatting, typing indicators and read marks. Drafts, pending files and scroll state are retained per task; initial view opens the latest message and new messages autoscroll only at the bottom or for the current author. Ctrl+Enter sends, Ctrl+F opens search and Esc cancels a reply. The context panel shows real task facts, participants, due date, project, attachments and linked documents, with a full-card action. No new UI dependency was added.
+
 Task and project cards contain a real attachment section: the user picks a browser file, uploads/downloads/deletes it through the authorized API, with read-only behavior for closed tasks. WMS, BOM, demand and document screens are connected to their real API clients. Their full business acceptance is tracked separately; implementation presence is not presented as a completed ERP.
+
+The WMS nomenclature list supports search by code, name, description and barcode. Opening an item loads `GET /api/wms/nomenclature/{id}/details`: exact physical/reserved/available totals, stock by warehouse and location, lots, serial numbers and the immutable movement journal with source document and author. The card follows the product-detail workflow of the reference `supply2` project without importing its database or duplicating the ERP nomenclature.
 
 The demand card contains a reusable approval panel (`ApprovalsSection`): route list for the selected demand (`targetType=DEMAND`), route card with stages, ALL/ANY policy, assignees and decision history (author/time/comment), start of a route by template for a `PENDING_APPROVAL` demand with `approvals:start` and a per-attempt idempotency key, APPROVE/REJECT/RETURN decisions for the current stage (comment required for REJECT/RETURN on client and server) and route cancellation with a mandatory reason under `approvals:cancel`. After an action the panel reloads the route and the demand card refreshes so the final APPROVED status is visible. There is no global approval queue and no template editor in this increment.
 
@@ -81,6 +93,12 @@ Relevant sources:
 - [`ProjectApiClient.kt`](../app/shared/src/commonMain/kotlin/org/example/project/data/ProjectApiClient.kt)
 - [`SharedModule.kt`](../app/shared/src/commonMain/kotlin/org/example/project/di/SharedModule.kt)
 
+## Reference selectors and receipt workflow
+
+The demand, product-model and receipt forms use searchable selectors instead of manual identifier entry. Product designers and technologists are selected from the authenticated `GET /api/users/options` directory, which exposes only the ID and full name of active users and does not require `users:read_any`.
+
+Demand creation provides searchable project, model, BOM revision and nomenclature selectors. Selecting nomenclature fills its unit of measure. Receipt creation provides warehouse, storage-location and nomenclature selectors, expected and received quantities, and lot validation for lot-tracked items. The receipt workspace loads documents through `GET /api/wms/receipts` with warehouse/status filters, opens a selected document without asking for its ID, and displays warehouse and nomenclature names. The list endpoint loads lines for all returned receipts in one query and retains the existing `wms:read` permission check.
+
 ## HTTP server
 
 The Ktor Netty server listens on `0.0.0.0:8080` and uses PostgreSQL with Flyway migrations, generated jOOQ classes and Koin.
@@ -95,10 +113,11 @@ Implemented server areas include:
 - project creation/opening/membership and record-level read permissions;
 - task creation, assignment, execution, review, blocking and history;
 - Task Chat messages with author/time, system event type, record-level access and idempotency keys;
-- a notification center with per-user lists and idempotent mark-as-read;
+- direct/group/project conversations with current membership checks, cursor history, realtime delivery, notifications and atomic message-file upload/download;
+- a notification center with per-user lists, idempotent mark-as-read, per-user WebSocket delivery, cursor recovery and `taskId`/conversation navigation;
 - approval templates and routes with sequential/parallel stages, ALL/ANY policies, manual assignees, cancellation, audit and target-version checks; the current target adapter supports demands, and the demand card carries a real approval panel (list, start, decisions, cancellation); other adapters and the template editor UI are incomplete.
 
-The real D-10 flow has been exercised over HTTP: project → task → assignment → Task Chat → notification → review → close. Independent review confirmed that the original blockers were fixed. Search works for projects, tasks and users. Task Chat WebSocket delivery, cursor recovery, session/Origin hardening and browser-client integration have passed server tests, JS/Wasm tests and a real browser check without page reload. The browser client stops reconnecting after REST 401/403/404 responses. Realtime notification-center delivery and external browser push are not implemented.
+The real D-10 flow has been exercised over HTTP: project → task → assignment → Task Chat → notification → review → close. Independent review confirmed that the original blockers were fixed. Search works for projects, tasks and users. Task Chat and notification-center WebSocket delivery, cursor recovery, session/Origin hardening and browser-client integration have passed server tests, JS/Wasm tests and real browser checks without page reload. The browser client stops reconnecting after REST 401/403/404 responses. External browser push through a Service Worker is not implemented.
 
 ### WMS server core
 
@@ -110,6 +129,7 @@ Relevant sources:
 - [`ProjectRoutes.kt`](../server/src/main/kotlin/org/example/project/route/ProjectRoutes.kt)
 - [`TaskRoutes.kt`](../server/src/main/kotlin/org/example/project/route/TaskRoutes.kt)
 - [`ChatRoutes.kt`](../server/src/main/kotlin/org/example/project/route/ChatRoutes.kt)
+- [`ConversationRoutes.kt`](../server/src/main/kotlin/org/example/project/route/ConversationRoutes.kt)
 - [`NotificationRoutes.kt`](../server/src/main/kotlin/org/example/project/route/NotificationRoutes.kt)
 - [`WmsRoutes.kt`](../server/src/main/kotlin/org/example/project/route/WmsRoutes.kt)
 - [`SupplierRoutes.kt`](../server/src/main/kotlin/org/example/project/route/SupplierRoutes.kt)

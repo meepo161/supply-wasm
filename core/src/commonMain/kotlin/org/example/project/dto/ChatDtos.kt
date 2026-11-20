@@ -15,13 +15,38 @@ data class ChatAuthorDto(
 )
 
 @Serializable
+data class ReplyPreviewDto(
+    val id: Long,
+    val author: ChatAuthorDto? = null,
+    val contentPreview: String
+)
+
+@Serializable
+data class ReactionSummaryDto(
+    val emoji: String,
+    val count: Int,
+    val reactedByMe: Boolean,
+    val reactedBy: List<ChatAuthorDto> = emptyList()
+)
+
+@Serializable
 data class ChatMessageDto(
     val id: Long,
     val taskId: Long,
     val author: ChatAuthorDto?,
     val type: ChatMessageType,
     val content: String,
-    val createdAt: String
+    val createdAt: String,
+    val attachments: List<AttachmentDto> = emptyList(),
+    val replyTo: ReplyPreviewDto? = null,
+    val reactions: List<ReactionSummaryDto> = emptyList(),
+    val mentionedUserIds: List<Long> = emptyList(),
+    val readByCount: Int = 0,
+    val readBy: List<ChatAuthorDto> = emptyList(),
+    val editedAt: String? = null,
+    val revokedAt: String? = null,
+    val source: MessageSourceDto? = null,
+    val version: Long = 0
 )
 
 @Serializable
@@ -35,7 +60,13 @@ data class ChatMessagePageDto(
 @Serializable
 data class SendChatMessageRequest(
     val content: String,
-    val idempotencyKey: String
+    val idempotencyKey: String,
+    val replyToMessageId: Long? = null
+)
+
+@Serializable
+data class RevokeMessageRequest(
+    val version: Long? = null
 )
 
 @Serializable

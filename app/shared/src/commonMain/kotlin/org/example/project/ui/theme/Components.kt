@@ -596,7 +596,8 @@ fun GradientRing(modifier: Modifier = Modifier, colors: List<Color> = Gradients.
 enum class ErpIconGlyph {
     Home, Tasks, Projects, Warehouse, Layers, Cart, Documents, Bell, Shield, User,
     Search, Plus, Refresh, Logout, ChevronRight, ChevronLeft, Moon, Sun,
-    CheckCircle, Clock, Alert, Sparkle, Menu, Filter, Send, Close, Grid, TrendUp
+    CheckCircle, Clock, Alert, Sparkle, Menu, Filter, Send, Close, Grid, TrendUp,
+    MoreHoriz, Attachment
 }
 
 @Composable
@@ -904,6 +905,21 @@ private fun DrawScope.drawGlyph(glyph: ErpIconGlyph, color: Color, sw: Float) {
             drawLine(color, p(0.58f, 0.66f), p(0.86f, 0.28f), sw, StrokeCap.Round)
             drawLine(color, p(0.68f, 0.26f), p(0.86f, 0.28f), sw, StrokeCap.Round)
             drawLine(color, p(0.86f, 0.28f), p(0.86f, 0.46f), sw, StrokeCap.Round)
+        }
+        ErpIconGlyph.MoreHoriz -> {
+            drawCircle(color, radius = sw * 0.75f, center = p(0.24f, 0.5f))
+            drawCircle(color, radius = sw * 0.75f, center = p(0.5f, 0.5f))
+            drawCircle(color, radius = sw * 0.75f, center = p(0.76f, 0.5f))
+        }
+        ErpIconGlyph.Attachment -> {
+            val path = Path().apply {
+                moveTo(0.64f * w, 0.18f * h)
+                lineTo(0.3f * w, 0.52f * h)
+                cubicTo(0.18f * w, 0.64f * h, 0.32f * w, 0.8f * h, 0.46f * w, 0.66f * h)
+                lineTo(0.78f * w, 0.34f * h)
+                cubicTo(0.92f * w, 0.2f * h, 0.76f * w, 0.04f * h, 0.62f * w, 0.18f * h)
+            }
+            drawPath(path, color, style = stroke)
         }
     }
 }

@@ -41,6 +41,13 @@ class UserRepository(private val dsl: DSLContext) {
             .fetch()
     }
 
+    fun listActive(): List<UsersRecord> {
+        return dsl.selectFrom(USERS)
+            .where(USERS.ACTIVE.eq(true))
+            .orderBy(USERS.FULL_NAME.asc(), USERS.ID.asc())
+            .fetch()
+    }
+
     fun create(
         login: String,
         passwordHash: String,

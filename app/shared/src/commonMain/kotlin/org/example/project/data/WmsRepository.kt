@@ -57,12 +57,17 @@ interface WmsRepository {
     suspend fun createLocation(request: CreateStorageLocationRequest): ApiResult<StorageLocationDto>
 
     suspend fun listNomenclature(): ApiResult<List<NomenclatureDto>>
+    suspend fun getNomenclatureDetails(id: Long): ApiResult<org.example.project.dto.NomenclatureDetailsDto>
     suspend fun createNomenclature(request: CreateNomenclatureRequest): ApiResult<NomenclatureDto>
     suspend fun archiveNomenclature(id: Long): ApiResult<NomenclatureDto>
 
     suspend fun getStock(warehouseId: Long?, nomenclatureId: Long?): ApiResult<List<StockBalanceDto>>
 
-    suspend fun listReceipts(purchaseOrderId: Long? = null, status: ReceiptStatus? = null): ApiResult<List<ReceiptDto>>
+    suspend fun listReceipts(
+        warehouseId: Long? = null,
+        purchaseOrderId: Long? = null,
+        status: ReceiptStatus? = null
+    ): ApiResult<List<ReceiptDto>>
     suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto>
     suspend fun getReceipt(id: Long): ApiResult<ReceiptDto>
     suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto>

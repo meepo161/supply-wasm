@@ -51,6 +51,60 @@ class WmsRepository(private val dsl: DSLContext) {
         val serialNumber: String?
     )
 
+    data class MovementRow(
+        val movement: org.example.project.generated.jooq.tables.records.StockMovementRecord,
+        val lotNumber: String?,
+        val serialNumber: String?,
+        val fromLocationCode: String?,
+        val toLocationCode: String?,
+        val createdByName: String
+    )
+
+    fun listLots(nomenclatureId: Long): List<LotsRecord> {
+        return dsl.selectFrom(LOTS)
+            .where(LOTS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(LOTS.CREATED_AT.desc(), LOTS.ID.desc())
+            .fetch()
+    }
+
+    fun listSerials(nomenclatureId: Long): List<SerialItemsRecord> {
+        return dsl.selectFrom(SERIAL_ITEMS)
+            .where(SERIAL_ITEMS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(SERIAL_ITEMS.CREATED_AT.desc(), SERIAL_ITEMS.ID.desc())
+            .fetch()
+    }
+
+    fun listMovements(nomenclatureId: Long): List<MovementRow> {
+        val fromLocations = STORAGE_LOCATIONS.`as`("from_locations")
+        val toLocations = STORAGE_LOCATIONS.`as`("to_locations")
+        return dsl.select(
+            STOCK_MOVEMENT.asterisk(),
+            LOTS.LOT_NUMBER,
+            SERIAL_ITEMS.SERIAL_NUMBER,
+            fromLocations.CODE,
+            toLocations.CODE,
+            USERS.FULL_NAME
+        )
+            .from(STOCK_MOVEMENT)
+            .leftJoin(LOTS).on(LOTS.ID.eq(STOCK_MOVEMENT.LOT_ID))
+            .leftJoin(SERIAL_ITEMS).on(SERIAL_ITEMS.ID.eq(STOCK_MOVEMENT.SERIAL_ID))
+            .leftJoin(fromLocations).on(fromLocations.ID.eq(STOCK_MOVEMENT.FROM_LOCATION_ID))
+            .leftJoin(toLocations).on(toLocations.ID.eq(STOCK_MOVEMENT.TO_LOCATION_ID))
+            .join(USERS).on(USERS.ID.eq(STOCK_MOVEMENT.CREATED_BY))
+            .where(STOCK_MOVEMENT.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(STOCK_MOVEMENT.CREATED_AT.desc(), STOCK_MOVEMENT.ID.desc())
+            .fetch { record ->
+                MovementRow(
+                    movement = record.into(STOCK_MOVEMENT),
+                    lotNumber = record.get(LOTS.LOT_NUMBER),
+                    serialNumber = record.get(SERIAL_ITEMS.SERIAL_NUMBER),
+                    fromLocationCode = record.get(fromLocations.CODE),
+                    toLocationCode = record.get(toLocations.CODE),
+                    createdByName = record.get(USERS.FULL_NAME)
+                )
+            }
+    }
+
     // Склады
 
     fun findWarehouseById(id: Long): WarehousesRecord? {
@@ -543,13 +597,19 @@ class WmsRepository(private val dsl: DSLContext) {
             row.get("order_line_id", Long::class.java) to row.get("accepted", BigDecimal::class.java)
         }
 
-    fun listReceipts(purchaseOrderId: Long?, status: String?): List<ReceiptsRecord> {
+    fun listReceipts(
+        warehouseId: Long?,
+        purchaseOrderId: Long?,
+        status: String?
+    ): List<ReceiptsRecord> {
         val conditions = mutableListOf<Condition>()
+        warehouseId?.let { conditions += RECEIPTS.WAREHOUSE_ID.eq(it) }
         purchaseOrderId?.let { conditions += RECEIPTS.PURCHASE_ORDER_ID.eq(it) }
         status?.let { conditions += RECEIPTS.STATUS.eq(it) }
         return dsl.selectFrom(RECEIPTS)
             .where(conditions)
             .orderBy(RECEIPTS.ID.desc())
+            .limit(200)
             .fetch()
     }
 
@@ -587,6 +647,14 @@ class WmsRepository(private val dsl: DSLContext) {
         return dsl.selectFrom(RECEIPT_LINES)
             .where(RECEIPT_LINES.RECEIPT_ID.eq(receiptId))
             .orderBy(RECEIPT_LINES.LINE_NO.asc())
+            .fetch()
+    }
+
+    fun listReceiptLinesFor(receiptIds: List<Long>): List<ReceiptLinesRecord> {
+        if (receiptIds.isEmpty()) return emptyList()
+        return dsl.selectFrom(RECEIPT_LINES)
+            .where(RECEIPT_LINES.RECEIPT_ID.`in`(receiptIds))
+            .orderBy(RECEIPT_LINES.RECEIPT_ID.asc(), RECEIPT_LINES.LINE_NO.asc())
             .fetch()
     }
 

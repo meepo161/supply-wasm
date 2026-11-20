@@ -12,8 +12,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -100,25 +98,20 @@ fun ProjectTabsSection(
     modifier: Modifier = Modifier
 ) {
     val project = state.selectedProject ?: return
+    // Вкладки «Обзор», «Задачи» и «Обсуждение» рисует ProjectDetailScreen;
+    // здесь остаётся только содержимое вкладок плана проекта.
+    if (state.selectedTab != ProjectTab.STAGES &&
+        state.selectedTab != ProjectTab.RISKS &&
+        state.selectedTab != ProjectTab.DEMANDS &&
+        state.selectedTab != ProjectTab.DOCUMENTS &&
+        state.selectedTab != ProjectTab.HISTORY
+    ) return
     val canSeeTabs = project.ownerId == currentUser.id ||
         project.members.any { it.userId == currentUser.id } ||
         currentUser.hasPermission("projects", "read_any")
     if (!canSeeTabs) return
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScrollableTabRow(
-            selectedTabIndex = ProjectTab.entries.indexOf(state.selectedTab),
-            edgePadding = 0.dp
-        ) {
-            ProjectTab.entries.forEach { tab ->
-                Tab(
-                    selected = state.selectedTab == tab,
-                    onClick = { onTabSelected(tab) },
-                    text = { Text(tab.title) }
-                )
-            }
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

@@ -14,7 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.NomenclatureType
+import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReceiptSourceType
+import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReservationReasonType
 import org.example.project.dto.ReservationStatus
 import org.example.project.dto.StorageLocationDto
@@ -29,6 +31,7 @@ import org.example.project.dto.WriteOffReasonType
 import org.example.project.dto.WriteOffStatus
 import org.example.project.dto.InventoryScopeType
 import org.example.project.dto.InventoryStatus
+import org.example.project.ui.components.SearchableDropdown
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,7 +113,6 @@ fun LocationDropdown(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NomenclatureDropdown(
     items: List<NomenclatureDto>,
@@ -119,35 +121,53 @@ fun NomenclatureDropdown(
     modifier: Modifier = Modifier,
     label: String = "Номенклатура"
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
+    SearchableDropdown(
+        items = items,
+        selected = selected,
+        onSelect = onSelect,
+        label = label,
+        itemText = { "${it.code} — ${it.name}" },
+        modifier = modifier,
+        emptyText = "Нет доступной номенклатуры"
+    )
+}
+
+@Composable
+fun ReceiptDropdown(
+    receipts: List<ReceiptDto>,
+    selected: ReceiptDto?,
+    onSelect: (ReceiptDto) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Приёмка"
+) {
+    SearchableDropdown(
+        items = receipts,
+        selected = selected,
+        onSelect = onSelect,
+        label = label,
+        itemText = { "${it.number} — ${it.status.localizedName()}" },
+        modifier = modifier,
+        emptyText = "Приёмки не найдены"
+    )
+}
+
+@Composable
+fun ReceiptStatusDropdown(
+    selected: ReceiptStatus?,
+    onSelect: (ReceiptStatus?) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Статус"
+) {
+    SearchableDropdown(
+        items = ReceiptStatus.entries,
+        selected = selected,
+        onSelect = onSelect,
+        onClear = { onSelect(null) },
+        clearText = "Все статусы",
+        label = label,
+        itemText = { it.localizedName() },
         modifier = modifier
-    ) {
-        OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: "Все",
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            items.forEach { item ->
-                DropdownMenuItem(
-                    text = { Text("${item.code} — ${item.name}") },
-                    onClick = {
-                        onSelect(item)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

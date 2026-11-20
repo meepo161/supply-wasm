@@ -4,6 +4,8 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.example.project.config.AppConfig
 import org.example.project.realtime.ChatEventBus
+import org.example.project.realtime.ConversationEventBus
+import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.*
 import org.example.project.service.*
 import org.jooq.DSLContext
@@ -12,7 +14,7 @@ import org.jooq.impl.DSL
 import org.koin.dsl.module
 import javax.sql.DataSource
 
-fun appModule(config: AppConfig) = module {
+fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module {
     single { config }
 
     single<DataSource> {
@@ -57,6 +59,7 @@ fun appModule(config: AppConfig) = module {
     single { BomRepository(get()) }
     single<FileStorage> { LocalFileStorage(config.storagePath) }
     single { LoginThrottleService(get()) }
+    single { MessageRateLimiter() }
 
     single { AuthService(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { UserService(get(), get(), get(), get(), get()) }
@@ -85,8 +88,16 @@ fun appModule(config: AppConfig) = module {
     }
     single { TaskService(get(), get(), get(), get(), get(), get()) }
     single { NotificationService(get()) }
+    single<PushSubscriptionStore> { PushSubscriptionRepository(get()) }
+    single<PushTransport> { pushTransport ?: WebPushTransport(config.push) }
+    single { PushService(get(), get(), config.push) }
     single { ChatEventBus() }
-    single { ChatService(get(), get(), get(), get(), get()) }
+    single { NotificationEventBus() }
+    single { ConversationRepository(get()) }
+    single { ConversationEventBus() }
+    single { ConversationService(get(), get(), get(), get(), get(), get(), get()) }
+    single { ChatService(get(), get(), get(), get(), get(), get(), get()) }
+    single { UnifiedChatListService(get(), get(), get(), get(), get()) }
     single { SearchService(get(), get()) }
     single { WmsService(get(), get(), get()) }
     single { ReceiptService(get(), get(), get(), get()) }
@@ -103,7 +114,7 @@ fun appModule(config: AppConfig) = module {
     single { SupplierService(get(), get(), get(), get()) }
     single { PurchaseOrderRepository(get()) }
     single { PurchaseOrderService(get(), get(), get(), get()) }
-    single { AttachmentService(get(), get(), get(), get(), get(), get()) }
+    single { AttachmentService(get(), get(), get(), get(), get(), get(), get()) }
     single { BomService(get(), get(), get()) }
     single { DocumentRepository(get()) }
     single { DocumentAccess(get(), get()) }

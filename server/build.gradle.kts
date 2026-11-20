@@ -46,6 +46,8 @@ dependencies {
     implementation(libs.koin.logger)
 
     implementation(libs.bcrypt)
+    implementation(libs.web.push)
+    implementation(libs.bouncycastle.bcprov)
 
     testImplementation(libs.ktor.serverTestHost)
     testImplementation(libs.ktor.clientWebsockets)

@@ -30,10 +30,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReceiptStatus
+import org.example.project.dto.WarehouseDto
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
+import org.example.project.ui.components.SearchableDropdown
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.Gradients
@@ -315,6 +318,7 @@ private fun NomenclatureTab(
     state: WmsUiState,
     viewModel: WmsViewModel
 ) {
+    val visibleItems = filterNomenclature(state.nomenclature, state.nomenclatureSearch)
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -325,14 +329,23 @@ private fun NomenclatureTab(
             onRefresh = viewModel::loadNomenclature,
             createLabel = "Создать номенклатуру"
         )
+        OutlinedTextField(
+            value = state.nomenclatureSearch,
+            onValueChange = viewModel::updateNomenclatureSearch,
+            label = { Text("Поиск по коду, названию, описанию или штрихкоду") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.nomenclature.isEmpty()) {
             LoadingOverlay()
         } else if (state.nomenclature.isEmpty()) {
             EmptyState("Нет номенклатуры. Создайте первую позицию.")
+        } else if (visibleItems.isEmpty()) {
+            EmptyState("По запросу ничего не найдено.")
         } else {
             NomenclatureGrid(
-                items = state.nomenclature,
+                items = visibleItems,
                 onClick = { viewModel.selectNomenclature(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
@@ -340,7 +353,12 @@ private fun NomenclatureTab(
         if (state.selectedNomenclature != null) {
             NomenclatureDetailDialog(
                 item = state.selectedNomenclature!!,
+                details = state.nomenclatureDetails,
+                loading = state.nomenclatureDetailsLoading,
+                error = state.operationError,
+                warehouses = state.warehouses,
                 onArchive = { viewModel.archiveNomenclature(state.selectedNomenclature!!) },
+                onRetry = { viewModel.selectNomenclature(state.selectedNomenclature!!) },
                 onClose = { viewModel.selectNomenclature(null) }
             )
         }
@@ -350,29 +368,130 @@ private fun NomenclatureTab(
 @Composable
 private fun NomenclatureDetailDialog(
     item: org.example.project.dto.NomenclatureDto,
+    details: org.example.project.dto.NomenclatureDetailsDto?,
+    loading: Boolean,
+    error: org.example.project.dto.ApiError?,
+    warehouses: List<WarehouseDto>,
     onArchive: () -> Unit,
+    onRetry: () -> Unit,
     onClose: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(item.name) },
+        title = { Text("${item.code} — ${item.name}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(text = "Код: ${item.code}", style = MaterialTheme.typography.bodyMedium)
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(text = "Тип: ${item.type.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Ед.изм.: ${item.unit}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Единица измерения: ${item.unit}", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Статус: ${if (item.archived) "Архив" else "Активна"}")
+                item.description?.takeIf { it.isNotBlank() }?.let { Text(it) }
                 if (item.barcodes.isNotEmpty()) {
-                    Text("Штрихкоды:", style = MaterialTheme.typography.labelLarge)
+                    Text("Штрихкоды", style = MaterialTheme.typography.titleSmall)
                     item.barcodes.forEach { barcode ->
                         Text(
-                            text = "${barcode.barcode} (${barcode.packageType.localizedName()}, ${barcode.quantityInPackage})",
+                            text = "${barcode.barcode} · ${barcode.packageType.localizedName()} · ${barcode.quantityInPackage} ${item.unit}",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
+                if (loading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                } else if (details == null) {
+                    error?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
+                    Button(onClick = onRetry) { Text("Загрузить данные") }
+                } else {
+                    HorizontalDivider()
+                    Text("Остатки", style = MaterialTheme.typography.titleMedium)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Физически", style = MaterialTheme.typography.labelMedium)
+                            Text("${details.physicalQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Резерв", style = MaterialTheme.typography.labelMedium)
+                            Text("${details.reservedQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Доступно", style = MaterialTheme.typography.labelMedium)
+                            Text("${details.availableQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
+                    if (details.stock.isEmpty()) {
+                        Text("На складах остатка нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        details.stock.forEach { stock ->
+                            val warehouse = warehouses.find { it.id == stock.warehouseId }
+                            Text(
+                                text = "${warehouse?.name ?: "Склад ${stock.warehouseId}"} · ${stock.locationCode} · ${stock.locationPurpose.localizedName()}\n" +
+                                    "Физ. ${stock.physicalQty}, резерв ${stock.reservedQty}, доступно ${stock.availableQty} ${item.unit}" +
+                                    (stock.lotNumber?.let { "\nПартия: $it" } ?: "") +
+                                    (stock.serialNumber?.let { "\nСерия: $it" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                    Text("Партии (${details.lots.size})", style = MaterialTheme.typography.titleMedium)
+                    details.lots.forEach { lot ->
+                        Text(
+                            text = lot.lotNumber +
+                                (lot.manufactureDate?.let { " · изготовлена $it" } ?: "") +
+                                (lot.expiryDate?.let { " · годна до $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (item.lotTracked && details.lots.isEmpty()) {
+                        Text("Партии ещё не зарегистрированы.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (item.serialTracked) {
+                        Text("Серийные номера (${details.serials.size})", style = MaterialTheme.typography.titleMedium)
+                        if (details.serials.isEmpty()) {
+                            Text("Серийные номера ещё не зарегистрированы.", style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            details.serials.forEach { serial ->
+                                Text(serial.serialNumber, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                    Text("Журнал движений (${details.movements.size})", style = MaterialTheme.typography.titleMedium)
+                    if (details.movements.isEmpty()) {
+                        Text("Движений пока нет.", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        details.movements.forEach { movement ->
+                            val direction = when {
+                                movement.fromLocationCode != null && movement.toLocationCode != null ->
+                                    "${movement.fromLocationCode} → ${movement.toLocationCode}"
+                                movement.fromLocationCode != null -> "из ${movement.fromLocationCode}"
+                                movement.toLocationCode != null -> "в ${movement.toLocationCode}"
+                                else -> ""
+                            }
+                            Text(
+                                text = "${movement.createdAt.toShortDate()} · ${movement.type.localizedName()} · ${movement.quantity} ${item.unit}\n" +
+                                    listOf(
+                                        direction,
+                                        "${movement.documentType} #${movement.documentId}",
+                                        movement.createdByName,
+                                        movement.note.orEmpty()
+                                    ).filter { it.isNotBlank() }.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
             }
         },
-        confirmButton = { Button(onClick = onArchive) { Text("Архивировать") } },
+        confirmButton = {
+            if (!item.archived) {
+                Button(onClick = onArchive, enabled = !loading) { Text("Архивировать") }
+            }
+        },
         dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
     )
 }
@@ -458,6 +577,48 @@ private fun ReceiptsTab(
                 )
                 TextButton(onClick = viewModel::dismissSuccess) { Text("Ок") }
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SearchableDropdown(
+                items = state.warehouses,
+                selected = state.warehouses.find { it.id == state.receiptFilters.warehouseId },
+                onSelect = { viewModel.updateReceiptWarehouseFilter(it.id) },
+                onClear = { viewModel.updateReceiptWarehouseFilter(null) },
+                clearText = "Все склады",
+                label = "Склад",
+                itemText = { "${it.code} — ${it.name}" },
+                modifier = Modifier.weight(1f)
+            )
+            ReceiptStatusDropdown(
+                selected = state.receiptFilters.status,
+                onSelect = viewModel::updateReceiptStatusFilter,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ReceiptDropdown(
+                receipts = state.receipts,
+                selected = null,
+                onSelect = viewModel::selectReceipt,
+                label = "Открыть приёмку",
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = viewModel::loadReceipts) { Text("Обновить") }
+        }
+        if (state.isLoading && state.receipts.isEmpty()) {
+            CircularProgressIndicator()
+        } else if (state.receipts.isEmpty()) {
+            Text(
+                text = "Приёмки по выбранным фильтрам не найдены.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
 
@@ -559,6 +720,8 @@ private fun ReceiptsTab(
                 onLinkDocumentNoChange = viewModel::updateReceiptLinkDocumentNo,
                 onLinkReasonChange = viewModel::updateReceiptLinkReason,
                 onLink = viewModel::linkReceipt,
+                warehouse = state.warehouses.find { it.id == state.currentReceipt.warehouseId },
+                nomenclature = state.nomenclature,
                 onPost = viewModel::postReceipt,
                 onClose = viewModel::clearCurrentReceipt
             )
@@ -576,6 +739,8 @@ private fun ReceiptDetailCard(
     onLinkDocumentNoChange: (String) -> Unit,
     onLinkReasonChange: (String) -> Unit,
     onLink: () -> Unit,
+    warehouse: WarehouseDto?,
+    nomenclature: List<NomenclatureDto>,
     onPost: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
@@ -592,6 +757,9 @@ private fun ReceiptDetailCard(
                     (receipt.sourceDocumentNo?.let { " · документ $it" } ?: ""),
                 style = MaterialTheme.typography.bodyMedium
             )
+            warehouse?.let { Text(text = "Склад: ${it.code} — ${it.name}", style = MaterialTheme.typography.bodyMedium) }
+            receipt.sourceRef?.let { Text(text = "Основание: $it", style = MaterialTheme.typography.bodyMedium) }
+            receipt.expectedAt?.let { Text(text = "Ожидается: $it", style = MaterialTheme.typography.bodyMedium) }
             receipt.purchaseOrderNumber?.let { orderNumber ->
                 Text(text = "Заказ поставщику: $orderNumber", style = MaterialTheme.typography.bodyMedium)
             }
@@ -609,10 +777,11 @@ private fun ReceiptDetailCard(
             HorizontalDivider()
             Text("Строки:", style = MaterialTheme.typography.labelLarge)
             receipt.lines.forEach { line ->
+                val item = nomenclature.find { it.id == line.nomenclatureId }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "№${line.lineNo}: номенклатура ${line.nomenclatureCode ?: line.nomenclatureId}, " +
-                            "ожидалось ${line.expectedQuantity}, принято ${line.receivedQuantity}",
+                        text = "№${line.lineNo}: ${item?.let { "${it.code} — ${it.name}" } ?: (line.nomenclatureCode ?: "Номенклатура ${line.nomenclatureId}")}\n" +
+                            "Ожидалось ${line.expectedQuantity} ${item?.unit.orEmpty()}, принято ${line.receivedQuantity} ${item?.unit.orEmpty()}",
                         style = MaterialTheme.typography.bodySmall
                     )
                     line.discrepancyKind?.let { kind ->
@@ -623,6 +792,7 @@ private fun ReceiptDetailCard(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
+                    line.note?.let { Text(text = it, style = MaterialTheme.typography.bodySmall) }
                 }
             }
             if (receipt.links.isNotEmpty()) {
@@ -644,7 +814,7 @@ private fun ReceiptDetailCard(
                 if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
                     Button(onClick = onPost) { Text("Провести") }
                 }
-                TextButton(onClick = onClose) { Text("Закрыть") }
+                TextButton(onClick = onClose) { Text("К списку") }
             }
             // Поздняя связь: заказ и накладная могут появиться после приёмки.
             // К заказу поставщику привязываются только приёмки по заказу, счёту

@@ -56,7 +56,8 @@ object TestDatabase {
                   audit_log, sessions, user_roles, permissions, roles,
                   attachments, notifications, task_chat_messages, task_status_history,
                   project_risks, project_milestones, project_stages,
-                  task_participants, tasks, project_members, projects,
+                  task_participants, tasks, project_bom_revisions, project_products,
+                  project_members, projects,
                   bom_lines, product_revisions, product_models,
                   users, departments, login_attempts
                 RESTART IDENTITY CASCADE
