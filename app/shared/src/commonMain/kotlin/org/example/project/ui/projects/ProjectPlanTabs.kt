@@ -370,6 +370,7 @@ private fun ProjectStageStatus.localizedName(): String = when (this) {
     ProjectStageStatus.CANCELLED -> "Отменён"
 }
 
+@Composable
 private fun ProjectStageStatus.accentColor() = when (this) {
     ProjectStageStatus.PLANNED -> MaterialTheme.colorScheme.primary
     ProjectStageStatus.IN_PROGRESS -> MaterialTheme.colorScheme.tertiary
@@ -384,6 +385,7 @@ private fun ProjectMilestoneStatus.localizedName(): String = when (this) {
     ProjectMilestoneStatus.CANCELLED -> "Отменена"
 }
 
+@Composable
 private fun ProjectMilestoneStatus.accentColor() = when (this) {
     ProjectMilestoneStatus.PLANNED -> MaterialTheme.colorScheme.primary
     ProjectMilestoneStatus.REACHED -> MaterialTheme.colorScheme.secondary
@@ -620,6 +622,7 @@ private fun ProjectRiskCriticality.localizedName(): String = when (this) {
     ProjectRiskCriticality.CRITICAL -> "Критичная"
 }
 
+@Composable
 private fun ProjectRiskCriticality.accentColor() = when (this) {
     ProjectRiskCriticality.LOW -> MaterialTheme.colorScheme.outline
     ProjectRiskCriticality.MEDIUM -> MaterialTheme.colorScheme.primary
@@ -867,9 +870,9 @@ private fun CloseRiskDialog(
 @Composable
 private fun <T> EnumRow(
     label: String,
-    values: List<Pair<T?, String>>,
-    selected: T?,
-    onSelect: (T?) -> Unit
+    values: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(

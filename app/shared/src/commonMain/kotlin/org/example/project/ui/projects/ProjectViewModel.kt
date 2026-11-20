@@ -24,6 +24,7 @@ import org.example.project.dto.CreateProjectMilestoneRequest
 import org.example.project.dto.CreateProjectRiskRequest
 import org.example.project.dto.CreateProjectStageRequest
 import org.example.project.dto.ProjectMilestoneDto
+import org.example.project.dto.ProjectMilestoneCommandRequest
 import org.example.project.dto.ProjectPlanSummaryDto
 import org.example.project.dto.ProjectRiskCategory
 import org.example.project.dto.ProjectRiskCriticality
