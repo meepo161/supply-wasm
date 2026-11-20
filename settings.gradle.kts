@@ -28,7 +28,7 @@ dependencyResolutionManagement {
 }
 
 include(":app:shared")
+include(":app:un7datagrid")
 include(":app:webApp")
 include(":core")
 include(":server")
-includeBuild("vendor/ComposeDataGrid")

@@ -33,7 +33,7 @@ The navigation includes **Мои задачи**, **Проекты**, **Проф�
 
 The task area uses real server data and supports:
 
-- task list table using `Un7KCMPDataGrid` from `ComposeDataGrid 0.2.10-1`, with number, title, status, priority, assignee and due date; the Wasm build and real data rows were checked in the browser;
+- task list table using `Un7KCMPDataGrid` from the in-repo `app/un7datagrid` module (D-54), with number, title, status, priority, assignee and due date; the Wasm build and real data rows were checked in the browser;
 - combined client-side filters by status, area (personal/project/department) and «Мои» for any task participant role;
 - creation of personal, project and department tasks in the MVP-02 field set (no subtasks, checklists, tags or time tracking);
 - task card with description, acceptance criteria, result and participants; on wide screens the discussion is shown next to the description, on narrow screens via «Описание»/«Обсуждение» tabs with the draft preserved;

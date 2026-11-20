@@ -8,6 +8,7 @@ import org.example.project.dto.TaskWorkType
 import org.example.project.ui.tasks.TaskAreaFilter
 import org.example.project.ui.tasks.filterByArea
 import org.example.project.ui.tasks.filterByProject
+import org.example.project.ui.tasks.filterByQuery
 import org.example.project.ui.tasks.filterByStatuses
 import org.example.project.ui.tasks.filterMine
 import kotlin.test.Test

@@ -45,9 +45,9 @@
 
 Серверные тесты используют отдельную базу `erp_test` на `localhost:5433`; не запускай их параллельно с другим набором тестов на этой базе. Проверяются реальные API и PostgreSQL-миграции. Перед сдачей изменения также проверяется соответствующий пользовательский сценарий через HTTP и браузер, а не только компиляция.
 
-## Таблицы ComposeDataGrid
+## Таблица приложения
 
-Для рабочих таблиц используется `Un7KCMPDataGrid` версии `0.2.10-1` из решения D-45. Исходники подключены как Git submodule `vendor/ComposeDataGrid`, поэтому токен GitHub Packages не требуется. В `settings.gradle.kts` есть `includeBuild("vendor/ComposeDataGrid")`, а `app/shared` использует координаты `com.github.unchil:un7datagrid:0.2.10-1`, которые Gradle подставляет из included build. Не заменяй библиотеку самодельной таблицей и не удаляй submodule при сборке.
+Для рабочих таблиц используется `Un7KCMPDataGrid` из нашего KMP-модуля `app/un7datagrid` (D-45, D-54). Исходники хранятся в репозитории, отдельный Git submodule не используется; в `settings.gradle.kts` подключён `include(":app:un7datagrid")`, а `app/shared` зависит от `project(":app:un7datagrid")`. Токен GitHub Packages не нужен. Сохранение ширин между перезагрузками делается в `app/shared/src/commonMain/kotlin/org/example/project/ui/tables/PersistentDataGrid.kt`; новые таблицы подключай через него, а не напрямую к `Un7KCMPDataGrid`. Происхождение кода и правки D-53 описаны в `app/un7datagrid/README.md`.
 
 ## Где менять код
 
