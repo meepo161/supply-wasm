@@ -11,6 +11,10 @@ import io.ktor.server.config.*
 import io.ktor.server.testing.*
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
@@ -23,6 +27,7 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.serializer
 import org.example.project.dto.*
 import org.example.project.model.CurrentUser
+import org.example.project.realtime.ChatEventBus
 import org.example.project.service.ChatService
 import org.jooq.DSLContext
 import org.junit.AfterClass
@@ -31,6 +36,7 @@ import org.junit.BeforeClass
 import org.junit.Test
 import org.koin.ktor.ext.getKoin
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -74,11 +80,68 @@ class ChatWorkspaceWebSocketTest {
             assertEquals(taskId, read.getValue("taskId").jsonPrimitive.long)
             assertEquals(adminUser.id, read.getValue("userId").jsonPrimitive.long)
             assertEquals(message.id, read.getValue("lastReadMessageId").jsonPrimitive.long)
+            ctx.markRead(taskId, MarkChatReadRequest(message.id), adminCtx)
+            ctx.markRead(taskId, MarkChatReadRequest(0), adminCtx)
 
             ctx.setDialogPinned(taskId, true, adminCtx)
             val pin = receiveEnvelope()
             assertEquals("TASK_CHAT_PIN", pin.getValue("category").jsonPrimitive.content)
             assertTrue(pin.getValue("isPinned").jsonPrimitive.boolean)
+            ctx.setDialogPinned(taskId, true, adminCtx)
+            val eventCounts = application.getKoin().get<DSLContext>().fetch(
+                "SELECT category, COUNT(*) AS count FROM task_chat_event_log WHERE task_id = ? GROUP BY category",
+                taskId
+            ).associate { it.get("category") as String to (it.get("count") as Number).toLong() }
+            assertEquals(1L, eventCounts["READ"])
+            assertEquals(1L, eventCounts["PIN"])
+            assertNull(withTimeoutOrNull(500) { incoming.receive() }, "No-op read/pin must not publish")
+
+            ctx.removeReaction(taskId, message.id, "👍", adminCtx)
+            val off = receiveEnvelope()
+            assertEquals("REACTION", off.getValue("type").jsonPrimitive.content)
+            assertTrue(off.getValue("reactions").jsonArray.isEmpty())
+            ctx.addReaction(taskId, message.id, "👍", adminCtx)
+            val onAgain = receiveEnvelope()
+            assertEquals(1L, onAgain.getValue("reactions").jsonArray.single().jsonObject
+                .getValue("count").jsonPrimitive.long)
+            assertEquals(3, application.getKoin().get<DSLContext>().fetchCountSql(
+                "SELECT * FROM task_chat_event_log WHERE task_id = ? AND category = 'REACTION'", taskId
+            ))
+            ctx.setDialogPinned(taskId, false, adminCtx)
+            val unpin = receiveEnvelope()
+            assertFalse(unpin.getValue("isPinned").jsonPrimitive.boolean)
+            ctx.setDialogPinned(taskId, false, adminCtx)
+            assertEquals(2, application.getKoin().get<DSLContext>().fetchCountSql(
+                "SELECT * FROM task_chat_event_log WHERE task_id = ? AND category = 'PIN'", taskId
+            ))
+            assertNull(withTimeoutOrNull(500) { incoming.receive() }, "No-op unpin must not publish")
+        }
+    }
+
+    @Test
+    fun `concurrent edit and reaction after replay are both delivered with increasing event ids`() = testApp { ctx ->
+        val admin = newClient()
+        val adminUser = ensureAdmin(admin)
+        val taskId = createTask("T-CW-CONCURRENT", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        val adminCtx = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
+        val message = ctx.sendMessage(taskId, SendChatMessageRequest("Concurrent", "cw-concurrent-1"), adminCtx)
+        val adminClient = loginClient("admin", "admin123")
+        adminClient.webSocket("/api/tasks/$taskId/chat/ws?afterEvent=0") {
+            val replay = receiveEnvelope()
+            assertEquals("MESSAGE", replay.getValue("type").jsonPrimitive.content)
+            coroutineScope {
+                launch {
+                    ctx.editMessage(taskId, message.id, EditMessageRequest("Edited concurrently", 0), adminCtx)
+                }
+                launch {
+                    ctx.addReaction(taskId, message.id, "👍", adminCtx)
+                }
+            }
+            val live = List(2) { receiveEnvelope() }
+            assertEquals(setOf("EDITED", "REACTION"), live.map { it.getValue("type").jsonPrimitive.content }.toSet())
+            val eventIds = live.map { it.getValue("eventId").jsonPrimitive.long }
+            assertTrue(eventIds[0] < eventIds[1], "Live event ids must be strictly increasing: $eventIds")
+            assertTrue(eventIds.all { it > replay.getValue("eventId").jsonPrimitive.long })
         }
     }
 
@@ -129,6 +192,150 @@ class ChatWorkspaceWebSocketTest {
             val reason = withTimeout(10_000) { closeReason.await() }
             assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
             assertEquals("", reason?.message)
+        }
+    }
+
+    @Test
+    fun `afterEvent replays durable lifecycle in order with viewer reactions and tombstones`() = testApp { ctx ->
+        val admin = newClient()
+        val adminUser = ensureAdmin(admin)
+        val member = createUserWithRole(admin, "cwreplay", "password", "Replay Member", emptyList())
+        val taskId = createTask("T-CW-REPLAY", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        addTaskParticipant(taskId, member.id, "ASSIGNEE")
+        val adminCtx = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
+        val message = ctx.sendMessage(taskId, SendChatMessageRequest("Replay secret", "cw-replay-1"), adminCtx)
+        ctx.editMessage(taskId, message.id, EditMessageRequest("Replay edited", 0), adminCtx)
+        ctx.addReaction(taskId, message.id, "👍", adminCtx)
+        ctx.revokeMessage(taskId, message.id, RevokeMessageRequest(1), adminCtx)
+        ctx.markRead(taskId, MarkChatReadRequest(message.id), adminCtx)
+        ctx.setDialogPinned(taskId, true, adminCtx)
+        ctx.setDialogPinned(taskId, false, adminCtx)
+
+        val adminClient = loginClient("admin", "admin123")
+        adminClient.webSocket("/api/tasks/$taskId/chat/ws?afterEvent=0") {
+            val envelopes = List(7) { receiveEnvelope() }
+            assertEquals(
+                listOf("MESSAGE", "EDITED", "REACTION", "REVOKED", "READ", "PIN", "PIN"),
+                envelopes.map { it.getValue("type").jsonPrimitive.content }
+            )
+            val eventIds = envelopes.map { it.getValue("eventId").jsonPrimitive.long }
+            assertEquals(eventIds.sorted(), eventIds)
+            assertEquals(7, eventIds.distinct().size)
+            assertTrue(envelopes[5].getValue("isPinned").jsonPrimitive.boolean)
+            assertFalse(envelopes[6].getValue("isPinned").jsonPrimitive.boolean)
+            val reaction = envelopes[2].getValue("reactions").jsonArray.single().jsonObject
+            assertTrue(reaction.getValue("reactedByMe").jsonPrimitive.boolean)
+            val revoked = envelopes[3].getValue("message").jsonObject
+            assertEquals("Сообщение отозвано", revoked.getValue("content").jsonPrimitive.content)
+            assertEquals(2L, revoked.getValue("version").jsonPrimitive.long)
+            assertFalse(envelopes.toString().contains("Replay secret"))
+            assertFalse(envelopes.toString().contains("Replay edited"))
+        }
+    }
+
+    @Test
+    fun `closed task rejects typing while read replay remains available`() = testApp { ctx ->
+        val admin = newClient()
+        val adminUser = ensureAdmin(admin)
+        val taskId = createTask("T-CW-TYPING-RO", "CLOSED", adminUser.id, adminUser.id, adminUser.id)
+        val adminCtx = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
+        val messageId = dslSendMessage(taskId, adminUser.id, "Closed history", "cw-typing-ro")
+        ctx.markRead(taskId, MarkChatReadRequest(messageId), adminCtx)
+        val adminClient = loginClient("admin", "admin123")
+        adminClient.webSocket("/api/tasks/$taskId/chat/ws?afterEvent=0") {
+            val read = receiveEnvelope()
+            assertEquals("READ", read.getValue("type").jsonPrimitive.content)
+            send(Frame.Text("""{"action":"TYPING"}"""))
+            val reason = withTimeout(10_000) { closeReason.await() }
+            assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
+        }
+    }
+
+    @Test
+    fun `legacy after cursor still replays only newer message envelopes`() = testApp { ctx ->
+        val admin = newClient()
+        val adminUser = ensureAdmin(admin)
+        val taskId = createTask("T-CW-LEGACY-AFTER", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        val adminCtx = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
+        val first = ctx.sendMessage(taskId, SendChatMessageRequest("First", "cw-legacy-1"), adminCtx)
+        val second = ctx.sendMessage(taskId, SendChatMessageRequest("Second", "cw-legacy-2"), adminCtx)
+        val adminClient = loginClient("admin", "admin123")
+        adminClient.webSocket("/api/tasks/$taskId/chat/ws?after=${first.id}") {
+            val envelope = receiveEnvelope()
+            assertEquals("TASK_CHAT_MESSAGE", envelope.getValue("category").jsonPrimitive.content)
+            assertEquals("MESSAGE", envelope.getValue("type").jsonPrimitive.content)
+            assertEquals(second.id, envelope.getValue("id").jsonPrimitive.long)
+            assertEquals("Second", envelope.getValue("message").jsonObject.getValue("content").jsonPrimitive.content)
+            assertTrue(envelope.getValue("eventId") is kotlinx.serialization.json.JsonNull)
+            assertNull(withTimeoutOrNull(500) { incoming.receive() })
+        }
+    }
+
+    @Test
+    fun `overflow unblocks ordered command and idempotent retry with explicit signal`() = testApp { ctx ->
+        val admin = newClient()
+        val adminUser = ensureAdmin(admin)
+        val taskId = createTask("T-CW-OVERFLOW", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        val adminCtx = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
+        val bus = application.getKoin().get<ChatEventBus>()
+        coroutineScope {
+            val slowSubscribed = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val releaseSlowCollector = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val slowCollector = launch {
+                bus.events
+                    .onSubscription { slowSubscribed.complete(Unit) }
+                    .collect { releaseSlowCollector.await() }
+            }
+            slowSubscribed.await()
+            val overflowSignals = Channel<Long>(1)
+            val overflowSubscribed = kotlinx.coroutines.CompletableDeferred<Unit>()
+            val overflowCollector = launch {
+                bus.overflow
+                    .onSubscription { overflowSubscribed.complete(Unit) }
+                    .collect { overflowSignals.send(it.taskId) }
+            }
+            overflowSubscribed.await()
+            repeat(65) { index ->
+                bus.publishEvent(
+                    ChatEventBus.Event(index + 1L, "TASK_CHAT_TYPING", "TYPING", taskId)
+                )
+            }
+
+            val message = withTimeout(2_000) {
+                ctx.sendMessage(taskId, SendChatMessageRequest("Durable despite overflow", "cw-overflow-1"), adminCtx)
+            }
+            val retry = withTimeout(1_000) {
+                ctx.sendMessage(taskId, SendChatMessageRequest("Durable despite overflow", "cw-overflow-1"), adminCtx)
+            }
+            assertEquals(message.id, retry.id)
+            assertEquals(taskId, withTimeout(1_000) { overflowSignals.receive() })
+            assertEquals(1, application.getKoin().get<DSLContext>().fetchCountSql(
+                "SELECT * FROM task_chat_event_log WHERE task_id = ?", taskId
+            ))
+            releaseSlowCollector.complete(Unit)
+            slowCollector.cancel()
+            overflowCollector.cancel()
+        }
+    }
+
+    @Test
+    fun `event published during replay is delivered once in event id order`() = testApp { ctx ->
+        val admin = newClient()
+        val adminUser = ensureAdmin(admin)
+        val taskId = createTask("T-CW-REPLAY-GAP", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        val adminCtx = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
+        repeat(201) { index ->
+            ctx.sendMessage(taskId, SendChatMessageRequest("Replay $index", "cw-gap-$index"), adminCtx)
+        }
+        val adminClient = loginClient("admin", "admin123")
+        adminClient.webSocket("/api/tasks/$taskId/chat/ws?afterEvent=0") {
+            val first = receiveEnvelope()
+            val gap = ctx.sendMessage(taskId, SendChatMessageRequest("During replay", "cw-gap-live"), adminCtx)
+            val envelopes = listOf(first) + List(201) { receiveEnvelope() }
+            val eventIds = envelopes.map { it.getValue("eventId").jsonPrimitive.long }
+            assertEquals(eventIds.sorted(), eventIds)
+            assertEquals(eventIds.distinct(), eventIds)
+            assertEquals(gap.id, envelopes.last().getValue("message").jsonObject.getValue("id").jsonPrimitive.long)
         }
     }
 
@@ -287,6 +494,19 @@ class ChatWorkspaceWebSocketTest {
             userId
         )
     }
+
+    private fun ApplicationTestBuilder.dslSendMessage(
+        taskId: Long,
+        authorId: Long,
+        content: String,
+        key: String
+    ): Long = application.getKoin().get<DSLContext>().fetchOne(
+        """
+        INSERT INTO task_chat_messages (task_id, author_id, type, content, idempotency_key)
+        VALUES (?, ?, 'USER', ?, ?) RETURNING id
+        """.trimIndent(),
+        taskId, authorId, content, key
+    )!!.get(0, Long::class.java)
 
     private fun ApplicationTestBuilder.newClient() = createClient {
         install(HttpCookies)

@@ -2,25 +2,45 @@ package org.example.project.data
 
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import org.khronos.webgl.ArrayBuffer
+import org.khronos.webgl.Uint8Array
 
 @JsFun(
-    "(cb) => {" +
+    "(cb, onError, existingCount, existingTotal) => {" +
         " const input = document.createElement('input');" +
         " input.type = 'file';" +
         " input.style.display = 'none';" +
+        " input.multiple = true;" +
         " input.onchange = () => {" +
-        "  const f = input.files && input.files[0];" +
-        "  if (!f) { input.remove(); return; }" +
-        "  const reader = new FileReader();" +
-        "  reader.onload = () => { cb(f.name, f.type || '', String(reader.result)); input.remove(); };" +
-        "  reader.onerror = () => { input.remove(); };" +
-        "  reader.readAsDataURL(f);" +
+        "  const files = Array.from(input.files || []);" +
+        "  if (!files.length) { input.remove(); return; }" +
+        "  if (existingCount + files.length > 5) { onError('Можно выбрать не более 5 файлов'); input.remove(); return; }" +
+        "  if (files.some((f) => f.size > 25 * 1024 * 1024)) { onError('Файл превышает 25 МиБ'); input.remove(); return; }" +
+        "  const total = files.reduce((sum, f) => sum + f.size, existingTotal);" +
+        "  if (total > 50 * 1024 * 1024) { onError('Общий размер файлов превышает 50 МиБ'); input.remove(); return; }" +
+        "  const readNext = (index) => {" +
+        "   if (index >= files.length) { input.remove(); return; }" +
+        "   const f = files[index];" +
+        "   const reader = new FileReader();" +
+        "   reader.onload = () => { cb(f.name, f.type || '', reader.result); readNext(index + 1); };" +
+        "   reader.onerror = () => { onError('Не удалось прочитать файл: ' + f.name); input.remove(); };" +
+        "   reader.readAsArrayBuffer(f);" +
+        "  };" +
+        "  readNext(0);" +
         " };" +
         " document.body.appendChild(input);" +
         " input.click();" +
         "}"
 )
-private external fun pickFileJs(cb: (String, String, String) -> Unit)
+private external fun pickFileJs(
+    cb: (String, String, ArrayBuffer) -> Unit,
+    onError: (String) -> Unit,
+    existingCount: Int,
+    existingTotal: Double
+)
+
+@JsFun("(buffer, index) => new Uint8Array(buffer)[index]")
+private external fun byteAt(buffer: ArrayBuffer, index: Int): Int
 
 @JsFun(
     "(name, mime, base64) => {" +
@@ -40,15 +60,19 @@ private external fun pickFileJs(cb: (String, String, String) -> Unit)
 )
 private external fun saveFileJs(name: String, mime: String, base64: String)
 
-@OptIn(ExperimentalEncodingApi::class)
-actual fun pickAttachmentFile(onPicked: (AttachmentFileData) -> Unit) {
-    pickFileJs { name, mime, dataUrl ->
-        val base64 = dataUrl.substringAfter(',', "")
-        val bytes = if (base64.isEmpty()) null else runCatching { Base64.decode(base64) }.getOrNull()
-        if (name.isNotBlank() && bytes != null && bytes.isNotEmpty()) {
+actual fun pickAttachmentFile(
+    onPicked: (AttachmentFileData) -> Unit,
+    onError: (String) -> Unit,
+    existingFileCount: Int,
+    existingTotalBytes: Long
+) {
+    pickFileJs({ name, mime, buffer ->
+        val view = Uint8Array(buffer)
+        val bytes = ByteArray(view.length) { index -> byteAt(buffer, index).toByte() }
+        if (name.isNotBlank() && bytes.isNotEmpty()) {
             onPicked(AttachmentFileData(name, mime.ifBlank { null }, bytes))
         }
-    }
+    }, onError, existingFileCount, existingTotalBytes.toDouble())
 }
 
 @OptIn(ExperimentalEncodingApi::class)

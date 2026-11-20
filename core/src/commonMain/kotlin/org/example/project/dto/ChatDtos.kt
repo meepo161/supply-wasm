@@ -40,7 +40,11 @@ data class ChatMessageDto(
     val replyTo: ReplyPreviewDto? = null,
     val reactions: List<ReactionSummaryDto> = emptyList(),
     val mentionedUserIds: List<Long> = emptyList(),
-    val readByCount: Int = 0
+    val readByCount: Int = 0,
+    val editedAt: String? = null,
+    val revokedAt: String? = null,
+    val source: MessageSourceDto? = null,
+    val version: Long = 0
 )
 
 @Serializable
@@ -56,6 +60,11 @@ data class SendChatMessageRequest(
     val content: String,
     val idempotencyKey: String,
     val replyToMessageId: Long? = null
+)
+
+@Serializable
+data class RevokeMessageRequest(
+    val version: Long? = null
 )
 
 @Serializable

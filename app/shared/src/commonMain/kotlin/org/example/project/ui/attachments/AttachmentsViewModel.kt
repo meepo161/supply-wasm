@@ -52,7 +52,7 @@ class AttachmentsViewModel(
     fun upload() {
         val type = entityType ?: return
         val id = entityId
-        pickAttachmentFile { file ->
+        pickAttachmentFile(onPicked = { file ->
             viewModelScope.launch {
                 _uiState.value = _uiState.value.copy(isUploading = true, error = null)
                 when (val result = repository.upload(type, id, file)) {
@@ -67,7 +67,7 @@ class AttachmentsViewModel(
                     )
                 }
             }
-        }
+        })
     }
 
     fun download(attachment: AttachmentDto) {

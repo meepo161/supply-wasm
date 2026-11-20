@@ -7,6 +7,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,11 +20,18 @@ import org.example.project.data.ApiResult
 import org.example.project.data.AttachmentFileData
 import org.example.project.data.AttachmentRepository
 import org.example.project.data.ChatAccessRevokedException
+import org.example.project.data.ChatApiClient
 import org.example.project.data.ChatRepository
 import org.example.project.data.DocumentRepository
+import org.example.project.data.TaskChatEventCursor
+import org.example.project.data.TaskChatMessageEventType
 import org.example.project.data.TaskChatRealtimeEvent
 import org.example.project.data.appendDistinct
 import org.example.project.data.chatTypingFrame
+import org.example.project.ui.conversations.ConversationLocalStateStore
+import org.example.project.ui.conversations.conversationCommandSignature
+import org.example.project.data.mergeTaskChatMessage
+import org.example.project.data.mergeTaskChatHistory
 import org.example.project.data.isChatAccessTerminated
 import org.example.project.data.ProjectRepository
 import org.example.project.data.TaskRepository
@@ -31,6 +39,7 @@ import org.example.project.data.UserRepository
 import org.example.project.data.pickAttachmentFile
 import org.example.project.data.safeAttachmentFileName
 import org.example.project.data.saveAttachmentFile
+import org.example.project.data.validateAttachmentSelection
 import org.example.project.dto.ApiError
 import org.example.project.dto.AssignTaskRequest
 import org.example.project.dto.AttachmentDto
@@ -41,6 +50,10 @@ import org.example.project.dto.ChatMessageDto
 import org.example.project.dto.ChatSearchResultDto
 import org.example.project.dto.CreateTaskRequest
 import org.example.project.dto.DocumentDto
+import org.example.project.dto.EditMessageRequest
+import org.example.project.dto.ForwardMessageRequest
+import org.example.project.dto.ConversationKind
+import org.example.project.dto.ConversationListItemDto
 import org.example.project.dto.ProjectDto
 import org.example.project.dto.ReopenTaskRequest
 import org.example.project.dto.ReplyPreviewDto
@@ -65,14 +78,27 @@ class TaskViewModel(
     private val projectRepository: ProjectRepository,
     private val attachmentRepository: AttachmentRepository,
     private val documentRepository: DocumentRepository,
-    private val currentUserId: Long
+    private val currentUserId: Long,
+    coroutineScope: CoroutineScope? = null,
+    private val reconnectDelay: suspend (Long) -> Unit = { delay(it) },
+    private val chatFilePicker: ((AttachmentFileData) -> Unit, (String) -> Unit, Int, Long) -> Unit = ::pickAttachmentFile
 ) : ViewModel() {
 
+    private val coroutineScope = coroutineScope ?: viewModelScope
     private val _uiState = MutableStateFlow(TasksUiState())
     val uiState: StateFlow<TasksUiState> = _uiState.asStateFlow()
 
     private var chatRealtimeJob: Job? = null
-    private var pendingMessageKey: String? = null
+    private var chatListJob: Job? = null
+    private var chatSearchJob: Job? = null
+    private var chatSearchGeneration = 0L
+    private var taskOpenJob: Job? = null
+    private var taskOpenGeneration = 0L
+    private var chatGeneration = 0L
+    private var chatListGeneration = 0L
+    private val chatHistoryJobs = mutableSetOf<Job>()
+    private val chatEventCursors = mutableMapOf<Long, TaskChatEventCursor>()
+    private val pendingCommands = ConversationLocalStateStore()
     private val typingOut = MutableSharedFlow<String>(extraBufferCapacity = 4)
     private var lastTypingSent: TimeMark? = null
     private var lastMarkedReadId: Long = 0L
@@ -87,7 +113,7 @@ class TaskViewModel(
 
     fun loadTasks() {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = taskRepository.list()) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
                     tasks = result.data,
@@ -103,7 +129,7 @@ class TaskViewModel(
     }
 
     private fun loadUsers() {
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = userRepository.list()) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(users = result.data)
                 is ApiResult.Error -> { /* без права чтения справочника выбор участников скрывается */
@@ -113,7 +139,7 @@ class TaskViewModel(
     }
 
     private fun loadProjects() {
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = projectRepository.list()) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(projects = result.data)
                 is ApiResult.Error -> { /* список проектов для выбора недоступен — форма покажет подсказку */
@@ -122,17 +148,48 @@ class TaskViewModel(
         }
     }
 
+    private fun advanceChatGeneration(): Long {
+        chatGeneration++
+        chatHistoryJobs.forEach { it.cancel() }
+        chatHistoryJobs.clear()
+        return chatGeneration
+    }
+
+    private fun isChatGenerationCurrent(taskId: Long, generation: Long): Boolean =
+        generation == chatGeneration && _uiState.value.selectedTask?.id == taskId
+
+    private fun launchChatHistory(generation: Long, block: suspend () -> Unit) {
+        val job = coroutineScope.launch { block() }
+        chatHistoryJobs += job
+        job.invokeOnCompletion { chatHistoryJobs -= job }
+    }
+
+    private fun invalidateTaskOpen(): Long {
+        taskOpenGeneration++
+        taskOpenJob?.cancel()
+        taskOpenJob = null
+        return taskOpenGeneration
+    }
+
     fun selectTask(task: TaskDto) {
+        invalidateTaskOpen()
+        chatSearchGeneration++
+        chatSearchJob?.cancel()
+        val generation = advanceChatGeneration()
         chatRealtimeJob?.cancel()
         chatRealtimeJob = null
-        // черновик и выбранный файл предыдущей задачи сохраняются per-task
         val previousId = _uiState.value.selectedTask?.id
         var drafts = _uiState.value.chatDrafts
         var files = _uiState.value.chatPendingFiles
+        var replies = _uiState.value.chatReplies
         if (previousId != null && previousId != task.id) {
             drafts = drafts + (previousId to _uiState.value.chat.draft)
-            val pendingFile = _uiState.value.chat.pendingFile
-            files = if (pendingFile != null) files + (previousId to pendingFile) else files - previousId
+            files = if (_uiState.value.chat.pendingFiles.isNotEmpty()) {
+                files + (previousId to _uiState.value.chat.pendingFiles)
+            } else {
+                files - previousId
+            }
+            replies = _uiState.value.chat.replyTo?.let { replies + (previousId to it) } ?: (replies - previousId)
         }
         lastMarkedReadId = 0L
         _uiState.value = _uiState.value.copy(
@@ -150,26 +207,30 @@ class TaskViewModel(
             chat = ChatUiState(
                 isLoading = true,
                 draft = drafts[task.id] ?: "",
-                pendingFile = files[task.id]
+                pendingFiles = files[task.id].orEmpty(),
+                replyTo = replies[task.id]
             ),
             chatDrafts = drafts,
-            chatPendingFiles = files
+            chatPendingFiles = files,
+            chatReplies = replies
         )
-        pendingMessageKey = null
-        viewModelScope.launch {
+        launchChatHistory(generation) {
             refreshSelectedTask(task.id)
-            loadChatInitial(task.id)
+            loadChatInitial(task.id, generation)
             loadTaskContext(task.id)
-            if (_uiState.value.selectedTask?.id == task.id) {
-                startChatRealtime(task.id)
+            if (isChatGenerationCurrent(task.id, generation)) {
+                startChatRealtime(task.id, generation)
             }
         }
     }
 
     fun backToList() {
+        invalidateTaskOpen()
+        chatSearchGeneration++
+        chatSearchJob?.cancel()
+        advanceChatGeneration()
         chatRealtimeJob?.cancel()
         chatRealtimeJob = null
-        pendingMessageKey = null
         _uiState.value = _uiState.value.copy(
             selectedTask = null,
             actionError = null,
@@ -179,7 +240,7 @@ class TaskViewModel(
     }
 
     fun refreshSelectedTask(taskId: Long) {
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = taskRepository.get(taskId)) {
                 is ApiResult.Success -> if (_uiState.value.selectedTask?.id == taskId) {
                     _uiState.value = _uiState.value.copy(
@@ -198,11 +259,18 @@ class TaskViewModel(
     }
 
     fun openTaskById(taskId: Long) {
+        val generation = invalidateTaskOpen()
         _uiState.value = _uiState.value.copy(actionError = null)
-        viewModelScope.launch {
+        taskOpenJob = coroutineScope.launch {
             when (val result = taskRepository.get(taskId)) {
-                is ApiResult.Success -> selectTask(result.data)
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(actionError = result.error)
+                is ApiResult.Success -> if (generation == taskOpenGeneration) {
+                    taskOpenJob = null
+                    selectTask(result.data)
+                }
+                is ApiResult.Error -> if (generation == taskOpenGeneration) {
+                    taskOpenJob = null
+                    _uiState.value = _uiState.value.copy(actionError = result.error)
+                }
             }
         }
     }
@@ -215,7 +283,7 @@ class TaskViewModel(
             return
         }
         _uiState.value = _uiState.value.copy(createError = null)
-        viewModelScope.launch {
+        coroutineScope.launch {
             val request = CreateTaskRequest(
                 title = form.title.trim(),
                 description = form.description.takeIf { it.isNotBlank() }?.trim(),
@@ -404,7 +472,7 @@ class TaskViewModel(
 
     private fun runCommand(task: TaskDto, command: suspend () -> ApiResult<TaskDto>) {
         _uiState.value = _uiState.value.copy(actionError = null)
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = command()) {
                 is ApiResult.Success -> {
                     _uiState.value = _uiState.value.copy(
@@ -431,85 +499,101 @@ class TaskViewModel(
         }
     }
 
-    private suspend fun loadChatInitial(taskId: Long) {
+    private suspend fun loadChatInitial(taskId: Long, generation: Long) {
         var collected = emptyList<ChatMessageDto>()
         var after: Long? = null
         var hasMore = false
         var iterations = 0
-        while (iterations < MAX_CHAT_PAGES) {
+        while (iterations < MAX_CHAT_PAGES && isChatGenerationCurrent(taskId, generation)) {
             when (val result = chatRepository.listMessages(taskId, after = after)) {
                 is ApiResult.Success -> {
-                    collected = collected + result.data.messages
+                    if (!isChatGenerationCurrent(taskId, generation)) return
+                    collected = collected.mergeTaskChatHistory(result.data.messages)
                     after = result.data.messages.lastOrNull()?.id
                     hasMore = result.data.hasMore
                     if (!result.data.hasMore || result.data.messages.isEmpty()) break
                 }
                 is ApiResult.Error -> {
-                    _uiState.value = _uiState.value.copy(
-                        chat = _uiState.value.chat.copy(
-                            messages = collected,
-                            isLoading = false,
-                            error = result.error
+                    if (isChatGenerationCurrent(taskId, generation)) {
+                        _uiState.value = _uiState.value.copy(
+                            chat = _uiState.value.chat.copy(
+                                messages = collected,
+                                isLoading = false,
+                                error = result.error
+                            )
                         )
-                    )
+                    }
                     return
                 }
             }
             iterations++
         }
+        if (!isChatGenerationCurrent(taskId, generation)) return
+        val hasUnread = _uiState.value.chatList.any { it.taskId == taskId && it.unreadCount > 0 }
         _uiState.value = _uiState.value.copy(
             chat = _uiState.value.chat.copy(
-                messages = collected,
+                messages = _uiState.value.chat.messages.mergeTaskChatHistory(collected),
                 isLoading = false,
                 hasMoreNewer = hasMore,
+                firstUnreadMessageId = firstUnreadMessageId(
+                    collected.map { it.id to it.author?.userId },
+                    currentUserId,
+                    hasUnread
+                ),
                 error = null
             )
         )
-        collected.lastOrNull()?.let { markChatReadUpTo(taskId, it.id) }
     }
 
     fun loadMoreNewer() {
         val taskId = _uiState.value.selectedTask?.id ?: return
+        val generation = chatGeneration
         val after = _uiState.value.chat.messages.lastOrNull()?.id ?: return
         _uiState.value = _uiState.value.copy(chat = _uiState.value.chat.copy(isLoadingMore = true))
-        viewModelScope.launch {
+        launchChatHistory(generation) {
             when (val result = chatRepository.listMessages(taskId, after = after)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    chat = _uiState.value.chat.copy(
-                        messages = _uiState.value.chat.messages + result.data.messages,
-                        isLoadingMore = false,
-                        hasMoreNewer = result.data.hasMore
+                is ApiResult.Success -> if (isChatGenerationCurrent(taskId, generation)) {
+                    _uiState.value = _uiState.value.copy(
+                        chat = _uiState.value.chat.copy(
+                            messages = _uiState.value.chat.messages.mergeTaskChatHistory(result.data.messages),
+                            isLoadingMore = false,
+                            hasMoreNewer = result.data.hasMore
+                        )
                     )
-                )
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    chat = _uiState.value.chat.copy(isLoadingMore = false, error = result.error)
-                )
+                }
+                is ApiResult.Error -> if (isChatGenerationCurrent(taskId, generation)) {
+                    _uiState.value = _uiState.value.copy(
+                        chat = _uiState.value.chat.copy(isLoadingMore = false, error = result.error)
+                    )
+                }
             }
         }
     }
 
     fun refreshChat(manual: Boolean) {
         val taskId = _uiState.value.selectedTask?.id ?: return
-        val known = _uiState.value.chat.messages
-        val after = known.lastOrNull()?.id
+        val generation = chatGeneration
+        val after = _uiState.value.chat.messages.lastOrNull()?.id
         if (after == null) {
-            viewModelScope.launch { loadChatInitial(taskId) }
+            launchChatHistory(generation) { loadChatInitial(taskId, generation) }
             return
         }
-        viewModelScope.launch {
+        launchChatHistory(generation) {
             when (val result = chatRepository.listMessages(taskId, after = after)) {
                 is ApiResult.Success -> {
-                    if (result.data.messages.isNotEmpty() || manual) {
+                    if (isChatGenerationCurrent(taskId, generation) &&
+                        (result.data.messages.isNotEmpty() || manual)
+                    ) {
                         _uiState.value = _uiState.value.copy(
                             chat = _uiState.value.chat.copy(
-                                messages = known + result.data.messages,
+                                messages = _uiState.value.chat.messages.mergeTaskChatHistory(result.data.messages),
                                 hasMoreNewer = result.data.hasMore,
                                 error = null
                             )
                         )
                     }
                 }
-                is ApiResult.Error -> if (manual) {
+                is ApiResult.Error -> if (manual && isChatGenerationCurrent(taskId, generation)) {
                     _uiState.value = _uiState.value.copy(
                         chat = _uiState.value.chat.copy(error = result.error)
                     )
@@ -536,70 +620,85 @@ class TaskViewModel(
     }
 
     fun setReplyTo(message: ChatMessageDto) {
+        val task = _uiState.value.selectedTask ?: return
+        if (task.isClosedLike()) return
+        val reply = ReplyPreviewDto(
+            id = message.id,
+            author = message.author,
+            contentPreview = chatSnippet(message.content)
+        )
         _uiState.value = _uiState.value.copy(
-            chat = _uiState.value.chat.copy(
-                replyTo = ReplyPreviewDto(
-                    id = message.id,
-                    author = message.author,
-                    contentPreview = chatSnippet(message.content)
-                )
-            )
+            chat = _uiState.value.chat.copy(replyTo = reply),
+            chatReplies = _uiState.value.chatReplies + (task.id to reply)
         )
     }
 
     fun clearReply() {
-        _uiState.value = _uiState.value.copy(chat = _uiState.value.chat.copy(replyTo = null))
+        val taskId = _uiState.value.selectedTask?.id
+        _uiState.value = _uiState.value.copy(
+            chat = _uiState.value.chat.copy(replyTo = null),
+            chatReplies = if (taskId == null) _uiState.value.chatReplies else _uiState.value.chatReplies - taskId
+        )
     }
 
     fun sendMessage() {
-        val taskId = _uiState.value.selectedTask?.id ?: return
+        val task = _uiState.value.selectedTask ?: return
+        if (task.isClosedLike()) return
+        val taskId = task.id
         val content = _uiState.value.chat.draft
-        if (content.isBlank() && _uiState.value.chat.pendingFile == null) {
+        val files = _uiState.value.chat.pendingFiles
+        if (content.isBlank() && files.isEmpty()) {
             _uiState.value = _uiState.value.copy(
                 chat = _uiState.value.chat.copy(
-                    sendError = ApiError("VALIDATION_ERROR", "Введите текст сообщения")
+                    sendError = ApiError("VALIDATION_ERROR", "Введите текст сообщения или выберите файл")
                 )
             )
             return
         }
-        val file = _uiState.value.chat.pendingFile
         val replyToMessageId = _uiState.value.chat.replyTo?.id
-        val key = pendingMessageKey ?: newIdempotencyKey().also { pendingMessageKey = it }
+        val signature = conversationCommandSignature(content, replyToMessageId, files)
+        val key = pendingCommands.commandKey(taskId.toString(), signature, ::newIdempotencyKey)
         _uiState.value = _uiState.value.copy(
             chat = _uiState.value.chat.copy(isSending = true, sendError = null)
         )
-        viewModelScope.launch {
-            when (
-                val result = chatRepository.sendMessage(
-                    taskId,
-                    SendChatMessageRequest(content.trim(), key, replyToMessageId),
-                    file
-                )
-            ) {
+        coroutineScope.launch {
+            val request = SendChatMessageRequest(content.trim(), key, replyToMessageId)
+            val result = if (files.size <= 1) {
+                chatRepository.sendMessage(taskId, request, files.singleOrNull())
+            } else {
+                (chatRepository as? ChatApiClient)?.sendMessage(taskId, request, files)
+                    ?: ApiResult.Error(ApiError("UNSUPPORTED", "Отправка нескольких файлов не поддерживается"))
+            }
+            when (result) {
                 is ApiResult.Success -> {
-                    pendingMessageKey = null
-                    // поздний ответ применяется, только если задача всё ещё открыта
+                    pendingCommands.clearComposerAfterSuccess(taskId.toString(), signature)
                     if (_uiState.value.selectedTask?.id == taskId) {
-                        val known = _uiState.value.chat.messages
-                        val messages = if (known.any { it.id == result.data.id }) known else known + result.data
+                        val messages = _uiState.value.chat.messages.mergeTaskChatHistory(listOf(result.data))
+                        val unchanged = _uiState.value.chat.draft == content &&
+                            _uiState.value.chat.pendingFiles == files &&
+                            _uiState.value.chat.replyTo?.id == replyToMessageId
                         _uiState.value = _uiState.value.copy(
                             chat = _uiState.value.chat.copy(
                                 messages = messages,
-                                draft = "",
-                                pendingFile = null,
-                                replyTo = null,
+                                draft = if (unchanged) "" else _uiState.value.chat.draft,
+                                pendingFiles = if (unchanged) emptyList() else _uiState.value.chat.pendingFiles,
+                                replyTo = if (unchanged) null else _uiState.value.chat.replyTo,
                                 isSending = false,
                                 sendError = null
                             ),
-                            chatDrafts = _uiState.value.chatDrafts - taskId,
-                            chatPendingFiles = _uiState.value.chatPendingFiles - taskId
+                            chatDrafts = if (unchanged) _uiState.value.chatDrafts - taskId else _uiState.value.chatDrafts,
+                            chatPendingFiles = if (unchanged) {
+                                _uiState.value.chatPendingFiles - taskId
+                            } else {
+                                _uiState.value.chatPendingFiles
+                            },
+                            chatReplies = if (unchanged) _uiState.value.chatReplies - taskId else _uiState.value.chatReplies
                         )
                         refreshChat(manual = false)
                     }
                 }
                 is ApiResult.Error -> {
                     if (_uiState.value.selectedTask?.id == taskId) {
-                        // текст и выбранный файл сохраняются при ошибке
                         _uiState.value = _uiState.value.copy(
                             chat = _uiState.value.chat.copy(isSending = false, sendError = result.error)
                         )
@@ -612,20 +711,49 @@ class TaskViewModel(
     fun pickChatFile() {
         val task = _uiState.value.selectedTask ?: return
         if (task.isClosedLike()) return
-        pickAttachmentFile { file ->
-            if (_uiState.value.selectedTask?.id == task.id) {
-                _uiState.value = _uiState.value.copy(
-                    chat = _uiState.value.chat.copy(pendingFile = file),
-                    chatPendingFiles = _uiState.value.chatPendingFiles + (task.id to file)
-                )
+        chatFilePicker(
+            { file ->
+                if (_uiState.value.selectedTask?.id == task.id) {
+                    val validationError = validateAttachmentSelection(
+                        _uiState.value.chat.pendingFiles.map { it.bytes.size.toLong() } + file.bytes.size.toLong()
+                    )
+                    val files = if (validationError == null) _uiState.value.chat.pendingFiles + file
+                    else _uiState.value.chat.pendingFiles
+                    _uiState.value = _uiState.value.copy(
+                        chat = _uiState.value.chat.copy(pendingFiles = files, attachmentPickerError = validationError),
+                        chatPendingFiles = _uiState.value.chatPendingFiles + (task.id to files)
+                    )
+                }
+            },
+            { error ->
+                if (_uiState.value.selectedTask?.id == task.id) {
+                    _uiState.value = _uiState.value.copy(
+                        chat = _uiState.value.chat.copy(attachmentPickerError = error)
+                    )
+                }
+            },
+            _uiState.value.chat.pendingFiles.size,
+            _uiState.value.chat.pendingFiles.sumOf { it.bytes.size.toLong() }
+        )
+    }
+
+    fun removeChatPendingFile(file: AttachmentFileData) {
+        val taskId = _uiState.value.selectedTask?.id ?: return
+        val files = _uiState.value.chat.pendingFiles.filterNot { it === file }
+        _uiState.value = _uiState.value.copy(
+            chat = _uiState.value.chat.copy(pendingFiles = files),
+            chatPendingFiles = if (files.isEmpty()) {
+                _uiState.value.chatPendingFiles - taskId
+            } else {
+                _uiState.value.chatPendingFiles + (taskId to files)
             }
-        }
+        )
     }
 
     fun clearChatPendingFile() {
         val taskId = _uiState.value.selectedTask?.id
         _uiState.value = _uiState.value.copy(
-            chat = _uiState.value.chat.copy(pendingFile = null),
+            chat = _uiState.value.chat.copy(pendingFiles = emptyList()),
             chatPendingFiles = if (taskId != null) {
                 _uiState.value.chatPendingFiles - taskId
             } else {
@@ -642,7 +770,7 @@ class TaskViewModel(
                 downloadError = null
             )
         )
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = attachmentRepository.download(attachment.id)) {
                 is ApiResult.Success -> saveAttachmentFile(
                     safeAttachmentFileName(attachment.fileName, attachment.id),
@@ -659,34 +787,42 @@ class TaskViewModel(
         }
     }
 
-    private fun startChatRealtime(taskId: Long) {
+    private fun startChatRealtime(taskId: Long, generation: Long) {
         chatRealtimeJob?.cancel()
-        chatRealtimeJob = viewModelScope.launch {
+        chatRealtimeJob = coroutineScope.launch {
             var attempt = 0
-            while (isActive && _uiState.value.selectedTask?.id == taskId) {
+            val cursor = chatEventCursors.getOrPut(taskId) { TaskChatEventCursor() }
+            while (isActive && isChatGenerationCurrent(taskId, generation)) {
                 try {
-                    catchUpChat(taskId)
-                    val lastId = _uiState.value.chat.messages.lastOrNull()?.id
-                    chatRepository.observeEvents(taskId, lastId, typingOut).collect { event ->
-                        if (_uiState.value.selectedTask?.id != taskId) return@collect
+                    catchUpChat(taskId, generation)
+                    val parameters = cursor.parameters()
+                    chatRepository.observeEvents(
+                        taskId,
+                        _uiState.value.chat.messages.lastOrNull()?.id ?: parameters.first,
+                        typingOut,
+                        afterEvent = parameters.second
+                    ).collect { event ->
+                        if (!isChatGenerationCurrent(taskId, generation)) return@collect
+                        if (!cursor.accept(event)) return@collect
                         when (event) {
                             is TaskChatRealtimeEvent.Message -> {
-                                appendChatMessages(listOf(event.message))
-                                refreshTaskQuiet(taskId)
-                                markChatReadUpTo(taskId, event.message.id)
+                                _uiState.value = _uiState.value.copy(
+                                    chat = _uiState.value.chat.copy(
+                                        messages = _uiState.value.chat.messages.mergeTaskChatMessage(event)
+                                    )
+                                )
+                                if (event.type == TaskChatMessageEventType.MESSAGE) {
+                                    refreshTaskQuiet(taskId)
+                                }
                             }
                             is TaskChatRealtimeEvent.Reaction -> applyReaction(event)
-                            is TaskChatRealtimeEvent.Read -> refreshChat(manual = false)
+                            is TaskChatRealtimeEvent.Read -> applyRead(event)
                             is TaskChatRealtimeEvent.Pin -> applyChatListPin(taskId, event.isPinned)
                             is TaskChatRealtimeEvent.Typing -> showTyping(event)
                         }
                     }
                 } catch (e: ChatAccessRevokedException) {
-                    _uiState.value = _uiState.value.copy(
-                        chat = _uiState.value.chat.copy(
-                            error = ApiError("CHAT_ACCESS_ENDED", "Доступ к обсуждению завершён")
-                        )
-                    )
+                    if (isChatGenerationCurrent(taskId, generation)) revokeTaskChatAccess(taskId)
                     break
                 } catch (e: CancellationException) {
                     throw e
@@ -694,9 +830,32 @@ class TaskViewModel(
                     // сетевой разрыв: переподключение с backoff, догон истории по курсору
                 }
                 attempt++
-                delay(reconnectDelayMs(attempt))
+                reconnectDelay(reconnectDelayMs(attempt))
             }
         }
+    }
+
+    private fun revokeTaskChatAccess(taskId: Long) {
+        advanceChatGeneration()
+        chatListGeneration++
+        chatRealtimeJob?.cancel()
+        chatRealtimeJob = null
+        chatListJob?.cancel()
+        chatListJob = null
+        chatEventCursors -= taskId
+        pendingCommands.clearSensitive(taskId.toString())
+        lastMarkedReadId = 0
+        lastTypingSent = null
+        _uiState.value = _uiState.value.copy(
+            selectedTask = null,
+            actionError = ApiError("CHAT_ACCESS_ENDED", "Доступ к обсуждению завершён"),
+            chat = ChatUiState(error = ApiError("CHAT_ACCESS_ENDED", "Доступ к обсуждению завершён")),
+            chatList = _uiState.value.chatList.filterNot { it.taskId == taskId },
+            chatDrafts = _uiState.value.chatDrafts - taskId,
+            chatPendingFiles = _uiState.value.chatPendingFiles - taskId,
+            taskAttachments = emptyList(),
+            linkedDocuments = emptyList()
+        )
     }
 
     private fun applyReaction(event: TaskChatRealtimeEvent.Reaction) {
@@ -705,6 +864,16 @@ class TaskViewModel(
                 messages = _uiState.value.chat.messages.map { message ->
                     if (message.id == event.messageId) message.copy(reactions = event.reactions) else message
                 }
+            )
+        )
+    }
+
+    private fun applyRead(event: TaskChatRealtimeEvent.Read) {
+        val previous = _uiState.value.chat.readCursors[event.userId] ?: 0
+        _uiState.value = _uiState.value.copy(
+            chat = _uiState.value.chat.copy(
+                readCursors = _uiState.value.chat.readCursors +
+                    (event.userId to maxOf(previous, event.lastReadMessageId))
             )
         )
     }
@@ -725,7 +894,7 @@ class TaskViewModel(
                 chat = _uiState.value.chat.copy(typingUsers = current + event.fullName)
             )
         }
-        viewModelScope.launch {
+        coroutineScope.launch {
             delay(TYPING_VISIBLE_MS)
             _uiState.value = _uiState.value.copy(
                 chat = _uiState.value.chat.copy(
@@ -748,18 +917,24 @@ class TaskViewModel(
     fun loadChatList() {
         val query = _uiState.value.chatListQuery
         val filter = _uiState.value.chatListFilter
+        val generation = ++chatListGeneration
         _uiState.value = _uiState.value.copy(chatListLoading = true, chatListError = null)
-        viewModelScope.launch {
+        chatListJob?.cancel()
+        chatListJob = coroutineScope.launch {
             when (val result = chatRepository.listChatTasks(query, filter)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    chatList = result.data,
-                    chatListLoading = false,
-                    chatListError = null
-                )
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    chatListLoading = false,
-                    chatListError = result.error
-                )
+                is ApiResult.Success -> if (generation == chatListGeneration) {
+                    _uiState.value = _uiState.value.copy(
+                        chatList = result.data,
+                        chatListLoading = false,
+                        chatListError = null
+                    )
+                }
+                is ApiResult.Error -> if (generation == chatListGeneration) {
+                    _uiState.value = _uiState.value.copy(
+                        chatListLoading = false,
+                        chatListError = result.error
+                    )
+                }
             }
         }
     }
@@ -786,7 +961,8 @@ class TaskViewModel(
 
     fun toggleChatPin(taskId: Long) {
         val item = _uiState.value.chatList.find { it.taskId == taskId } ?: return
-        viewModelScope.launch {
+        if (runCatching { TaskStatus.valueOf(item.status) }.getOrNull()?.let { !canMutateTaskChat(it) } == true) return
+        coroutineScope.launch {
             when (val result = chatRepository.setChatPinned(taskId, !item.isPinned)) {
                 is ApiResult.Success -> loadChatList()
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(chatListError = result.error)
@@ -797,10 +973,12 @@ class TaskViewModel(
     /* ---------------------------- D-51: реакции ---------------------------- */
 
     fun toggleReaction(messageId: Long, emoji: String) {
-        val taskId = _uiState.value.selectedTask?.id ?: return
+        val task = _uiState.value.selectedTask ?: return
+        if (task.isClosedLike()) return
+        val taskId = task.id
         val message = _uiState.value.chat.messages.find { it.id == messageId } ?: return
         val active = message.reactions.find { it.emoji == emoji }?.reactedByMe != true
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = chatRepository.setChatReaction(taskId, messageId, emoji, active)) {
                 is ApiResult.Success -> refreshChat(manual = false)
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
@@ -810,10 +988,97 @@ class TaskViewModel(
         }
     }
 
+    fun editChatMessage(message: ChatMessageDto, content: String) {
+        val task = _uiState.value.selectedTask ?: return
+        if (task.isClosedLike() || message.author?.userId != currentUserId || message.revokedAt != null || content.isBlank()) return
+        val client = chatRepository as? ChatApiClient ?: return
+        coroutineScope.launch {
+            when (val result = client.editMessage(task.id, message.id, EditMessageRequest(content.trim(), message.version))) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(
+                        messages = _uiState.value.chat.messages.map { if (it.id == message.id) result.data else it }
+                    )
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(error = result.error)
+                )
+            }
+        }
+    }
+
+    fun revokeChatMessage(message: ChatMessageDto) {
+        val task = _uiState.value.selectedTask ?: return
+        if (task.isClosedLike() || message.author?.userId != currentUserId || message.revokedAt != null) return
+        val client = chatRepository as? ChatApiClient ?: return
+        coroutineScope.launch {
+            when (val result = client.revokeMessage(task.id, message.id, message.version)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(
+                        messages = _uiState.value.chat.messages.map { if (it.id == message.id) result.data else it }
+                    )
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(error = result.error)
+                )
+            }
+        }
+    }
+
+    fun forwardChatMessage(message: ChatMessageDto, target: ConversationListItemDto) {
+        val task = _uiState.value.selectedTask ?: return
+        val targetTask = _uiState.value.chatList.find { it.taskId == target.id && target.kind == ConversationKind.TASK }
+        val targetClosed = targetTask?.let {
+            runCatching { TaskStatus.valueOf(it.status) }.getOrNull()?.let { status -> !canMutateTaskChat(status) }
+        } == true
+        if (task.isClosedLike() || targetClosed || !target.canWrite || message.revokedAt != null) return
+        val client = chatRepository as? ChatApiClient ?: return
+        coroutineScope.launch {
+            when (
+                val result = client.forwardMessage(
+                    task.id,
+                    message.id,
+                    ForwardMessageRequest(target.kind, target.id, newIdempotencyKey())
+                )
+            ) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(actionError = null, forwardedMessageId = message.id)
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(actionError = result.error)
+                )
+            }
+        }
+    }
+
+    fun loadChatImagePreview(attachment: AttachmentDto) {
+        val current = _uiState.value.chat
+        if (attachment.id in current.imagePreviews || attachment.id in current.loadingImagePreviews) return
+        _uiState.value = _uiState.value.copy(
+            chat = current.copy(loadingImagePreviews = current.loadingImagePreviews + attachment.id)
+        )
+        coroutineScope.launch {
+            when (val result = attachmentRepository.download(attachment.id)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(
+                        imagePreviews = _uiState.value.chat.imagePreviews + (attachment.id to result.data.bytes),
+                        loadingImagePreviews = _uiState.value.chat.loadingImagePreviews - attachment.id
+                    )
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    chat = _uiState.value.chat.copy(
+                        loadingImagePreviews = _uiState.value.chat.loadingImagePreviews - attachment.id
+                    )
+                )
+            }
+        }
+    }
+
     /* ----------------------------- D-51: поиск ------------------------------ */
 
     fun updateChatSearchQuery(query: String) {
         val taskId = _uiState.value.selectedTask?.id
+        val searchGeneration = ++chatSearchGeneration
+        chatSearchJob?.cancel()
         _uiState.value = _uiState.value.copy(
             chat = _uiState.value.chat.copy(searchQuery = query, searchError = null)
         )
@@ -823,11 +1088,13 @@ class TaskViewModel(
             )
             return
         }
+        val generation = chatGeneration
         _uiState.value = _uiState.value.copy(chat = _uiState.value.chat.copy(searchLoading = true))
-        viewModelScope.launch {
+        chatSearchJob = coroutineScope.launch {
             when (val result = chatRepository.searchChatMessages(taskId, query)) {
                 is ApiResult.Success -> {
-                    if (_uiState.value.selectedTask?.id == taskId &&
+                    if (searchGeneration == chatSearchGeneration &&
+                        isChatGenerationCurrent(taskId, generation) &&
                         _uiState.value.chat.searchQuery == query
                     ) {
                         _uiState.value = _uiState.value.copy(
@@ -839,7 +1106,10 @@ class TaskViewModel(
                     }
                 }
                 is ApiResult.Error -> {
-                    if (_uiState.value.selectedTask?.id == taskId) {
+                    if (searchGeneration == chatSearchGeneration &&
+                        isChatGenerationCurrent(taskId, generation) &&
+                        _uiState.value.chat.searchQuery == query
+                    ) {
                         _uiState.value = _uiState.value.copy(
                             chat = _uiState.value.chat.copy(
                                 searchLoading = false,
@@ -853,16 +1123,85 @@ class TaskViewModel(
     }
 
     fun scrollToSearchResult(messageId: Long) {
-        val messageLoaded = _uiState.value.chat.messages.any { it.id == messageId }
+        val taskId = _uiState.value.selectedTask?.id ?: return
+        if (_uiState.value.chat.messages.any { it.id == messageId }) {
+            showChatSearchTarget(messageId)
+            return
+        }
+        val generation = chatGeneration
+        _uiState.value = _uiState.value.copy(chat = _uiState.value.chat.copy(searchError = null))
+        launchChatHistory(generation) { loadChatSearchTarget(taskId, generation, messageId) }
+    }
+
+    private fun showChatSearchTarget(messageId: Long) {
         _uiState.value = _uiState.value.copy(
             chat = _uiState.value.chat.copy(
-                scrollToMessageId = messageId.takeIf { messageLoaded },
-                searchError = if (messageLoaded) null else ApiError(
-                    "MESSAGE_NOT_LOADED",
-                    "Сообщение находится за пределами загруженной истории"
-                )
+                scrollToMessageId = messageId,
+                highlightedMessageId = messageId,
+                searchError = null
             )
         )
+    }
+
+    private suspend fun loadChatSearchTarget(taskId: Long, generation: Long, messageId: Long) {
+        val loaded = _uiState.value.chat.messages
+        var before = when {
+            loaded.isEmpty() -> messageId + 1
+            messageId < loaded.first().id -> loaded.first().id
+            messageId > loaded.last().id -> null
+            else -> messageId + 1
+        }
+        var after = if (before == null && loaded.isNotEmpty()) loaded.last().id else null
+        repeat(MAX_SEARCH_TARGET_PAGES) {
+            if (!isChatGenerationCurrent(taskId, generation)) return
+            when (
+                val result = chatRepository.listMessages(
+                    taskId,
+                    after = after,
+                    before = before,
+                    limit = SEARCH_HISTORY_PAGE_SIZE
+                )
+            ) {
+                is ApiResult.Error -> {
+                    if (isChatGenerationCurrent(taskId, generation)) {
+                        _uiState.value = _uiState.value.copy(
+                            chat = _uiState.value.chat.copy(searchError = result.error)
+                        )
+                    }
+                    return
+                }
+                is ApiResult.Success -> {
+                    if (!isChatGenerationCurrent(taskId, generation)) return
+                    val merged = (_uiState.value.chat.messages + result.data.messages)
+                        .associateBy { it.id }.values.sortedBy { it.id }
+                    _uiState.value = _uiState.value.copy(
+                        chat = _uiState.value.chat.copy(messages = merged)
+                    )
+                    if (merged.any { it.id == messageId }) {
+                        showChatSearchTarget(messageId)
+                        return
+                    }
+                    if (result.data.messages.isEmpty()) return@repeat
+                    if (before != null) {
+                        if (!result.data.hasMore) return@repeat
+                        before = result.data.nextBefore ?: result.data.messages.last().id
+                    } else {
+                        if (!result.data.hasMore) return@repeat
+                        after = result.data.nextAfter ?: result.data.messages.last().id
+                    }
+                }
+            }
+        }
+        if (isChatGenerationCurrent(taskId, generation)) {
+            _uiState.value = _uiState.value.copy(
+                chat = _uiState.value.chat.copy(
+                    searchError = ApiError(
+                        "MESSAGE_TARGET_UNAVAILABLE",
+                        "Сообщение недоступно или было удалено"
+                    )
+                )
+            )
+        }
     }
 
     fun clearScrollToMessage() {
@@ -874,7 +1213,7 @@ class TaskViewModel(
     /* --------------------- D-51: контекст задачи справа --------------------- */
 
     private fun loadTaskContext(taskId: Long) {
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = attachmentRepository.list(AttachmentEntityType.TASK, taskId)) {
                 is ApiResult.Success -> {
                     if (_uiState.value.selectedTask?.id == taskId) {
@@ -885,7 +1224,7 @@ class TaskViewModel(
                 }
             }
         }
-        viewModelScope.launch {
+        coroutineScope.launch {
             when (val result = documentRepository.list()) {
                 is ApiResult.Success -> {
                     if (_uiState.value.selectedTask?.id == taskId) {
@@ -900,16 +1239,33 @@ class TaskViewModel(
         }
     }
 
+    fun updateChatVisibleRange(lastVisibleMessageId: Long?, viewingLatest: Boolean) {
+        val taskId = _uiState.value.selectedTask?.id ?: return
+        val latestLoadedMessageId = _uiState.value.chat.messages.lastOrNull()?.id
+        if (shouldMarkTaskChatRead(lastVisibleMessageId, latestLoadedMessageId, viewingLatest)) {
+            markChatReadUpTo(taskId, requireNotNull(lastVisibleMessageId))
+        }
+    }
+
     private fun markChatReadUpTo(taskId: Long, messageId: Long) {
         if (messageId <= lastMarkedReadId) return
         lastMarkedReadId = messageId
-        viewModelScope.launch {
-            chatRepository.markChatRead(taskId, messageId)
-            _uiState.value = _uiState.value.copy(
-                chatList = _uiState.value.chatList.map {
-                    if (it.taskId == taskId) it.copy(unreadCount = 0, mentionCount = 0) else it
+        coroutineScope.launch {
+            when (val result = chatRepository.markChatRead(taskId, messageId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    chatList = _uiState.value.chatList.map {
+                        if (it.taskId == taskId) it.copy(unreadCount = 0, mentionCount = 0) else it
+                    }
+                )
+                is ApiResult.Error -> {
+                    if (lastMarkedReadId == messageId) lastMarkedReadId = 0
+                    if (_uiState.value.selectedTask?.id == taskId) {
+                        _uiState.value = _uiState.value.copy(
+                            chat = _uiState.value.chat.copy(error = result.error)
+                        )
+                    }
                 }
-            )
+            }
         }
     }
 
@@ -921,18 +1277,21 @@ class TaskViewModel(
         _uiState.value = _uiState.value.copy(workspaceFullCard = false)
     }
 
-    private suspend fun catchUpChat(taskId: Long) {
+    private suspend fun catchUpChat(taskId: Long, generation: Long) {
         var after = _uiState.value.chat.messages.lastOrNull()?.id
         var iterations = 0
-        while (iterations < MAX_CHAT_PAGES) {
+        while (iterations < MAX_CHAT_PAGES && isChatGenerationCurrent(taskId, generation)) {
             when (val result = chatRepository.listMessages(taskId, after = after)) {
                 is ApiResult.Success -> {
+                    if (!isChatGenerationCurrent(taskId, generation)) return
                     appendChatMessages(result.data.messages)
                     if (!result.data.hasMore || result.data.messages.isEmpty()) break
                     after = result.data.messages.last().id
                 }
                 is ApiResult.Error -> {
-                    if (isChatAccessTerminated(result.statusCode)) throw ChatAccessRevokedException()
+                    if (isChatAccessTerminated(result.statusCode) && isChatGenerationCurrent(taskId, generation)) {
+                        throw ChatAccessRevokedException()
+                    }
                     break
                 }
             }
@@ -968,7 +1327,12 @@ class TaskViewModel(
     }
 
     override fun onCleared() {
+        advanceChatGeneration()
+        chatListGeneration++
+        chatSearchGeneration++
+        chatSearchJob?.cancel()
         chatRealtimeJob?.cancel()
+        chatListJob?.cancel()
         super.onCleared()
     }
 
@@ -979,6 +1343,8 @@ class TaskViewModel(
         const val CHAT_RECONNECT_BASE_MS = 1_000L
         const val CHAT_RECONNECT_MAX_MS = 30_000L
         const val MAX_CHAT_PAGES = 10
+        const val MAX_SEARCH_TARGET_PAGES = 10
+        const val SEARCH_HISTORY_PAGE_SIZE = 200
         const val TYPING_VISIBLE_MS = 4_000L
         val TYPING_THROTTLE = 3.seconds
         val DATE_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}")
@@ -1012,7 +1378,8 @@ data class TasksUiState(
     val taskAttachments: List<AttachmentDto> = emptyList(),
     val linkedDocuments: List<DocumentDto> = emptyList(),
     val chatDrafts: Map<Long, String> = emptyMap(),
-    val chatPendingFiles: Map<Long, AttachmentFileData> = emptyMap(),
+    val chatPendingFiles: Map<Long, List<AttachmentFileData>> = emptyMap(),
+    val chatReplies: Map<Long, ReplyPreviewDto> = emptyMap(),
     val workspaceFullCard: Boolean = false
 )
 
@@ -1039,17 +1406,27 @@ data class ChatUiState(
     val sendError: ApiError? = null,
     val draft: String = "",
     val filter: ChatMessageFilter = ChatMessageFilter.ALL,
-    val pendingFile: AttachmentFileData? = null,
+    val pendingFiles: List<AttachmentFileData> = emptyList(),
     val downloadingAttachmentId: Long? = null,
     val downloadError: ApiError? = null,
+    val actionError: ApiError? = null,
+    val attachmentPickerError: String? = null,
+    val forwardedMessageId: Long? = null,
     val replyTo: ReplyPreviewDto? = null,
+    val readCursors: Map<Long, Long> = emptyMap(),
     val typingUsers: List<String> = emptyList(),
     val searchQuery: String = "",
     val searchResults: List<ChatSearchResultDto> = emptyList(),
     val searchLoading: Boolean = false,
     val searchError: ApiError? = null,
-    val scrollToMessageId: Long? = null
-)
+    val scrollToMessageId: Long? = null,
+    val highlightedMessageId: Long? = null,
+    val firstUnreadMessageId: Long? = null,
+    val imagePreviews: Map<Long, ByteArray> = emptyMap(),
+    val loadingImagePreviews: Set<Long> = emptySet()
+) {
+    val pendingFile: AttachmentFileData? get() = pendingFiles.firstOrNull()
+}
 
 enum class ChatMessageFilter(val label: String) {
     ALL("Все"),

@@ -126,6 +126,10 @@ class AttachmentService(
         runCatching { fileStorage.delete(prepared.relativePath) }
     }
 
+    fun discardMessageFiles(prepared: Iterable<PreparedMessageFile>) {
+        prepared.forEach(::discardMessageFile)
+    }
+
     fun attachPreparedFile(
         prepared: PreparedMessageFile,
         entityType: String,
@@ -292,6 +296,8 @@ class AttachmentService(
 
     companion object {
         const val MAX_FILE_SIZE_BYTES = 25L * 1024 * 1024
+        const val MAX_MESSAGE_FILES = 5
+        const val MAX_MESSAGE_AGGREGATE_SIZE_BYTES = 50L * 1024 * 1024
         private const val GENERIC_MIME = "application/octet-stream"
 
         private val ALLOWED_MIME_BY_EXTENSION = mapOf(

@@ -26,6 +26,7 @@ fun Application.configureRouting() {
     val taskService: TaskService by inject()
     val chatService: ChatService by inject()
     val notificationService: NotificationService by inject()
+    val pushService: PushService by inject()
     val searchService: SearchService by inject()
     val wmsService: WmsService by inject()
     val wmsTransferService: WmsTransferService by inject()
@@ -44,6 +45,7 @@ fun Application.configureRouting() {
     val chatRepository: ChatRepository by inject()
     val conversationRepository: ConversationRepository by inject()
     val conversationService: ConversationService by inject()
+    val unifiedChatListService: UnifiedChatListService by inject()
     val config: AppConfig by inject()
 
     routing {
@@ -56,10 +58,12 @@ fun Application.configureRouting() {
         taskRoutes(taskService)
         chatRoutes(chatService)
         notificationRoutes(notificationService)
+        pushRoutes(pushService)
         searchRoutes(searchService)
         chatWebSocketRoutes(chatService, chatRepository, sessionService, chatEventBus, config.cookieName, config.allowedOrigins)
         notificationWebSocketRoutes(notificationService, sessionService, notificationEventBus, config.cookieName, config.allowedOrigins)
         conversationRoutes(conversationService)
+        unifiedChatRoutes(unifiedChatListService)
         conversationWebSocketRoutes(conversationService, conversationRepository, sessionService, conversationEventBus, config.cookieName, config.allowedOrigins)
         wmsRoutes(wmsService)
         wmsTransferRoutes(wmsTransferService)

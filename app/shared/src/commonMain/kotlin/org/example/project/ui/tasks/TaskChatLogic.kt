@@ -6,7 +6,48 @@ import org.example.project.dto.DocumentDto
 import org.example.project.dto.DocumentLinkType
 import org.example.project.dto.TaskChatListFilter
 import org.example.project.dto.TaskChatListItemDto
+import org.example.project.dto.TaskStatus
 import org.example.project.dto.UserOptionDto
+
+private const val MAX_IMAGE_PREVIEW_BYTES = 10L * 1024L * 1024L
+
+fun restorePrependAnchor(firstVisibleIndex: Int, prependedCount: Int): Int =
+    (firstVisibleIndex + prependedCount).coerceAtLeast(0)
+
+data class TaskChatScrollAnchor(val messageId: Long, val index: Int, val offset: Int)
+data class RestoredTaskChatScrollAnchor(val index: Int, val offset: Int)
+
+fun restoreTaskChatPrependAnchor(
+    anchor: TaskChatScrollAnchor,
+    oldMessageIds: List<Long>,
+    newMessageIds: List<Long>
+): RestoredTaskChatScrollAnchor {
+    val restoredIndex = newMessageIds.indexOf(anchor.messageId).takeIf { it >= 0 }
+        ?: restorePrependAnchor(anchor.index, (newMessageIds.size - oldMessageIds.size).coerceAtLeast(0))
+    return RestoredTaskChatScrollAnchor(restoredIndex, anchor.offset)
+}
+
+fun firstUnreadMessageId(
+    messages: List<Pair<Long, Long?>>,
+    currentUserId: Long,
+    hasUnread: Boolean
+): Long? = if (hasUnread) messages.firstOrNull { it.second != currentUserId }?.first else null
+
+fun shouldMarkTaskChatRead(
+    lastVisibleMessageId: Long?,
+    latestLoadedMessageId: Long?,
+    viewingLatest: Boolean
+): Boolean = viewingLatest && lastVisibleMessageId != null && lastVisibleMessageId == latestLoadedMessageId
+
+fun canMutateTaskChat(status: TaskStatus): Boolean =
+    status != TaskStatus.CLOSED && status != TaskStatus.CANCELLED
+
+fun canEditChatMessage(isOwn: Boolean, canWrite: Boolean, revoked: Boolean): Boolean =
+    isOwn && canWrite && !revoked
+
+fun isPreviewableImage(mimeType: String?, sizeBytes: Long): Boolean =
+    mimeType?.lowercase()?.substringBefore(';') in setOf("image/png", "image/jpeg", "image/gif", "image/webp") &&
+        sizeBytes in 1..MAX_IMAGE_PREVIEW_BYTES
 
 /** Подписи фильтров списка чатов; enum приходит из core. */
 fun TaskChatListFilter.label(): String = when (this) {
@@ -121,7 +162,15 @@ fun parseChatFormatting(text: String): List<ChatTextSegment> {
         }
     }
     flushPlain()
-    return segments
+    return segments.fold(mutableListOf()) { normalized, segment ->
+        val previous = normalized.lastOrNull()
+        if (previous?.kind == segment.kind) {
+            normalized[normalized.lastIndex] = previous.copy(text = previous.text + segment.text)
+        } else {
+            normalized += segment
+        }
+        normalized
+    }
 }
 
 /** Сниппет последнего сообщения для левого списка. */

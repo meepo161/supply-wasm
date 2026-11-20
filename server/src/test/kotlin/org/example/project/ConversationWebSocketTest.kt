@@ -11,16 +11,24 @@ import io.ktor.server.config.*
 import io.ktor.server.testing.*
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.serializer
 import org.example.project.dto.*
 import org.example.project.model.CurrentUser
+import org.example.project.realtime.ConversationEventBus
 import org.example.project.service.ConversationService
 import org.jooq.DSLContext
 import org.junit.AfterClass
@@ -30,6 +38,7 @@ import org.junit.Test
 import org.koin.ktor.ext.getKoin
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -197,6 +206,188 @@ class ConversationWebSocketTest {
             val duplicate = withTimeoutOrNull(2_000) { incoming.receive() }
             assertNull(duplicate, "Repeated message must not be published again")
         }
+    }
+
+    @Test
+    fun `edited revoked reaction read and typing events are typed and authorized`() = testApp { ctx ->
+        val admin = newClient()
+        ensureAdmin(admin)
+        val author = createUserWithRole(admin, "cwseventsa", "password", "Events Author", emptyList())
+        val recipient = createUserWithRole(admin, "cwseventsb", "password", "Events Recipient", emptyList())
+        val conversationId = createDirectConversation(author.id, recipient.id, "cwseventsa")
+        val authorUser = CurrentUser(author.id, "cwseventsa", "Events Author", emptySet())
+        val message = ctx.sendMessage(conversationId, SendChatMessageRequest("Before", "cws-events-1"), authorUser)
+
+        val recipientClient = loginClient("cwseventsb", "password")
+        recipientClient.webSocket("/api/conversations/$conversationId/ws") {
+            val initial = receiveEnvelope()
+            assertEquals("CONVERSATION_MESSAGE", initial.getValue("category").jsonPrimitive.content)
+            assertEquals("MESSAGE", initial.getValue("type").jsonPrimitive.content)
+
+            val edited = ctx.editMessage(conversationId, message.id, EditMessageRequest("After", 0), authorUser)
+            val editEvent = receiveEnvelope()
+            assertEquals("CONVERSATION_MESSAGE", editEvent.getValue("category").jsonPrimitive.content)
+            assertEquals("EDITED", editEvent.getValue("type").jsonPrimitive.content)
+            assertEquals(edited.editedAt, editEvent.getValue("message").jsonObject.getValue("editedAt").jsonPrimitive.content)
+
+            ctx.toggleReaction(conversationId, message.id, "👍", authorUser)
+            val reaction = receiveEnvelope()
+            assertEquals("CONVERSATION_REACTION", reaction.getValue("category").jsonPrimitive.content)
+            assertEquals("REACTION", reaction.getValue("type").jsonPrimitive.content)
+            assertEquals(message.id, reaction.getValue("messageId").jsonPrimitive.long)
+
+            ctx.markRead(conversationId, MarkChatReadRequest(message.id), authorUser)
+            val read = receiveEnvelope()
+            assertEquals("CONVERSATION_READ", read.getValue("category").jsonPrimitive.content)
+            assertEquals("READ", read.getValue("type").jsonPrimitive.content)
+            assertEquals(message.id, read.getValue("lastReadMessageId").jsonPrimitive.long)
+
+            ctx.revokeMessage(conversationId, message.id, authorUser)
+            val revoked = receiveEnvelope()
+            assertEquals("REVOKED", revoked.getValue("type").jsonPrimitive.content)
+            assertEquals("Сообщение отозвано", revoked.getValue("message").jsonObject.getValue("content").jsonPrimitive.content)
+            assertFalse(revoked.toString().contains("Before"))
+            assertFalse(revoked.toString().contains("After"))
+        }
+    }
+
+    @Test
+    fun `afterEvent replays missed edited reaction read and revoked without old content`() = testApp { ctx ->
+        val admin = newClient()
+        ensureAdmin(admin)
+        val author = createUserWithRole(admin, "cwsreplaya", "password", "Replay Author", emptyList())
+        val recipient = createUserWithRole(admin, "cwsreplayb", "password", "Replay Recipient", emptyList())
+        val conversationId = createDirectConversation(author.id, recipient.id, "cwsreplaya")
+        val authorUser = CurrentUser(author.id, "cwsreplaya", "Replay Author", emptySet())
+        val message = ctx.sendMessage(conversationId, SendChatMessageRequest("Replay secret", "cws-replay-1"), authorUser)
+        val recipientClient = loginClient("cwsreplayb", "password")
+
+        var messageEventId = 0L
+        recipientClient.webSocket("/api/conversations/$conversationId/ws?afterEvent=0") {
+            val initial = receiveEnvelope()
+            assertEquals("MESSAGE", initial.getValue("type").jsonPrimitive.content)
+            messageEventId = initial.getValue("eventId").jsonPrimitive.long
+        }
+        ctx.editMessage(conversationId, message.id, EditMessageRequest("Replay edited", 0), authorUser)
+        ctx.toggleReaction(conversationId, message.id, "👍", authorUser)
+        ctx.markRead(conversationId, MarkChatReadRequest(message.id), authorUser)
+        ctx.revokeMessage(conversationId, message.id, authorUser)
+
+        recipientClient.webSocket(
+            "/api/conversations/$conversationId/ws?after=${message.id}&afterEvent=$messageEventId"
+        ) {
+            val types = List(4) { receiveEnvelope() }
+            assertEquals(listOf("EDITED", "REACTION", "READ", "REVOKED"), types.map {
+                it.getValue("type").jsonPrimitive.content
+            })
+            assertTrue(types.zipWithNext().all { (a, b) ->
+                a.getValue("eventId").jsonPrimitive.long < b.getValue("eventId").jsonPrimitive.long
+            })
+            val reaction = types[1].getValue("reactions").jsonArray.single().jsonObject
+            assertFalse(reaction.getValue("reactedByMe").jsonPrimitive.boolean)
+            val revoked = types[3]
+            assertEquals("Сообщение отозвано", revoked.getValue("message").jsonObject.getValue("content").jsonPrimitive.content)
+            assertFalse(revoked.toString().contains("Replay secret"))
+            assertFalse(revoked.toString().contains("Replay edited"))
+        }
+    }
+
+    @Test
+    fun `reaction reactedByMe is hydrated independently for each websocket viewer`() = testApp { ctx ->
+        val admin = newClient()
+        ensureAdmin(admin)
+        val author = createUserWithRole(admin, "cwsviewera", "password", "Viewer Author", emptyList())
+        val recipient = createUserWithRole(admin, "cwsviewerb", "password", "Viewer Recipient", emptyList())
+        val conversationId = createDirectConversation(author.id, recipient.id, "cwsviewera")
+        val authorUser = CurrentUser(author.id, "cwsviewera", "Viewer Author", emptySet())
+        val message = ctx.sendMessage(conversationId, SendChatMessageRequest("Viewer", "cws-viewer-1"), authorUser)
+        val authorClient = loginClient("cwsviewera", "password")
+        val recipientClient = loginClient("cwsviewerb", "password")
+
+        authorClient.webSocket("/api/conversations/$conversationId/ws") author@{
+            assertEquals("MESSAGE", this@author.receiveEnvelope().getValue("type").jsonPrimitive.content)
+            recipientClient.webSocket("/api/conversations/$conversationId/ws") recipient@{
+                assertEquals("MESSAGE", this@recipient.receiveEnvelope().getValue("type").jsonPrimitive.content)
+                ctx.toggleReaction(conversationId, message.id, "👍", authorUser)
+                val authorEvent = this@author.receiveEnvelope()
+                val recipientEvent = this@recipient.receiveEnvelope()
+                assertTrue(authorEvent.getValue("reactions").jsonArray.single().jsonObject
+                    .getValue("reactedByMe").jsonPrimitive.boolean)
+                assertFalse(recipientEvent.getValue("reactions").jsonArray.single().jsonObject
+                    .getValue("reactedByMe").jsonPrimitive.boolean)
+            }
+        }
+    }
+
+    @Test
+    fun `concurrent commands after replay publish both durable events in id order`() = testApp { ctx ->
+        val admin = newClient()
+        ensureAdmin(admin)
+        val author = createUserWithRole(admin, "cwsordereda", "password", "Ordered Author", emptyList())
+        val recipient = createUserWithRole(admin, "cwsorderedb", "password", "Ordered Recipient", emptyList())
+        val conversationId = createDirectConversation(author.id, recipient.id, "cwsordereda")
+        val authorUser = CurrentUser(author.id, "cwsordereda", "Ordered Author", emptySet())
+        val message = ctx.sendMessage(conversationId, SendChatMessageRequest("Ordered", "cws-ordered-1"), authorUser)
+        val recipientClient = loginClient("cwsorderedb", "password")
+
+        recipientClient.webSocket("/api/conversations/$conversationId/ws?afterEvent=0") {
+            val replayed = receiveEnvelope()
+            assertEquals("MESSAGE", replayed.getValue("type").jsonPrimitive.content)
+            coroutineScope {
+                launch { ctx.editMessage(conversationId, message.id, EditMessageRequest("Ordered edit", 0), authorUser) }
+                launch { ctx.toggleReaction(conversationId, message.id, "👍", authorUser) }
+            }
+            val live = List(2) { receiveEnvelope() }
+            val eventIds = live.map { it.getValue("eventId").jsonPrimitive.long }
+            assertTrue(eventIds[0] < eventIds[1], "Events must follow durable id order: $live")
+            assertEquals(setOf("EDITED", "REACTION"), live.map { it.getValue("type").jsonPrimitive.content }.toSet())
+        }
+    }
+
+    @Test
+    fun `typing action is throttled and broadcast with current access`() = testApp { _ ->
+        val admin = newClient()
+        ensureAdmin(admin)
+        val author = createUserWithRole(admin, "cwstypinga", "password", "Typing Author", emptyList())
+        val recipient = createUserWithRole(admin, "cwstypingb", "password", "Typing Recipient", emptyList())
+        val conversationId = createDirectConversation(author.id, recipient.id, "cwstypinga")
+        val authorClient = loginClient("cwstypinga", "password")
+        val recipientClient = loginClient("cwstypingb", "password")
+
+        recipientClient.webSocket("/api/conversations/$conversationId/ws") recipient@{
+            authorClient.webSocket("/api/conversations/$conversationId/ws") author@{
+                this@author.send(Frame.Text("""{"action":"TYPING"}"""))
+                this@author.send(Frame.Text("""{"action":"TYPING"}"""))
+                val typing = this@recipient.receiveEnvelope()
+                assertEquals("CONVERSATION_TYPING", typing.getValue("category").jsonPrimitive.content)
+                assertEquals("TYPING", typing.getValue("type").jsonPrimitive.content)
+                assertEquals(author.id, typing.getValue("userId").jsonPrimitive.long)
+                assertNull(withTimeoutOrNull(2_000) { this@recipient.incoming.receive() })
+            }
+        }
+    }
+
+    @Test
+    fun `event bus applies backpressure without dropping events beyond buffer capacity`() = runBlocking {
+        val bus = ConversationEventBus()
+        val received = Channel<Long>(Channel.RENDEZVOUS)
+        val collector = launch {
+            bus.events.collect { received.send(it.eventId!!) }
+        }
+        yield()
+        val producer = launch {
+            repeat(100) { index ->
+                val eventId = index + 1L
+                bus.publish(
+                    ConversationMessageDto(eventId, 1L, content = "event", createdAt = ""),
+                    eventId
+                )
+            }
+        }
+        val eventIds = List(100) { received.receive() }
+        producer.join()
+        collector.cancel()
+        assertEquals((1L..100L).toList(), eventIds)
     }
 
     private suspend fun DefaultClientWebSocketSession.receiveEnvelope(): JsonObject {

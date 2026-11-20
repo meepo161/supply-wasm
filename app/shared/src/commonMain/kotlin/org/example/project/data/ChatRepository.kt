@@ -25,7 +25,12 @@ interface ChatRepository {
     fun observeMessages(taskId: Long, after: Long? = null): Flow<ChatMessageDto>
 
     /** Типизированный поток событий WS; outgoing несёт клиентские команды (typing). */
-    fun observeEvents(taskId: Long, after: Long? = null, outgoing: Flow<String>): Flow<TaskChatRealtimeEvent>
+    fun observeEvents(
+        taskId: Long,
+        after: Long? = null,
+        outgoing: Flow<String>,
+        afterEvent: Long? = null
+    ): Flow<TaskChatRealtimeEvent>
 
     suspend fun listChatTasks(
         query: String? = null,

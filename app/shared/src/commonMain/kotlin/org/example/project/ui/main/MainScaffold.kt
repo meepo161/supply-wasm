@@ -32,6 +32,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -136,11 +138,22 @@ fun MainScaffold(
             attachmentRepository, userRepository, user
         )
     }
-    val projectConversationViewModel = remember(user.id) {
+    val projectUiState by projectViewModel.uiState.collectAsState()
+    val projectConversationViewModel = remember(
+        user.id,
+        projectUiState.selectedProject?.id,
+        selected == NavigationDestination.PROJECTS
+    ) {
         ConversationViewModel(
             conversationRepository, taskRepository, projectRepository,
             attachmentRepository, userRepository, user
         )
+    }
+    DisposableEffect(conversationViewModel) {
+        onDispose { conversationViewModel.close() }
+    }
+    DisposableEffect(projectConversationViewModel) {
+        onDispose { projectConversationViewModel.close() }
     }
     androidx.compose.runtime.LaunchedEffect(notificationViewModel) {
         notificationViewModel.uiState.collect { state ->

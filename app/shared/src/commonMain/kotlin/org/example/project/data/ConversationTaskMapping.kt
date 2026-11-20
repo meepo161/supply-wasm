@@ -1,6 +1,7 @@
 package org.example.project.data
 
 import org.example.project.dto.ChatMessageDto
+import org.example.project.dto.ChatSearchResultDto
 import org.example.project.dto.ConversationDto
 import org.example.project.dto.ConversationKind
 import org.example.project.dto.ConversationMemberDto
@@ -25,7 +26,15 @@ fun ChatMessageDto.toConversationMessage(): ConversationMessageDto =
         author = author,
         content = content,
         createdAt = createdAt,
-        attachments = attachments
+        attachments = attachments,
+        replyTo = replyTo,
+        reactions = reactions,
+        mentionedUserIds = mentionedUserIds,
+        readByCount = readByCount,
+        editedAt = editedAt,
+        revokedAt = revokedAt,
+        source = source,
+        version = version
     )
 
 fun isVirtualTaskConversationId(id: Long): Boolean = id < 0
@@ -87,3 +96,13 @@ fun conversationKey(kind: ConversationKind, id: Long): String = "$kind:$id"
 /** Защита от поздних ответов: ответ применяется только к всё ещё выбранному разговору. */
 fun isSameConversation(selected: ConversationDto?, id: Long, kind: ConversationKind): Boolean =
     selected != null && selected.id == id && selected.kind == kind
+
+
+fun ChatSearchResultDto.toConversationMessage(): ConversationMessageDto =
+    ConversationMessageDto(
+        id = messageId,
+        conversationId = -taskId,
+        author = author,
+        content = content,
+        createdAt = createdAt
+    )

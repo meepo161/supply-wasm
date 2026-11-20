@@ -243,7 +243,7 @@ class DocumentViewModel(
             )
             return
         }
-        pickAttachmentFile { file ->
+        pickAttachmentFile(onPicked = { file ->
             viewModelScope.launch {
                 _uiState.value = _uiState.value.copy(isUploading = true, operationError = null)
                 when (val result = documentRepository.uploadVersion(document.id, file, reason.ifEmpty { null })) {
@@ -262,7 +262,7 @@ class DocumentViewModel(
                     )
                 }
             }
-        }
+        })
     }
 
     fun approveVersion(version: DocumentVersionDto) {

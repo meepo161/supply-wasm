@@ -5,7 +5,23 @@ package org.example.project.data
  * для реально выбранного пользователем файла; при отмене диалога
  * колбэк не вызывается.
  */
-expect fun pickAttachmentFile(onPicked: (AttachmentFileData) -> Unit)
+const val MAX_ATTACHMENT_FILES = 5
+const val MAX_ATTACHMENT_FILE_BYTES = 25L * 1024L * 1024L
+const val MAX_ATTACHMENT_TOTAL_BYTES = 50L * 1024L * 1024L
+
+fun validateAttachmentSelection(fileSizes: List<Long>): String? = when {
+    fileSizes.size > MAX_ATTACHMENT_FILES -> "Можно выбрать не более 5 файлов"
+    fileSizes.any { it > MAX_ATTACHMENT_FILE_BYTES } -> "Файл превышает 25 МиБ"
+    fileSizes.sum() > MAX_ATTACHMENT_TOTAL_BYTES -> "Общий размер файлов превышает 50 МиБ"
+    else -> null
+}
+
+expect fun pickAttachmentFile(
+    onPicked: (AttachmentFileData) -> Unit,
+    onError: (String) -> Unit = {},
+    existingFileCount: Int = 0,
+    existingTotalBytes: Long = 0L
+)
 
 /**
  * Инициирует скачивание файла в браузере (Blob + object URL).

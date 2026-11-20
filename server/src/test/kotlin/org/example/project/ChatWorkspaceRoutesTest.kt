@@ -214,6 +214,68 @@ class ChatWorkspaceRoutesTest {
     }
 
     @Test
+    fun `reply to revoked message exposes only tombstone preview`() = testApp {
+        val admin = jsonClient()
+        val adminUser = ensureAdmin(admin)
+        val taskId = createTask("T-CW-REVOKED-REPLY", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        val client = loginClient("admin", "admin123")
+        val original = client.post("/api/tasks/$taskId/chat/messages") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SendChatMessageRequest("Secret revoked reply source", "cw-revoked-reply-1")))
+        }.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        val reply = client.post("/api/tasks/$taskId/chat/messages") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SendChatMessageRequest(
+                "Reply remains", "cw-revoked-reply-2", replyToMessageId = original.id
+            )))
+        }.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        val revoked = client.post("/api/tasks/$taskId/chat/messages/${original.id}/revoke") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(RevokeMessageRequest(0)))
+        }
+        assertEquals(HttpStatusCode.OK, revoked.status, revoked.bodyAsText())
+
+        val historyResponse = client.get("/api/tasks/$taskId/chat/messages")
+        val historyText = historyResponse.bodyAsText()
+        assertFalse(historyText.contains("Secret revoked reply source"))
+        val history = historyResponse.bodyAs<ApiResponse<ChatMessagePageDto>>().data!!
+        val hydratedReply = history.messages.single { it.id == reply.id }
+        assertEquals("Сообщение отозвано", hydratedReply.replyTo?.contentPreview)
+        assertEquals("Reply remains", hydratedReply.content)
+    }
+
+    @Test
+    fun `removed participant cannot edit after access revocation and no event is written`() = testApp {
+        val admin = jsonClient()
+        val adminUser = ensureAdmin(admin)
+        val member = createUserWithRole(admin, "cwremovedwriter", "password", "Removed Writer", emptyList())
+        val taskId = createTask("T-CW-REMOVED", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        addTaskParticipant(taskId, member.id, "ASSIGNEE")
+        val client = loginClient("cwremovedwriter", "password")
+        val message = client.post("/api/tasks/$taskId/chat/messages") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SendChatMessageRequest("Before removal", "cw-removed-1")))
+        }.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        application.getKoin().get<DSLContext>().execute(
+            "DELETE FROM task_participants WHERE task_id = ? AND user_id = ?", taskId, member.id
+        )
+
+        val denied = client.post("/api/tasks/$taskId/chat/messages/${message.id}/edit") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(EditMessageRequest("After removal", message.version)))
+        }
+        assertEquals(HttpStatusCode.Forbidden, denied.status)
+        val current = application.getKoin().get<DSLContext>().fetchOne(
+            "SELECT content, version FROM task_chat_messages WHERE id = ?", message.id
+        )!!
+        assertEquals("Before removal", current.get("content"))
+        assertEquals(0L, current.get("version"))
+        assertEquals(1, application.getKoin().get<DSLContext>().fetchCountSql(
+            "SELECT * FROM task_chat_event_log WHERE task_id = ?", taskId
+        ))
+    }
+
+    @Test
     fun `reactions toggle idempotently and respect rights`() = testApp {
         val admin = jsonClient()
         val adminUser = ensureAdmin(admin)
@@ -342,6 +404,230 @@ class ChatWorkspaceRoutesTest {
 
         val denied = loginClient("cwsstranger7", "password").get("/api/tasks/$taskId/chat/search?query=маркер")
         assertEquals(HttpStatusCode.Forbidden, denied.status)
+    }
+
+    @Test
+    fun `task message edit and revoke require author version and hide revoked content`() = testApp {
+        val admin = jsonClient()
+        ensureAdmin(admin)
+        val author = createUserWithRole(admin, "cwedita", "password", "Task Edit Author", emptyList())
+        val member = createUserWithRole(admin, "cweditb", "password", "Task Edit Member", emptyList())
+        val taskId = createTask("T-CW-EDIT", "IN_PROGRESS", author.id, author.id, author.id)
+        addTaskParticipant(taskId, author.id, "INITIATOR")
+        addTaskParticipant(taskId, member.id, "ASSIGNEE")
+        val authorClient = loginClient("cwedita", "password")
+        val memberClient = loginClient("cweditb", "password")
+        val message = authorClient.post("/api/tasks/$taskId/chat/messages") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SendChatMessageRequest("Secret original", "cw-edit-1")))
+        }.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        val systemId = dslSendMessage(taskId, author.id, "System lifecycle", "cw-edit-system")
+        application.getKoin().get<DSLContext>().execute(
+            "UPDATE task_chat_messages SET type = 'SYSTEM' WHERE id = ?", systemId
+        )
+
+        val missingVersion = authorClient.post("/api/tasks/$taskId/chat/messages/${message.id}/edit") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(EditMessageRequest("No version")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, missingVersion.status)
+        assertEquals(HttpStatusCode.Forbidden, memberClient.post(
+            "/api/tasks/$taskId/chat/messages/${message.id}/edit"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(EditMessageRequest("Stolen", 0)))
+        }.status)
+        assertEquals(HttpStatusCode.Forbidden, authorClient.post(
+            "/api/tasks/$taskId/chat/messages/$systemId/edit"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(EditMessageRequest("Changed system", 0)))
+        }.status)
+
+        val editedResponse = authorClient.post("/api/tasks/$taskId/chat/messages/${message.id}/edit") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(EditMessageRequest("Edited", 0)))
+        }
+        assertEquals(HttpStatusCode.OK, editedResponse.status, editedResponse.bodyAsText())
+        val edited = editedResponse.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        assertEquals("Edited", edited.content)
+        assertEquals(1L, edited.version)
+        assertTrue(edited.editedAt != null)
+        assertEquals(HttpStatusCode.Conflict, authorClient.post(
+            "/api/tasks/$taskId/chat/messages/${message.id}/edit"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(EditMessageRequest("Stale", 0)))
+        }.status)
+        val revision = application.getKoin().get<DSLContext>().fetchOne(
+            "SELECT previous_content FROM task_chat_message_revisions WHERE message_id = ?", message.id
+        )!!
+        assertEquals("Secret original", revision.get("previous_content"))
+
+        assertEquals(HttpStatusCode.BadRequest, authorClient.post(
+            "/api/tasks/$taskId/chat/messages/${message.id}/revoke"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(RevokeMessageRequest()))
+        }.status)
+        assertEquals(HttpStatusCode.Forbidden, memberClient.post(
+            "/api/tasks/$taskId/chat/messages/${message.id}/revoke"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(RevokeMessageRequest(1)))
+        }.status)
+        assertEquals(HttpStatusCode.Conflict, authorClient.post(
+            "/api/tasks/$taskId/chat/messages/${message.id}/revoke"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(RevokeMessageRequest(0)))
+        }.status)
+        assertEquals(HttpStatusCode.Forbidden, authorClient.post(
+            "/api/tasks/$taskId/chat/messages/$systemId/revoke"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(RevokeMessageRequest(0)))
+        }.status)
+        val revokedResponse = authorClient.post("/api/tasks/$taskId/chat/messages/${message.id}/revoke") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(RevokeMessageRequest(1)))
+        }
+        assertEquals(HttpStatusCode.OK, revokedResponse.status, revokedResponse.bodyAsText())
+        val revoked = revokedResponse.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        assertEquals("Сообщение отозвано", revoked.content)
+        assertEquals(2L, revoked.version)
+        assertTrue(revoked.revokedAt != null)
+        val historyText = memberClient.get("/api/tasks/$taskId/chat/messages").bodyAsText()
+        assertTrue(historyText.contains("Сообщение отозвано"))
+        assertFalse(historyText.contains("Secret original"))
+        assertFalse(historyText.contains("Edited"))
+        assertFalse(memberClient.get("/api/tasks/$taskId/chat/search?query=Secret").bodyAsText().contains("Secret original"))
+        assertEquals(2, application.getKoin().get<DSLContext>().fetchCountSql(
+            "SELECT * FROM audit_log WHERE action IN ('CHAT_MESSAGE_EDIT', 'CHAT_MESSAGE_REVOKE') AND payload->>'messageId' = ?",
+            message.id.toString()
+        ))
+        val categories = application.getKoin().get<DSLContext>().fetch(
+            "SELECT category FROM task_chat_event_log WHERE task_id = ? ORDER BY id", taskId
+        ).map { it.get("category") }
+        assertEquals(listOf("MESSAGE", "EDITED", "REVOKED"), categories)
+    }
+
+    @Test
+    fun `task forward checks both tasks preserves source and is idempotent`() = testApp {
+        val admin = jsonClient()
+        val adminUser = ensureAdmin(admin)
+        val author = createUserWithRole(admin, "cwfwda", "password", "Task Forward Author", emptyList())
+        createUserWithRole(admin, "cwfwdstranger", "password", "Task Forward Stranger", emptyList())
+        val sourceTask = createTask("T-CW-FWD-S", "IN_PROGRESS", author.id, author.id, author.id)
+        val targetTask = createTask("T-CW-FWD-T", "IN_PROGRESS", author.id, author.id, author.id)
+        val deniedTask = createTask("T-CW-FWD-D", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
+        addTaskParticipant(sourceTask, author.id, "INITIATOR")
+        addTaskParticipant(targetTask, author.id, "INITIATOR")
+        addTaskParticipant(deniedTask, author.id, "WATCHER")
+        val client = loginClient("cwfwda", "password")
+        val source = client.post("/api/tasks/$sourceTask/chat/messages") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(SendChatMessageRequest("Forward task text", "cw-fwd-source")))
+        }.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        val systemId = dslSendMessage(sourceTask, author.id, "System forward", "cw-fwd-system")
+        application.getKoin().get<DSLContext>().execute(
+            "UPDATE task_chat_messages SET type = 'SYSTEM' WHERE id = ?", systemId
+        )
+
+        val deniedSource = loginClient("cwfwdstranger", "password").post(
+            "/api/tasks/$sourceTask/chat/messages/${source.id}/forward"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(ForwardMessageRequest(ConversationKind.TASK, targetTask, "cw-fwd-source-denied")))
+        }
+        assertEquals(HttpStatusCode.Forbidden, deniedSource.status)
+        assertFalse(deniedSource.bodyAsText().contains("Forward task text"))
+        assertEquals(HttpStatusCode.BadRequest, client.post(
+            "/api/tasks/$sourceTask/chat/messages/${source.id}/forward"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(ForwardMessageRequest(ConversationKind.GROUP, targetTask, "cw-fwd-kind")))
+        }.status)
+        assertEquals(HttpStatusCode.Forbidden, client.post(
+            "/api/tasks/$sourceTask/chat/messages/${source.id}/forward"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(ForwardMessageRequest(ConversationKind.TASK, deniedTask, "cw-fwd-denied")))
+        }.status)
+        assertEquals(HttpStatusCode.Forbidden, client.post(
+            "/api/tasks/$sourceTask/chat/messages/$systemId/forward"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(ForwardMessageRequest(ConversationKind.TASK, targetTask, "cw-fwd-system-target")))
+        }.status)
+        val forwardedResponse = client.post("/api/tasks/$sourceTask/chat/messages/${source.id}/forward") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(ForwardMessageRequest(ConversationKind.TASK, targetTask, "cw-fwd-1")))
+        }
+        assertEquals(HttpStatusCode.Created, forwardedResponse.status, forwardedResponse.bodyAsText())
+        val forwarded = forwardedResponse.bodyAs<ApiResponse<ChatMessageDto>>().data!!
+        assertEquals("Forward task text", forwarded.content)
+        assertEquals(ConversationKind.TASK, forwarded.source?.kind)
+        assertEquals(source.id, forwarded.source?.messageId)
+        assertEquals(author.id, forwarded.source?.author?.userId)
+        val repeat = client.post("/api/tasks/$sourceTask/chat/messages/${source.id}/forward") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(ForwardMessageRequest(ConversationKind.TASK, targetTask, "cw-fwd-1")))
+        }
+        assertEquals(forwarded.id, repeat.bodyAs<ApiResponse<ChatMessageDto>>().data!!.id)
+        assertEquals(1, client.get("/api/tasks/$targetTask/chat/messages")
+            .bodyAs<ApiResponse<ChatMessagePageDto>>().data!!.messages.size)
+        assertEquals(1, application.getKoin().get<DSLContext>().fetchCountSql(
+            "SELECT * FROM task_chat_event_log WHERE task_id = ?", targetTask
+        ))
+        assertEquals(1, application.getKoin().get<DSLContext>().fetchCountSql(
+            "SELECT * FROM audit_log WHERE action = 'CHAT_MESSAGE_FORWARD' AND payload->>'forwardedMessageId' = ?",
+            forwarded.id.toString()
+        ))
+    }
+
+    @Test
+    fun `closed and cancelled tasks reject every mutating task chat command but allow reads`() = testApp {
+        val admin = jsonClient()
+        ensureAdmin(admin)
+        val member = createUserWithRole(admin, "cwclosedall", "password", "Closed Task Member", emptyList())
+        val client = loginClient("cwclosedall", "password")
+        listOf("CLOSED", "CANCELLED").forEachIndexed { index, status ->
+            val taskId = createTask("T-CW-RO-$index", status, member.id, member.id, member.id)
+            addTaskParticipant(taskId, member.id, "ASSIGNEE")
+            val messageId = dslSendMessage(taskId, member.id, "Read only $status", "cw-ro-$index")
+            assertEquals(HttpStatusCode.OK, client.get("/api/tasks/$taskId/chat/messages").status)
+            assertEquals(HttpStatusCode.Forbidden, client.post("/api/tasks/$taskId/chat/messages") {
+                contentType(ContentType.Application.Json)
+                setBody(stringify(SendChatMessageRequest("no", "cw-ro-send-$index")))
+            }.status)
+            assertEquals(HttpStatusCode.Forbidden, client.post(
+                "/api/tasks/$taskId/chat/messages/$messageId/edit"
+            ) {
+                contentType(ContentType.Application.Json)
+                setBody(stringify(EditMessageRequest("no", 0)))
+            }.status)
+            assertEquals(HttpStatusCode.Forbidden, client.post(
+                "/api/tasks/$taskId/chat/messages/$messageId/revoke"
+            ) {
+                contentType(ContentType.Application.Json)
+                setBody(stringify(RevokeMessageRequest(0)))
+            }.status)
+            assertEquals(HttpStatusCode.Forbidden, client.post(
+                "/api/tasks/$taskId/chat/messages/$messageId/forward"
+            ) {
+                contentType(ContentType.Application.Json)
+                setBody(stringify(ForwardMessageRequest(ConversationKind.TASK, taskId, "cw-ro-fwd-$index")))
+            }.status)
+            assertEquals(HttpStatusCode.Forbidden, client.put(
+                "/api/tasks/$taskId/chat/messages/$messageId/reactions/ok"
+            ).status)
+            assertEquals(HttpStatusCode.Forbidden, client.put("/api/tasks/$taskId/chat/pin").status)
+            assertEquals(HttpStatusCode.OK, client.post("/api/tasks/$taskId/chat/read") {
+                contentType(ContentType.Application.Json)
+                setBody(stringify(MarkChatReadRequest(messageId)))
+            }.status)
+        }
     }
 
     private suspend fun readCursor(response: HttpResponse): Long {

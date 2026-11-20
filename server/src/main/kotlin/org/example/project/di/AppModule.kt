@@ -14,7 +14,7 @@ import org.jooq.impl.DSL
 import org.koin.dsl.module
 import javax.sql.DataSource
 
-fun appModule(config: AppConfig) = module {
+fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module {
     single { config }
 
     single<DataSource> {
@@ -57,6 +57,7 @@ fun appModule(config: AppConfig) = module {
     single { BomRepository(get()) }
     single<FileStorage> { LocalFileStorage(config.storagePath) }
     single { LoginThrottleService(get()) }
+    single { MessageRateLimiter() }
 
     single { AuthService(get(), get(), get(), get(), get(), get(), get(), get()) }
     single { UserService(get(), get(), get(), get(), get()) }
@@ -66,12 +67,16 @@ fun appModule(config: AppConfig) = module {
     single { ProjectService(get(), get(), get(), get()) }
     single { TaskService(get(), get(), get(), get(), get(), get()) }
     single { NotificationService(get()) }
+    single<PushSubscriptionStore> { PushSubscriptionRepository(get()) }
+    single<PushTransport> { pushTransport ?: WebPushTransport(config.push) }
+    single { PushService(get(), get(), config.push) }
     single { ChatEventBus() }
     single { NotificationEventBus() }
     single { ConversationRepository(get()) }
     single { ConversationEventBus() }
     single { ConversationService(get(), get(), get(), get(), get(), get(), get()) }
     single { ChatService(get(), get(), get(), get(), get(), get(), get()) }
+    single { UnifiedChatListService(get(), get(), get(), get(), get()) }
     single { SearchService(get(), get()) }
     single { WmsService(get(), get(), get()) }
     single { WmsTransferService(get(), get(), get()) }

@@ -30,6 +30,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -97,6 +98,9 @@ fun ProjectDetailScreen(
     var closeRequested by remember(project.id) { mutableStateOf(false) }
     var closeReason by remember(project.id) { mutableStateOf("") }
 
+    DisposableEffect(conversationViewModel) {
+        onDispose { conversationViewModel.close() }
+    }
     LaunchedEffect(project.status, project.version) {
         if (project.status == ProjectStatus.CLOSED) closeRequested = false
     }
@@ -185,7 +189,11 @@ fun ProjectDetailScreen(
                     onPickFile = conversationViewModel::pickFile,
                     onClearFile = conversationViewModel::clearPendingFile,
                     onDownloadAttachment = conversationViewModel::downloadAttachment,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    conversationKey = "PROJECT:${chat?.id ?: project.id}",
+                    participants = chat?.members.orEmpty(),
+                    forwardTargets = conversationState.items,
+                    viewModel = conversationViewModel
                 )
             }
         }

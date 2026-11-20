@@ -21,6 +21,7 @@ import org.example.project.dto.ApiError
 import org.example.project.dto.ConversationKind
 import org.example.project.dto.NotificationDto
 import org.example.project.dto.UserDto
+import org.example.project.ui.home.BrowserNotifications
 
 class NotificationViewModel(
     private val notificationRepository: NotificationRepository,
@@ -33,6 +34,7 @@ class NotificationViewModel(
     val uiState: StateFlow<NotificationUiState> = _uiState.asStateFlow()
 
     private var realtimeJob: Job? = null
+    private var pendingOpenJob: Job? = null
 
     init {
         loadNotifications()
@@ -116,6 +118,26 @@ class NotificationViewModel(
         viewModelScope.launch {
             when (val result = taskRepository.get(taskId)) {
                 is ApiResult.Success -> onAccessGranted(result.data.id)
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+            }
+        }
+    }
+
+    fun openPendingNotification(
+        onOpenTask: (Long) -> Unit,
+        onOpenConversation: (Long) -> Unit,
+        onOpenProjectChat: (Long) -> Unit
+    ) {
+        if (pendingOpenJob?.isActive == true) return
+        val eventId = BrowserNotifications.consumePendingEventId() ?: return
+        pendingOpenJob = viewModelScope.launch {
+            when (val result = notificationRepository.listNotifications(limit = 1, after = eventId - 1)) {
+                is ApiResult.Success -> {
+                    result.data.notifications.find { it.id == eventId }?.let { notification ->
+                        markRead(notification)
+                        openNotification(notification, onOpenTask, onOpenConversation, onOpenProjectChat)
+                    }
+                }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
             }
         }
