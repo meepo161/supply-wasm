@@ -524,7 +524,7 @@ class ChatWorkspaceRoutesTest {
         val deniedTask = createTask("T-CW-FWD-D", "IN_PROGRESS", adminUser.id, adminUser.id, adminUser.id)
         addTaskParticipant(sourceTask, author.id, "INITIATOR")
         addTaskParticipant(targetTask, author.id, "INITIATOR")
-        addTaskParticipant(deniedTask, author.id, "WATCHER")
+        addTaskParticipant(deniedTask, author.id, "OBSERVER")
         val client = loginClient("cwfwda", "password")
         val source = client.post("/api/tasks/$sourceTask/chat/messages") {
             contentType(ContentType.Application.Json)
@@ -780,7 +780,7 @@ class ChatWorkspaceRoutesTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

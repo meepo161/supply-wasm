@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,6 +76,15 @@ fun SupplierScreen(viewModel: SupplierViewModel, modifier: Modifier = Modifier) 
                         compact = true
                     )
                 }
+                if (state.selectedTab == SupplierTab.CLAIMS && viewModel.canManage()) {
+                    GradientButton(
+                        text = "Новая рекламация",
+                        onClick = { viewModel.showDialog(SupplierDialog.CreateClaim) },
+                        gradient = Gradients.Sunset,
+                        leadingIcon = ErpIconGlyph.Plus,
+                        compact = true
+                    )
+                }
             }
         )
         Spacer(Modifier.height(8.dp))
@@ -95,6 +105,7 @@ fun SupplierScreen(viewModel: SupplierViewModel, modifier: Modifier = Modifier) 
             when (state.selectedTab) {
                 SupplierTab.SUPPLIERS -> SuppliersPane(state, viewModel)
                 SupplierTab.OFFERS -> OffersPane(state, viewModel)
+                SupplierTab.CLAIMS -> ClaimsPane(state, viewModel)
             }
         }
     }
@@ -590,5 +601,140 @@ private fun SuccessNote(text: String, onDismiss: () -> Unit) {
             modifier = Modifier.weight(1f)
         )
         SoftButton(text = "Ок", onClick = onDismiss)
+    }
+}
+
+@Composable
+private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        state.operationError?.let { ErrorMessageCard(it) }
+        state.successMessage?.let { SuccessNote(it, viewModel::dismissSuccess) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SectionHeader(
+                title = "Рекламации поставщикам",
+                count = state.claims.size,
+                accent = Brand.Orange,
+                subtitle = "Претензионная работа и возвраты",
+                action = { SoftButton(text = "Обновить", onClick = viewModel::loadClaims) }
+            )
+        }
+        if (state.isClaimsLoading && state.claims.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { GradientSpinner() }
+        } else if (state.claims.isEmpty()) {
+            GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 20.dp) {
+                Text("Рекламаций пока нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(state.claims.size) { index ->
+                    val claim = state.claims[index]
+                    GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 14.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${claim.number} — ${claim.supplierName.ifBlank { "#${claim.supplierId}" }}",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                PillBadge(text = claim.status.name, accent = Brand.Orange)
+                            }
+                            Text(
+                                text = "Тип: ${claim.claimType.name} • Сумма: ${claim.claimAmount} ${claim.currency}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(text = claim.description, style = MaterialTheme.typography.bodyMedium)
+                            if (viewModel.canManage()) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    when (claim.status) {
+                                        org.example.project.dto.SupplierClaimStatus.OPEN ->
+                                            SoftButton(text = "Отправить", onClick = {
+                                                viewModel.transitionClaim(claim, org.example.project.dto.SupplierClaimStatus.SENT)
+                                            })
+                                        org.example.project.dto.SupplierClaimStatus.SENT ->
+                                            SoftButton(text = "На рассмотрение", onClick = {
+                                                viewModel.transitionClaim(claim, org.example.project.dto.SupplierClaimStatus.IN_REVIEW)
+                                            })
+                                        org.example.project.dto.SupplierClaimStatus.IN_REVIEW ->
+                                            SoftButton(text = "Урегулировать", onClick = {
+                                                viewModel.transitionClaim(claim, org.example.project.dto.SupplierClaimStatus.RESOLVED)
+                                            })
+                                        org.example.project.dto.SupplierClaimStatus.RESOLVED ->
+                                            SoftButton(text = "Закрыть", onClick = {
+                                                viewModel.transitionClaim(claim, org.example.project.dto.SupplierClaimStatus.CLOSED)
+                                            })
+                                        else -> {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (state.activeDialog == SupplierDialog.CreateClaim) {
+        var supplierExpanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        val selectedSupplier = state.suppliers.firstOrNull { it.id == state.claimForm.supplierId }
+            ?: state.suppliers.firstOrNull()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::dismissDialog,
+            title = { Text("Новая рекламация") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box {
+                        androidx.compose.material3.OutlinedButton(onClick = { supplierExpanded = true }) {
+                            Text(selectedSupplier?.name ?: "Выберите поставщика")
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = supplierExpanded,
+                            onDismissRequest = { supplierExpanded = false }
+                        ) {
+                            state.suppliers.forEach { s ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(s.name) },
+                                    onClick = {
+                                        supplierExpanded = false
+                                        viewModel.updateClaimForm(state.claimForm.copy(supplierId = s.id))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    org.example.project.ui.theme.ErpTextField(
+                        value = state.claimForm.description,
+                        onValueChange = { viewModel.updateClaimForm(state.claimForm.copy(description = it)) },
+                        label = "Описание претензии"
+                    )
+                    org.example.project.ui.theme.ErpTextField(
+                        value = state.claimForm.claimAmount,
+                        onValueChange = { viewModel.updateClaimForm(state.claimForm.copy(claimAmount = it)) },
+                        label = "Сумма претензии (RUB)"
+                    )
+                }
+            },
+            confirmButton = {
+                GradientButton(
+                    text = "Создать",
+                    onClick = viewModel::createClaim,
+                    gradient = Gradients.Sunset,
+                    compact = true
+                )
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::dismissDialog) { Text("Отмена") }
+            }
+        )
     }
 }

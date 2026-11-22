@@ -79,8 +79,7 @@ class SupplierService(
         return executeIdempotent(
             "SUPPLIER_CREATE", request.idempotencyKey, payload, HttpStatusCode.Created, currentUser
         ) {
-            val created = dsl.transactionResult(TransactionalCallable {
-                supplierRepository.findDuplicate(request.inn, request.name)?.let { duplicate ->
+            supplierRepository.findDuplicate(request.inn, request.name)?.let { duplicate ->
                     throw ConflictException(
                         "Supplier already exists: ${duplicate.number} ${duplicate.name}"
                     )
@@ -152,8 +151,6 @@ class SupplierService(
                 )
                 val card = buildCard(supplier)
                 supplier.id to json.encodeToString(SupplierCardDto.serializer(), card)
-            })
-            created
         }
     }
 
@@ -442,7 +439,6 @@ class SupplierService(
         return executeIdempotent(
             "SUPPLIER_OFFER_CREATE", request.idempotencyKey, payload, HttpStatusCode.Created, currentUser
         ) {
-            dsl.transactionResult(TransactionalCallable {
                 val demand = supplierRepository.findDemandById(request.demandId)
                     ?: throw NotFoundException("demand", request.demandId)
                 if (demand.status == "CANCELLED" || demand.status == "COVERED") {
@@ -557,7 +553,6 @@ class SupplierService(
                     )
                 )
                 offer.id to json.encodeToString(SupplierOfferDto.serializer(), buildOffer(offer))
-            })
         }
     }
 
@@ -719,7 +714,6 @@ class SupplierService(
         return executeIdempotent(
             "SUPPLIER_OFFER_SELECT", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
         ) {
-            dsl.transactionResult(TransactionalCallable {
                 val offer = supplierRepository.lockOfferById(id)
                     ?: throw NotFoundException("supplier_offer", id)
                 if (offer.version != request.version) {
@@ -780,7 +774,6 @@ class SupplierService(
                     )
                 )
                 id to json.encodeToString(SupplierOfferDto.serializer(), buildOffer(selected))
-            })
         }
     }
 

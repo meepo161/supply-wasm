@@ -103,7 +103,8 @@ class SearchViewModel(
                     type = item.type,
                     id = item.id,
                     title = item.title,
-                    number = item.number
+                    number = item.number,
+                    parentId = item.parentId
                 )
             }
         }
@@ -145,5 +146,6 @@ data class SearchResultRef(
     val type: SearchResultType,
     val id: Long,
     val title: String,
-    val number: String?
+    val number: String?,
+    val parentId: Long? = null
 )

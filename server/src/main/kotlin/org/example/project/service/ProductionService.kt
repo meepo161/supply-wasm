@@ -1,10 +1,14 @@
 package org.example.project.service
 
+import org.example.project.dto.AddInstanceSoftwareRequest
 import org.example.project.dto.CancelProductionOrderRequest
 import org.example.project.dto.CompleteProductionOrderRequest
 import org.example.project.dto.CreateProductionOrderRequest
 import org.example.project.dto.CreateProductionStageInput
+import org.example.project.dto.ProductInstanceDetailDto
 import org.example.project.dto.ProductInstanceDto
+import org.example.project.dto.RecordInstanceRemarkRequest
+import org.example.project.dto.RecordInstanceTestRequest
 import org.example.project.dto.ProductionOrderActionRequest
 import org.example.project.dto.ProductionOrderDto
 import org.example.project.dto.ProductionOrderStageDto
@@ -317,6 +321,190 @@ class ProductionService(
         productionRepository.findOrderById(orderId) ?: throw NotFoundException("production_order", orderId)
         return productionRepository.listInstances(orderId).map { it.toDto() }
     }
+
+    fun getInstance(id: Long, currentUser: CurrentUser): ProductInstanceDetailDto {
+        currentUser.requirePermission("production", "read")
+        return productionRepository.findInstanceDetailById(id)
+            ?: throw NotFoundException("product_instance", id)
+    }
+
+    fun recordInstanceTest(
+        id: Long,
+        request: RecordInstanceTestRequest,
+        currentUser: CurrentUser
+    ): ProductInstanceDetailDto {
+        currentUser.requirePermission("production", "manage")
+        val normalizedResult = request.result.trim().uppercase()
+        if (normalizedResult !in setOf("GOOD", "NOT_GOOD")) {
+            throw ValidationException("Test result must be GOOD or NOT_GOOD")
+        }
+        val normalizedDecision = request.technicalDecision.trim().uppercase()
+        if (normalizedDecision !in setOf("PENDING", "GOOD", "NOT_GOOD")) {
+            throw ValidationException("Technical decision must be PENDING, GOOD, or NOT_GOOD")
+        }
+        return dsl.transactionResult(TransactionalCallable {
+            val orderId = productionRepository.findInstanceOrderId(id)
+                ?: throw NotFoundException("product_instance", id)
+            val testId = productionRepository.insertInstanceTest(
+                instanceId = id,
+                orderId = orderId,
+                result = normalizedResult,
+                notes = request.notes?.trim()?.takeIf { it.isNotEmpty() },
+                protocolDocumentVersionId = request.protocolDocumentVersionId,
+                technicalDecision = normalizedDecision,
+                userId = currentUser.userId
+            )
+            auditService.log(
+                currentUser.userId,
+                "RECORD_TEST",
+                "PRODUCT_INSTANCE",
+                id,
+                mapOf("testId" to testId, "result" to normalizedResult, "technicalDecision" to normalizedDecision)
+            )
+            productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+        })
+    }
+
+
+
+    fun recordInstanceRemark(
+        id: Long,
+        request: RecordInstanceRemarkRequest,
+        currentUser: CurrentUser
+    ): ProductInstanceDetailDto {
+        currentUser.requirePermission("production", "manage")
+        val description = request.description.trim()
+        if (description.isEmpty()) {
+            throw ValidationException("Remark description must not be blank")
+        }
+        val normalizedSeverity = request.severity.trim().uppercase()
+        if (normalizedSeverity !in setOf("MINOR", "CRITICAL")) {
+            throw ValidationException("Severity must be MINOR or CRITICAL")
+        }
+        return dsl.transactionResult(TransactionalCallable {
+            productionRepository.findInstanceOrderId(id)
+                ?: throw NotFoundException("product_instance", id)
+            val remarkId = productionRepository.insertInstanceRemark(
+                instanceId = id,
+                testId = request.testId,
+                description = description,
+                severity = normalizedSeverity,
+                blocksShipment = request.blocksShipment,
+                userId = currentUser.userId
+            )
+            auditService.log(
+                currentUser.userId,
+                "RECORD_REMARK",
+                "PRODUCT_INSTANCE",
+                id,
+                mapOf("remarkId" to remarkId, "severity" to normalizedSeverity, "blocksShipment" to request.blocksShipment)
+            )
+            productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+        })
+    }
+
+
+
+    fun addInstanceSoftware(
+        id: Long,
+        request: AddInstanceSoftwareRequest,
+        currentUser: CurrentUser
+    ): ProductInstanceDetailDto {
+        currentUser.requirePermission("production", "manage")
+        val name = request.name.trim()
+        val version = request.version.trim()
+        if (name.isEmpty() || version.isEmpty()) {
+            throw ValidationException("Software name and version must not be blank")
+        }
+        return dsl.transactionResult(TransactionalCallable {
+            productionRepository.findInstanceOrderId(id)
+                ?: throw NotFoundException("product_instance", id)
+            val swId = productionRepository.insertInstanceSoftware(
+                instanceId = id,
+                name = name,
+                version = version,
+                build = request.build?.trim()?.takeIf { it.isNotEmpty() },
+                userId = currentUser.userId
+            )
+            auditService.log(
+                currentUser.userId,
+                "ADD_SOFTWARE",
+                "PRODUCT_INSTANCE",
+                id,
+                mapOf("softwareId" to swId, "name" to name, "version" to version)
+            )
+            productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+        })
+    }
+
+    fun resolveInstanceRemark(
+        id: Long,
+        remarkId: Long,
+        currentUser: CurrentUser
+    ): ProductInstanceDetailDto {
+        currentUser.requirePermission("production", "manage")
+        return dsl.transactionResult(TransactionalCallable {
+            productionRepository.findInstanceOrderId(id)
+                ?: throw NotFoundException("product_instance", id)
+            val updated = productionRepository.resolveInstanceRemark(id, remarkId, "RESOLVED", currentUser.userId)
+            if (updated == 0) {
+                throw ConflictException("Remark is already resolved or does not exist")
+            }
+            auditService.log(
+                currentUser.userId,
+                "RESOLVE_REMARK",
+                "PRODUCT_INSTANCE",
+                id,
+                mapOf("remarkId" to remarkId)
+            )
+            productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+        })
+    }
+
+    fun acceptInstance(id: Long, currentUser: CurrentUser): ProductInstanceDetailDto {
+        currentUser.requirePermission("production", "manage")
+        return dsl.transactionResult(TransactionalCallable {
+            val detail = productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+            if (detail.status == "SHIPPED") {
+                throw ConflictException("Shipped instance cannot be accepted again")
+            }
+            if (productionRepository.hasBlockingOpenRemarks(id)) {
+                throw ConflictException("Cannot accept instance with open shipment-blocking remarks")
+            }
+            if (productionRepository.hasUnresolvedFailedTests(id)) {
+                throw ConflictException("Cannot accept instance with unresolved failed tests")
+            }
+            productionRepository.updateInstanceStatus(id, "ACCEPTED", acceptedAt = OffsetDateTime.now())
+            auditService.log(currentUser.userId, "ACCEPT_INSTANCE", "PRODUCT_INSTANCE", id, emptyMap())
+            productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+        })
+    }
+
+    fun shipInstance(id: Long, currentUser: CurrentUser): ProductInstanceDetailDto {
+        currentUser.requirePermission("production", "manage")
+        return dsl.transactionResult(TransactionalCallable {
+            val detail = productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+            if (detail.status != "ACCEPTED") {
+                throw ConflictException("Only ACCEPTED instance can be shipped")
+            }
+            if (productionRepository.hasBlockingOpenRemarks(id)) {
+                throw ConflictException("Shipment blocked by open critical/blocking remarks")
+            }
+            productionRepository.updateInstanceStatus(id, "SHIPPED", shippedAt = OffsetDateTime.now())
+            auditService.log(currentUser.userId, "SHIP_INSTANCE", "PRODUCT_INSTANCE", id, emptyMap())
+            productionRepository.findInstanceDetailById(id)
+                ?: throw NotFoundException("product_instance", id)
+        })
+    }
+
+
 
     // --- Реализация ---
 

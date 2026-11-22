@@ -4,6 +4,10 @@ import org.example.project.data.AttachmentApiClient
 import org.example.project.data.AttachmentRepository
 import org.example.project.data.AdminApiClient
 import org.example.project.data.AdminRepository
+import org.example.project.data.AnalyticsApiClient
+import org.example.project.data.AnalyticsRepository
+import org.example.project.data.ErpExtrasApiClient
+import org.example.project.data.ErpExtrasRepository
 import org.example.project.data.ApprovalApiClient
 import org.example.project.data.ApprovalRepository
 import org.example.project.data.AuthApiClient
@@ -61,4 +65,6 @@ val sharedModule = module {
     singleOf(::SupplierApiClient) bind SupplierRepository::class
     singleOf(::PurchaseOrderApiClient) bind PurchaseOrderRepository::class
     singleOf(::ProductionApiClient) bind ProductionRepository::class
+    singleOf(::AnalyticsApiClient) bind AnalyticsRepository::class
+    singleOf(::ErpExtrasApiClient) bind ErpExtrasRepository::class
 }

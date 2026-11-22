@@ -143,6 +143,9 @@ class WmsService(
                 unit = request.unit.trim(),
                 lotTracked = request.lotTracked,
                 serialTracked = request.serialTracked,
+                minStock = parseNonNegative(request.minStock, "minStock"),
+                safetyStock = parseNonNegative(request.safetyStock, "safetyStock"),
+                leadTimeDays = request.leadTimeDays.coerceAtLeast(0),
                 createdBy = currentUser.userId
             )
             request.barcodes.forEach { barcode ->
@@ -178,7 +181,9 @@ class WmsService(
             item = nomenclature.toDto(loadBarcodes(listOf(id))),
             physicalQty = stock.fold(BigDecimal.ZERO) { total, row -> total.add(row.balance.physicalQty) }.toPlainString(),
             reservedQty = stock.fold(BigDecimal.ZERO) { total, row -> total.add(row.balance.reservedQty) }.toPlainString(),
-            availableQty = stock.fold(BigDecimal.ZERO) { total, row -> total.add(row.balance.availableQty) }.toPlainString(),
+            availableQty = stock
+                .filter { it.locationPurpose !in setOf("QUARANTINE", "DEFECT", "TEMPORARY") }
+                .fold(BigDecimal.ZERO) { total, row -> total.add(row.balance.availableQty) }.toPlainString(),
             stock = stock.map { it.toDto() },
             lots = wmsRepository.listLots(id).map { lot ->
                 LotDto(
@@ -226,6 +231,10 @@ class WmsService(
         if (wmsRepository.findNomenclatureById(id) == null) {
             throw NotFoundException("nomenclature", id)
         }
+        val activeRef = wmsRepository.findActiveNomenclatureReference(id)
+        if (activeRef != null) {
+            throw ConflictException("Cannot archive nomenclature with active references ($activeRef)")
+        }
         return dsl.transactionResult(TransactionalCallable {
             val archived = wmsRepository.archiveNomenclature(id)
                 ?: throw ConflictException("Nomenclature is already archived")
@@ -237,11 +246,279 @@ class WmsService(
         })
     }
 
+    fun updateNomenclatureThresholds(
+        id: Long,
+        request: UpdateNomenclatureThresholdsRequest,
+        currentUser: CurrentUser
+    ): NomenclatureDto {
+        currentUser.requirePermission("wms", "manage")
+        if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
+        val minStock = parseNonNegative(request.minStock, "minStock")
+        val safetyStock = parseNonNegative(request.safetyStock, "safetyStock")
+        if (request.leadTimeDays < 0) {
+            throw ValidationException("leadTimeDays must be non-negative", mapOf("leadTimeDays" to "negative"))
+        }
+        return dsl.transactionResult(TransactionalCallable {
+            val updated = wmsRepository.updateNomenclatureThresholds(
+                id, minStock, safetyStock, request.leadTimeDays, request.version
+            ) ?: throw ConflictException("Nomenclature version conflict")
+            auditService.log(currentUser.userId, "UPDATE_THRESHOLDS", "NOMENCLATURE", id)
+            updated.toDto(loadBarcodes(listOf(id)))
+        })
+    }
+
+    fun findByBarcode(code: String, currentUser: CurrentUser): NomenclatureDto {
+        currentUser.requirePermission("wms", "read")
+        val clean = code.trim()
+        if (clean.isEmpty()) throw ValidationException("Barcode is required", mapOf("barcode" to "required"))
+        val record = wmsRepository.findNomenclatureByBarcode(clean) ?: throw NotFoundException("barcode", clean)
+        return record.toDto(loadBarcodes(listOf(record.id)))
+    }
+
+    fun addBarcode(id: Long, request: CreateNomenclatureBarcodeRequest, currentUser: CurrentUser): NomenclatureDto {
+        currentUser.requirePermission("wms", "manage")
+        val record = wmsRepository.findNomenclatureById(id) ?: throw NotFoundException("nomenclature", id)
+        val clean = request.barcode.trim()
+        if (clean.isEmpty()) throw ValidationException("Barcode is required", mapOf("barcode" to "required"))
+        if (wmsRepository.findNomenclatureByBarcode(clean) != null) {
+            throw ConflictException("Barcode already exists: $clean")
+        }
+        val qty = parseQuantity(request.quantityInPackage, "quantityInPackage")
+        dsl.transaction { _ ->
+            wmsRepository.insertBarcode(id, clean, request.packageType.name, qty, currentUser.userId)
+            auditService.log(currentUser.userId, "ADD_BARCODE", "NOMENCLATURE", id, mapOf("barcode" to clean))
+        }
+        return record.toDto(loadBarcodes(listOf(id)))
+    }
+
+    fun deleteBarcode(id: Long, barcodeId: Long, currentUser: CurrentUser): NomenclatureDto {
+        currentUser.requirePermission("wms", "manage")
+        val record = wmsRepository.findNomenclatureById(id) ?: throw NotFoundException("nomenclature", id)
+        if (!wmsRepository.deleteBarcode(id, barcodeId)) throw NotFoundException("barcode", barcodeId)
+        auditService.log(currentUser.userId, "DELETE_BARCODE", "NOMENCLATURE", id, mapOf("barcodeId" to barcodeId))
+        return record.toDto(loadBarcodes(listOf(id)))
+    }
+
+    fun listUnitConversions(id: Long, currentUser: CurrentUser): List<NomenclatureUnitConversionDto> {
+        currentUser.requirePermission("wms", "read")
+        if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
+        return wmsRepository.listUnitConversions(id).map {
+            NomenclatureUnitConversionDto(
+                id = it.id,
+                nomenclatureId = it.nomenclatureId,
+                fromUnit = it.fromUnit,
+                toUnit = it.toUnit,
+                factor = it.factor.stripTrailingZeros().toPlainString()
+            )
+        }
+    }
+
+    fun createUnitConversion(
+        id: Long,
+        request: CreateUnitConversionRequest,
+        currentUser: CurrentUser
+    ): NomenclatureUnitConversionDto {
+        currentUser.requirePermission("wms", "manage")
+        if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
+        if (request.fromUnit.isBlank() || request.toUnit.isBlank()) {
+            throw ValidationException("Units are required")
+        }
+        val factor = parseQuantity(request.factor, "factor")
+        val rec = wmsRepository.createUnitConversion(id, request.fromUnit.trim(), request.toUnit.trim(), factor, currentUser.userId)
+        return NomenclatureUnitConversionDto(
+            id = rec.id,
+            nomenclatureId = rec.nomenclatureId,
+            fromUnit = rec.fromUnit,
+            toUnit = rec.toUnit,
+            factor = rec.factor.stripTrailingZeros().toPlainString()
+        )
+    }
+
+    fun listAnalogs(id: Long, currentUser: CurrentUser): List<NomenclatureAnalogDto> {
+        currentUser.requirePermission("wms", "read")
+        if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
+        return wmsRepository.listAnalogs(id).map { row ->
+            NomenclatureAnalogDto(
+                id = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.ID)!!,
+                nomenclatureId = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.NOMENCLATURE_ID)!!,
+                analogNomenclatureId = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.ANALOG_NOMENCLATURE_ID)!!,
+                analogCode = row.get(org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE.CODE)!!,
+                analogName = row.get(org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE.NAME)!!,
+                conversionFactor = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.CONVERSION_FACTOR)!!.stripTrailingZeros().toPlainString(),
+                applicabilityCondition = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.APPLICABILITY_CONDITION),
+                priority = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.PRIORITY)!!,
+                active = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.ACTIVE)!!
+            )
+        }
+    }
+
+    fun createAnalog(
+        id: Long,
+        request: CreateNomenclatureAnalogRequest,
+        currentUser: CurrentUser
+    ): List<NomenclatureAnalogDto> {
+        currentUser.requirePermission("wms", "manage")
+        if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
+        if (request.analogNomenclatureId == id) throw ValidationException("Analog cannot be the same nomenclature")
+        if (wmsRepository.findNomenclatureById(request.analogNomenclatureId) == null) {
+            throw NotFoundException("nomenclature", request.analogNomenclatureId)
+        }
+        val factor = parseQuantity(request.conversionFactor, "conversionFactor")
+        wmsRepository.createAnalog(id, request.analogNomenclatureId, factor, request.applicabilityCondition?.trim(), request.priority.coerceAtLeast(1), currentUser.userId)
+        return listAnalogs(id, currentUser)
+    }
+
+    private fun parseNonNegative(raw: String, field: String): BigDecimal {
+        val value = raw.trim().toBigDecimalOrNull()
+            ?: throw ValidationException("Invalid number for $field", mapOf(field to "invalid"))
+        if (value < BigDecimal.ZERO) throw ValidationException("$field must be >= 0", mapOf(field to "negative"))
+        return value
+    }
+
     // Остатки
 
     fun getStock(warehouseId: Long?, nomenclatureId: Long?, currentUser: CurrentUser): List<StockBalanceDto> {
         currentUser.requirePermission("wms", "read")
-        return wmsRepository.selectStock(warehouseId, nomenclatureId).map { it.toDto() }
+        val tr = org.example.project.generated.jooq.tables.Transfers.TRANSFERS
+        val inTransitMap = dsl.select(tr.TO_WAREHOUSE_ID, tr.NOMENCLATURE_ID, org.jooq.impl.DSL.sum(tr.QUANTITY))
+            .from(tr)
+            .where(tr.STATUS.eq("IN_TRANSIT"))
+            .groupBy(tr.TO_WAREHOUSE_ID, tr.NOMENCLATURE_ID)
+            .fetch()
+            .associate { row ->
+                (row.get(tr.TO_WAREHOUSE_ID)!! to row.get(tr.NOMENCLATURE_ID)!!) to
+                    (row.get(2, java.math.BigDecimal::class.java) ?: java.math.BigDecimal.ZERO)
+            }
+        return wmsRepository.selectStock(warehouseId, nomenclatureId).map { row ->
+            val inTransit = inTransitMap[row.balance.warehouseId to row.balance.nomenclatureId] ?: java.math.BigDecimal.ZERO
+            row.toDto().copy(inTransitQty = inTransit.stripTrailingZeros().toPlainString())
+        }
+    }
+
+    fun listMovements(
+        warehouseId: Long?,
+        nomenclatureId: Long?,
+        type: String?,
+        limit: Int,
+        currentUser: CurrentUser
+    ): List<StockMovementDto> {
+        currentUser.requirePermission("wms", "read")
+        val sm = org.example.project.generated.jooq.tables.StockMovement.STOCK_MOVEMENT
+        val slFrom = org.example.project.generated.jooq.tables.StorageLocations.STORAGE_LOCATIONS.`as`("sl_from")
+        val slTo = org.example.project.generated.jooq.tables.StorageLocations.STORAGE_LOCATIONS.`as`("sl_to")
+        val u = org.example.project.generated.jooq.tables.Users.USERS
+        val lot = org.example.project.generated.jooq.tables.Lots.LOTS
+        val ser = org.example.project.generated.jooq.tables.SerialItems.SERIAL_ITEMS
+        var cond: org.jooq.Condition = org.jooq.impl.DSL.trueCondition()
+        if (warehouseId != null) {
+            cond = cond.and(slFrom.WAREHOUSE_ID.eq(warehouseId).or(slTo.WAREHOUSE_ID.eq(warehouseId)))
+        }
+        if (nomenclatureId != null) {
+            cond = cond.and(sm.NOMENCLATURE_ID.eq(nomenclatureId))
+        }
+        type?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            cond = cond.and(sm.MOVEMENT_TYPE.eq(it))
+        }
+        return dsl.select(
+            sm.ID, sm.MOVEMENT_TYPE, sm.NOMENCLATURE_ID, lot.LOT_NUMBER, ser.SERIAL_NUMBER,
+            slFrom.CODE, slTo.CODE, sm.QUANTITY, sm.DOCUMENT_TYPE, sm.DOCUMENT_ID,
+            sm.NOTE, sm.CREATED_BY, u.FULL_NAME, sm.CREATED_AT
+        )
+            .from(sm)
+            .leftJoin(lot).on(lot.ID.eq(sm.LOT_ID))
+            .leftJoin(ser).on(ser.ID.eq(sm.SERIAL_ID))
+            .leftJoin(slFrom).on(slFrom.ID.eq(sm.FROM_LOCATION_ID))
+            .leftJoin(slTo).on(slTo.ID.eq(sm.TO_LOCATION_ID))
+            .join(u).on(u.ID.eq(sm.CREATED_BY))
+            .where(cond)
+            .orderBy(sm.ID.desc())
+            .limit(limit.coerceIn(1, 500))
+            .fetch { r ->
+                StockMovementDto(
+                    id = r.get(sm.ID)!!,
+                    type = StockMovementType.valueOf(r.get(sm.MOVEMENT_TYPE)!!),
+                    nomenclatureId = r.get(sm.NOMENCLATURE_ID)!!,
+                    lotNumber = r.get(lot.LOT_NUMBER),
+                    serialNumber = r.get(ser.SERIAL_NUMBER),
+                    fromLocationCode = r.get(slFrom.CODE),
+                    toLocationCode = r.get(slTo.CODE),
+                    quantity = r.get(sm.QUANTITY)!!.stripTrailingZeros().toPlainString(),
+                    documentType = r.get(sm.DOCUMENT_TYPE)!!,
+                    documentId = r.get(sm.DOCUMENT_ID)!!,
+                    note = r.get(sm.NOTE),
+                    createdBy = r.get(sm.CREATED_BY)!!,
+                    createdByName = r.get(u.FULL_NAME)!!,
+                    createdAt = r.get(sm.CREATED_AT)?.toString()
+                )
+            }
+    }
+
+    fun listLowStock(currentUser: CurrentUser): List<LowStockItemDto> {
+        currentUser.requirePermission("wms", "read")
+        val nom = org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
+        val sb = org.example.project.generated.jooq.tables.StockBalance.STOCK_BALANCE
+        val sl = org.example.project.generated.jooq.tables.StorageLocations.STORAGE_LOCATIONS
+        val stockRows = dsl.select(sb.NOMENCLATURE_ID, org.jooq.impl.DSL.sum(sb.PHYSICAL_QTY.minus(sb.RESERVED_QTY)))
+            .from(sb)
+            .join(sl).on(sl.ID.eq(sb.LOCATION_ID))
+            .where(sl.PURPOSE.notIn("QUARANTINE", "DEFECT", "TEMPORARY"))
+            .groupBy(sb.NOMENCLATURE_ID)
+            .fetch()
+            .associate { it.get(sb.NOMENCLATURE_ID)!! to (it.get(1, BigDecimal::class.java) ?: BigDecimal.ZERO) }
+        return dsl.selectFrom(nom)
+            .where(nom.ARCHIVED.eq(false))
+            .and(nom.MIN_STOCK.gt(BigDecimal.ZERO))
+            .orderBy(nom.CODE.asc())
+            .fetch()
+            .mapNotNull { item ->
+                val minStock = item.minStock ?: BigDecimal.ZERO
+                val avail = (stockRows[item.id] ?: BigDecimal.ZERO).max(BigDecimal.ZERO)
+                if (avail < minStock) {
+                    LowStockItemDto(
+                        nomenclatureId = item.id,
+                        code = item.code,
+                        name = item.name,
+                        unit = item.unit,
+                        minStock = minStock.stripTrailingZeros().toPlainString(),
+                        safetyStock = (item.safetyStock ?: BigDecimal.ZERO).stripTrailingZeros().toPlainString(),
+                        availableQty = avail.stripTrailingZeros().toPlainString(),
+                        deficitQty = (minStock - avail).stripTrailingZeros().toPlainString()
+                    )
+                } else null
+            }
+    }
+
+    fun listLots(nomenclatureId: Long?, currentUser: CurrentUser): List<LotDto> {
+        currentUser.requirePermission("wms", "read")
+        val lots = org.example.project.generated.jooq.tables.Lots.LOTS
+        val q = dsl.selectFrom(lots)
+        val rows = if (nomenclatureId != null) q.where(lots.NOMENCLATURE_ID.eq(nomenclatureId)).fetch() else q.fetch()
+        return rows.map {
+            LotDto(
+                id = it.id,
+                nomenclatureId = it.nomenclatureId,
+                lotNumber = it.lotNumber,
+                manufactureDate = it.manufactureDate?.toString(),
+                expiryDate = it.expiryDate?.toString(),
+                createdAt = it.createdAt?.toString()
+            )
+        }
+    }
+
+    fun listSerials(nomenclatureId: Long?, currentUser: CurrentUser): List<SerialItemDto> {
+        currentUser.requirePermission("wms", "read")
+        val ser = org.example.project.generated.jooq.tables.SerialItems.SERIAL_ITEMS
+        val q = dsl.selectFrom(ser)
+        val rows = if (nomenclatureId != null) q.where(ser.NOMENCLATURE_ID.eq(nomenclatureId)).fetch() else q.fetch()
+        return rows.map {
+            SerialItemDto(
+                id = it.id,
+                nomenclatureId = it.nomenclatureId,
+                lotId = it.lotId,
+                serialNumber = it.serialNumber,
+                createdAt = it.createdAt?.toString()
+            )
+        }
     }
 
 
@@ -519,6 +796,9 @@ private fun NomenclatureRecord.toDto(barcodes: Map<Long, List<NomenclatureBarcod
     unit = this.unit,
     lotTracked = this.lotTracked ?: false,
     serialTracked = this.serialTracked ?: false,
+    minStock = (this.minStock ?: BigDecimal.ZERO).stripTrailingZeros().toPlainString(),
+    safetyStock = (this.safetyStock ?: BigDecimal.ZERO).stripTrailingZeros().toPlainString(),
+    leadTimeDays = this.leadTimeDays ?: 0,
     archived = this.archived ?: false,
     createdAt = this.createdAt?.toString(),
     createdBy = this.createdBy,
@@ -539,7 +819,7 @@ private fun WmsRepository.StockRow.toDto(): StockBalanceDto = StockBalanceDto(
     serialNumber = this.serialNumber,
     physicalQty = this.balance.physicalQty.toPlainString(),
     reservedQty = this.balance.reservedQty.toPlainString(),
-    availableQty = this.balance.availableQty.toPlainString(),
+    availableQty = if (this.locationPurpose in setOf("QUARANTINE", "DEFECT", "TEMPORARY")) "0" else this.balance.availableQty.toPlainString(),
     version = this.balance.version ?: 0
 )
 

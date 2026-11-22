@@ -14,7 +14,7 @@ class ChatExperienceSchemaTest {
 
     companion object {
         private val ds = PGSimpleDataSource().apply {
-            setUrl("jdbc:postgresql://localhost:5433/erp_test")
+            setUrl("${TestDatabase.TEST_URL}")
             user = "erp"
             password = "erp"
         }
@@ -330,7 +330,7 @@ class ChatExperienceSchemaTest {
     private fun createTask(connection: Connection, userId: Long): Long = connection.prepareStatement(
         """
         INSERT INTO tasks (number, area, status, type, title, initiator_id, created_at, created_by, version)
-        VALUES (?, 'PERSONAL', 'NEW', 'WORK', 'Chat experience task', ?, NOW(), ?, 0)
+        VALUES (?, 'PERSONAL', 'NEW', 'GENERAL', 'Chat experience task', ?, NOW(), ?, 0)
         RETURNING id
         """.trimIndent()
     ).use { statement ->

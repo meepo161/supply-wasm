@@ -6,8 +6,9 @@ import org.postgresql.ds.PGSimpleDataSource
 object TestDatabase {
 
     private const val DB_NAME = "erp_test"
-    private const val ADMIN_URL = "jdbc:postgresql://localhost:5433/erp"
-    private const val TEST_URL = "jdbc:postgresql://localhost:5433/erp_test"
+    private val PORT = System.getenv("ERP_TEST_DB_PORT") ?: System.getProperty("erp.test.db.port") ?: "5433"
+    private val ADMIN_URL = "jdbc:postgresql://localhost:$PORT/erp"
+    val TEST_URL = "jdbc:postgresql://localhost:$PORT/$DB_NAME"
     private const val USER = "erp"
     private const val PASSWORD = "erp"
 
@@ -79,7 +80,7 @@ object TestDatabase {
                 WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid()
                 """.trimIndent()
             )
-            conn.createStatement().execute("DROP DATABASE IF EXISTS $DB_NAME")
+            conn.createStatement().execute("DROP DATABASE IF EXISTS $DB_NAME WITH (FORCE)")
         }
     }
 
@@ -96,7 +97,7 @@ object TestDatabase {
                 WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid()
                 """.trimIndent()
             )
-            conn.createStatement().execute("DROP DATABASE IF EXISTS $DB_NAME")
+            conn.createStatement().execute("DROP DATABASE IF EXISTS $DB_NAME WITH (FORCE)")
             conn.createStatement().execute("CREATE DATABASE $DB_NAME")
         }
     }

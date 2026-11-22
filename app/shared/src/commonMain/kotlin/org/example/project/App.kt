@@ -63,7 +63,11 @@ fun App() {
                             "loading" -> LoadingScreen()
                             "app" -> MainScaffold(
                                 user = currentUser!!,
-                                onLogout = viewModel::logout
+                                onLogout = viewModel::logout,
+                                passwordChangeLoading = state.passwordChangeLoading,
+                                passwordChangeError = state.passwordChangeError,
+                                onChangePassword = viewModel::changePassword,
+                                onClearPasswordError = viewModel::clearPasswordChangeState
                             )
                             else -> LoginScreen(
                                 state = state,

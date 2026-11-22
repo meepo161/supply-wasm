@@ -7,23 +7,26 @@ class MessageRateLimiter(
     private val windowMillis: Long = 10_000,
     private val clock: () -> Long = System::currentTimeMillis
 ) {
-    private data class Window(val startedAt: Long, var count: Int)
-
-    private val windows = mutableMapOf<Pair<Long, String>, Window>()
+    private val windows = mutableMapOf<Pair<Long, String>, ArrayDeque<Long>>()
 
     @Synchronized
     fun check(userId: Long, chatKey: String) {
         val now = clock()
-        windows.entries.removeAll { (_, window) -> now - window.startedAt >= windowMillis }
-        val startedAt = now - Math.floorMod(now, windowMillis)
+        val cutoff = now - windowMillis
+        windows.entries.removeAll { (_, timestamps) ->
+            while (timestamps.isNotEmpty() && timestamps.first() <= cutoff) {
+                timestamps.removeFirst()
+            }
+            timestamps.isEmpty()
+        }
         val key = userId to chatKey
-        val window = windows[key]?.takeIf { it.startedAt == startedAt }
-            ?: Window(startedAt, 0).also { windows[key] = it }
-        if (window.count >= limit) {
-            val retryAfter = ((startedAt + windowMillis - now + 999) / 1000).coerceAtLeast(1)
+        val timestamps = windows.getOrPut(key) { ArrayDeque() }
+        if (timestamps.size >= limit) {
+            val oldest = timestamps.first()
+            val retryAfter = ((oldest + windowMillis - now + 999) / 1000).coerceAtLeast(1)
             throw TooManyRequestsException("Too many messages", retryAfter)
         }
-        window.count++
+        timestamps.addLast(now)
     }
 
     internal val trackedWindowCount: Int

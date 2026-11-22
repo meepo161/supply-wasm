@@ -147,8 +147,8 @@ class UnifiedChatRoutesTest {
         assertEquals(HttpStatusCode.OK, changed.status, changed.bodyAsText())
         val state = changed.bodyAs<ApiResponse<ConversationListItemDto>>().data!!
         assertTrue(state.isPinned && state.isMuted && state.isArchived)
-        assertTrue(workspace(adminClient).items.none { it.id == groupId })
-        assertEquals(groupId, workspace(adminClient, "filter=ARCHIVED").items.single().id)
+        assertTrue(workspace(adminClient).items.none { it.kind == ConversationKind.GROUP && it.id == groupId })
+        assertEquals(groupId, workspace(adminClient, "filter=ARCHIVED").items.single { it.kind == ConversationKind.GROUP }.id)
         val otherItem = workspace(login("uwsother"), "filter=ARCHIVED").items
         assertTrue(otherItem.isEmpty())
 
@@ -233,7 +233,7 @@ class UnifiedChatRoutesTest {
         val observer = createUser("uwsobserver", "State Observer")
         val taskId = createTask("T-OBSERVER-STATE", "IN_PROGRESS", admin.id, admin.id)
         addTaskParticipant(taskId, admin.id, "INITIATOR")
-        addTaskParticipant(taskId, observer.id, "WATCHER")
+        addTaskParticipant(taskId, observer.id, "OBSERVER")
         val observerClient = login("uwsobserver")
         assertFalse(workspace(observerClient).items.single { it.taskId == taskId }.canWrite)
         val auditBeforePin = count("SELECT * FROM audit_log")
@@ -383,7 +383,7 @@ class UnifiedChatRoutesTest {
             assertEquals(HttpStatusCode.OK, pin.await().status)
             assertEquals(HttpStatusCode.OK, mute.await().status)
         }
-        var groupState = workspace(adminClient).items.single { it.id == groupId }
+        var groupState = workspace(adminClient).items.single { it.kind == ConversationKind.GROUP && it.id == groupId }
         assertTrue(groupState.isPinned)
         assertTrue(groupState.isMuted)
         kotlinx.coroutines.coroutineScope {
@@ -400,7 +400,7 @@ class UnifiedChatRoutesTest {
             assertEquals(HttpStatusCode.OK, mute.await().status)
             assertEquals(HttpStatusCode.OK, archive.await().status)
         }
-        groupState = workspace(adminClient, "filter=ARCHIVED").items.single { it.id == groupId }
+        groupState = workspace(adminClient, "filter=ARCHIVED").items.single { it.kind == ConversationKind.GROUP && it.id == groupId }
         assertTrue(groupState.isPinned)
         assertFalse(groupState.isMuted)
         assertTrue(groupState.isArchived)
@@ -442,8 +442,8 @@ class UnifiedChatRoutesTest {
         val projectId = createProject("Secret Project", admin.id, member.id)
         val projectChat = createConversation("PROJECT", null, projectId, admin.id, member.id)
         insertConversationMessage(projectChat, admin.id, "secret project preview", "u-r-p", null)
-        val taskId = createTask("T-REMOVED", "IN_PROGRESS", admin.id, member.id)
-        addTaskParticipant(taskId, member.id, "WATCHER")
+        val taskId = createTask("T-REMOVED", "IN_PROGRESS", admin.id, admin.id)
+        addTaskParticipant(taskId, member.id, "OBSERVER")
         insertTaskMessage(taskId, admin.id, "secret task preview", "u-r-t", null)
         val closedTask = createTask("T-CLOSED-WORKSPACE", "CLOSED", member.id, member.id)
         addTaskParticipant(closedTask, member.id, "ASSIGNEE")
@@ -516,13 +516,15 @@ class UnifiedChatRoutesTest {
         vararg memberIds: Long
     ): Long {
         val id = dsl().connectionResult { connection ->
+            val directKey = if (kind == "DIRECT") memberIds.sorted().joinToString(":") else null
             connection.prepareStatement(
-                "INSERT INTO conversations (kind, title, project_id, created_by) VALUES (?, ?, ?, ?) RETURNING id"
+                "INSERT INTO conversations (kind, title, project_id, direct_key, created_by) VALUES (?, ?, ?, ?, ?) RETURNING id"
             ).use { statement ->
                 statement.setString(1, kind)
                 statement.setString(2, title)
                 if (projectId == null) statement.setNull(3, java.sql.Types.BIGINT) else statement.setLong(3, projectId)
-                statement.setLong(4, memberIds.first())
+                statement.setString(4, directKey)
+                statement.setLong(5, memberIds.first())
                 statement.executeQuery().use { result -> result.next(); result.getLong(1) }
             }
         }
@@ -537,7 +539,7 @@ class UnifiedChatRoutesTest {
             connection.prepareStatement(
                 """
                 INSERT INTO projects (number, name, status, owner_id, created_by)
-                VALUES (?, ?, 'OPEN', ?, ?) RETURNING id
+                VALUES (?, ?, 'IN_PROGRESS', ?, ?) RETURNING id
                 """.trimIndent()
             ).use { statement ->
                 statement.setString(1, "P-${java.util.UUID.randomUUID()}")
@@ -665,10 +667,10 @@ class UnifiedChatRoutesTest {
             environment {
                 config = HoconApplicationConfig(ConfigFactory.parseString(
                     """
-                    ktor { deployment { port = 0 } application { modules = [org.example.project.ApplicationKt.module] } }
-                    database { url = "jdbc:postgresql://localhost:5433/erp_test" user = "erp" password = "erp" }
-                    session { ttlMinutes = 60 cookieName = "erp_session" }
-                    security { allowedOrigins = "http://localhost:8080,http://localhost:8081" cookieSecure = false }
+                    ktor { deployment { port = 0 }, application { modules = [org.example.project.ApplicationKt.module] } }
+                    database { url = "${TestDatabase.TEST_URL}", user = "erp", password = "erp" }
+                    session { ttlMinutes = 60, cookieName = "erp_session" }
+                    security { allowedOrigins = "http://localhost:8080,http://localhost:8081", cookieSecure = false }
                     storage { path = "./.local/test-storage" }
                     """.trimIndent()
                 ))

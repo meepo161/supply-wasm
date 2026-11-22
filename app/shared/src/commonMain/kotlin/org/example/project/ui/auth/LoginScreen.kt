@@ -148,6 +148,23 @@ fun LoginScreen(
                             )
 
                             state.error?.let { error -> ErrorBanner(error) }
+                            if (state.passwordChangeSuccess) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Brand.Mint.copy(alpha = 0.14f))
+                                        .border(1.dp, Brand.Mint.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Пароль успешно изменён. Войдите с новым паролем.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Brand.Teal
+                                    )
+                                }
+                            }
 
                             GradientButton(
                                 text = if (state.isLoading) "Подключаемся…" else "Войти в систему",

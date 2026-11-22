@@ -13,4 +13,5 @@ interface ApprovalRepository {
     suspend fun startRoute(request: StartApprovalRouteRequest): ApiResult<ApprovalRouteDto>
     suspend fun submitDecision(routeId: Long, request: SubmitApprovalDecisionRequest): ApiResult<ApprovalRouteDto>
     suspend fun cancelRoute(routeId: Long, request: CancelApprovalRouteRequest): ApiResult<ApprovalRouteDto>
+    suspend fun myQueue(): ApiResult<List<ApprovalRouteDto>> = ApiResult.Success(emptyList())
 }

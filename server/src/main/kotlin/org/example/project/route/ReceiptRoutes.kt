@@ -9,6 +9,7 @@ import org.example.project.dto.*
 import org.example.project.exception.ValidationException
 import org.example.project.plugins.RequireAuthPlugin
 import org.example.project.plugins.currentUser
+import org.example.project.service.ReceiptQcService
 import org.example.project.service.ReceiptService
 
 /**
@@ -16,7 +17,7 @@ import org.example.project.service.ReceiptService
  * Поиск/создание приёмок сохраняют прежние пути `/api/wms/receipts*`, а
  * ожидаемые поставки и связи вынесены отдельными путями.
  */
-fun Route.receiptRoutes(receiptService: ReceiptService) {
+fun Route.receiptRoutes(receiptService: ReceiptService, receiptQcService: ReceiptQcService) {
     route("/api/wms/receipts") {
         install(RequireAuthPlugin) {}
 
@@ -73,6 +74,20 @@ fun Route.receiptRoutes(receiptService: ReceiptService) {
                 HttpStatusCode.OK,
                 ApiResponse.success(receiptService.linkReceipt(id, request, call.currentUser()))
             )
+        }
+
+        /** Контроль качества при приёмке (WMS-37). */
+        get("/{id}/qc") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid receipt id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(receiptQcService.getOrInit(id, call.currentUser())))
+        }
+
+        post("/{id}/qc") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid receipt id")
+            val request = call.receive<InspectReceiptQcRequest>()
+            call.respond(HttpStatusCode.OK, ApiResponse.success(receiptQcService.inspect(id, request, call.currentUser())))
         }
     }
 

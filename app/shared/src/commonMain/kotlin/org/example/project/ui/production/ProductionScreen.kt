@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,6 +96,40 @@ fun ProductionScreen(
     }
 
     ProductionDialogs(state = state, viewModel = viewModel)
+
+    if (state.activeDialog == ProductionDialog.CreateNonconformity) {
+        var category by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("PRODUCTION") }
+        var description by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::dismissDialog,
+            title = { Text("Новое несоответствие (NCR)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    org.example.project.ui.theme.ErpTextField(
+                        value = category,
+                        onValueChange = { category = it },
+                        label = "Категория"
+                    )
+                    org.example.project.ui.theme.ErpTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = "Описание несоответствия"
+                    )
+                }
+            },
+            confirmButton = {
+                GradientButton(
+                    text = "Создать",
+                    onClick = { viewModel.createNonconformity(category, description) },
+                    gradient = Gradients.Aurora,
+                    compact = true
+                )
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = viewModel::dismissDialog) { Text("Отмена") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -222,8 +257,96 @@ private fun OrderDetailPane(
                 } else {
                     ProductInstancesGrid(
                         instances = state.instances,
+                        onClick = { viewModel.openInstanceDetail(it.id) },
                         modifier = Modifier.fillMaxWidth().height(180.dp)
                     )
+                }
+                Spacer(Modifier.height(14.dp))
+                SectionHeader(
+                    title = "Материалы заказа (BOM)",
+                    count = state.materials.size,
+                    accent = Brand.Blue,
+                    subtitle = "План, резерв и факт списания",
+                    action = if (canManage) {
+                        { SoftButton(text = "Из BOM", onClick = viewModel::initMaterialsFromBom) }
+                    } else null
+                )
+                Spacer(Modifier.height(6.dp))
+                if (state.materials.isEmpty()) {
+                    Text(
+                        "Материалы не сформированы. Нажмите «Из BOM».",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    state.materials.forEach { m ->
+                        Text(
+                            text = "${m.nomenclatureCode} ${m.nomenclatureName}: план ${m.plannedQty} / резерв ${m.allocatedQty} / факт ${m.consumedQty} ${m.unit}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                SectionHeader(
+                    title = "Несоответствия (NCR)",
+                    count = state.nonconformities.size,
+                    accent = Brand.Rose,
+                    subtitle = "Регистрация и корректирующие действия",
+                    action = if (canManage) {
+                        { SoftButton(text = "Создать NCR", onClick = { viewModel.showDialog(ProductionDialog.CreateNonconformity) }) }
+                    } else null
+                )
+                Spacer(Modifier.height(6.dp))
+                if (state.nonconformities.isEmpty()) {
+                    Text(
+                        "Несоответствий по заказу не зарегистрировано.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    state.nonconformities.forEach { nc ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${nc.number} [${nc.status.name}] ${nc.description}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (canManage && nc.status != org.example.project.dto.NonconformityStatus.CLOSED) {
+                                val next = when (nc.status) {
+                                    org.example.project.dto.NonconformityStatus.REGISTERED -> org.example.project.dto.NonconformityStatus.EVALUATION
+                                    org.example.project.dto.NonconformityStatus.EVALUATION -> org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION
+                                    org.example.project.dto.NonconformityStatus.ASSIGNED -> org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION
+                                    org.example.project.dto.NonconformityStatus.ROOT_CAUSE_ANALYSIS -> org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION
+                                    org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION -> org.example.project.dto.NonconformityStatus.EFFECTIVENESS_CHECK
+                                    org.example.project.dto.NonconformityStatus.EFFECTIVENESS_CHECK -> org.example.project.dto.NonconformityStatus.CLOSED
+                                    org.example.project.dto.NonconformityStatus.CLOSED -> org.example.project.dto.NonconformityStatus.CLOSED
+                                }
+                                SoftButton(
+                                    text = "Далее",
+                                    onClick = { viewModel.transitionNonconformity(nc, next) }
+                                )
+                            }
+                        }
+                    }
+                }
+                if (state.engineeringChanges.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    SectionHeader(
+                        title = "Инженерные изменения (ECN)",
+                        count = state.engineeringChanges.size,
+                        accent = Brand.Indigo,
+                        subtitle = "Влияние смены ревизии"
+                    )
+                    state.engineeringChanges.forEach { ec ->
+                        Text(
+                            text = "#${ec.id} [${ec.status.name}] ${ec.impactSummary} (${ec.materialDecision.name})",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
             }
@@ -455,5 +578,10 @@ private fun OrderActionRow(order: ProductionOrderDto, viewModel: ProductionViewM
                 tint = Brand.Rose
             )
         }
+        val printUriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+        SoftButton(
+            text = "Печать наряда",
+            onClick = { printUriHandler.openUri("http://localhost:8080/api/analytics/print/production-order/${order.id}") }
+        )
     }
 }

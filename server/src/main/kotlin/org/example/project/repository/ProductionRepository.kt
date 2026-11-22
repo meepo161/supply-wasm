@@ -1,6 +1,20 @@
 package org.example.project.repository
 
+import org.example.project.dto.ProductInstanceComponentDto
+import org.example.project.dto.ProductInstanceDetailDto
+import org.example.project.dto.ProductInstanceDocumentDto
+import org.example.project.dto.ProductInstanceRemarkDto
+import org.example.project.dto.ProductInstanceSoftwareDto
+import org.example.project.dto.ProductInstanceTestDto
 import org.example.project.generated.jooq.tables.Departments.DEPARTMENTS
+import org.example.project.generated.jooq.tables.DocumentVersions.DOCUMENT_VERSIONS
+import org.example.project.generated.jooq.tables.Documents.DOCUMENTS
+import org.example.project.generated.jooq.tables.InstanceComponents.INSTANCE_COMPONENTS
+import org.example.project.generated.jooq.tables.InstanceDocuments.INSTANCE_DOCUMENTS
+import org.example.project.generated.jooq.tables.InstanceRemarks.INSTANCE_REMARKS
+import org.example.project.generated.jooq.tables.InstanceSoftware.INSTANCE_SOFTWARE
+import org.example.project.generated.jooq.tables.InstanceTests.INSTANCE_TESTS
+import org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
 import org.example.project.generated.jooq.tables.ProductInstances.PRODUCT_INSTANCES
 import org.example.project.generated.jooq.tables.ProductModels.PRODUCT_MODELS
 import org.example.project.generated.jooq.tables.ProductRevisions.PRODUCT_REVISIONS
@@ -230,5 +244,325 @@ class ProductionRepository(private val dsl: DSLContext) {
             .fetchOne(PRODUCTION_ORDERS.NUMBER)
         val nextIndex = maxNumber?.removePrefix(prefix)?.toIntOrNull()?.plus(1) ?: 1
         return String.format("$prefix%05d", nextIndex)
+    }
+
+    fun findInstanceDetailById(instanceId: Long): ProductInstanceDetailDto? {
+        val row = dsl.select(
+            PRODUCT_INSTANCES.ID,
+            PRODUCT_INSTANCES.ORDER_ID,
+            PRODUCTION_ORDERS.NUMBER,
+            PRODUCT_INSTANCES.PROJECT_ID,
+            PRODUCT_INSTANCES.PRODUCT_MODEL_ID,
+            PRODUCT_MODELS.CODE,
+            PRODUCT_MODELS.NAME,
+            PRODUCT_INSTANCES.BOM_REVISION_ID,
+            PRODUCT_INSTANCES.SERIAL_NUMBER,
+            PRODUCT_INSTANCES.STATUS,
+            PRODUCT_INSTANCES.MANUFACTURED_AT,
+            PRODUCT_INSTANCES.ACCEPTED_AT,
+            PRODUCT_INSTANCES.SHIPPED_AT,
+            PRODUCT_INSTANCES.VERSION
+        )
+            .from(PRODUCT_INSTANCES)
+            .leftJoin(PRODUCTION_ORDERS).on(PRODUCTION_ORDERS.ID.eq(PRODUCT_INSTANCES.ORDER_ID))
+            .leftJoin(PRODUCT_MODELS).on(PRODUCT_MODELS.ID.eq(PRODUCT_INSTANCES.PRODUCT_MODEL_ID))
+            .where(PRODUCT_INSTANCES.ID.eq(instanceId))
+            .fetchOne() ?: return null
+
+        val components = dsl.select(
+            INSTANCE_COMPONENTS.ID,
+            INSTANCE_COMPONENTS.NOMENCLATURE_ID,
+            NOMENCLATURE.CODE,
+            NOMENCLATURE.NAME,
+            INSTANCE_COMPONENTS.QUANTITY,
+            INSTANCE_COMPONENTS.LOT_ID,
+            INSTANCE_COMPONENTS.SERIAL_ID,
+            INSTANCE_COMPONENTS.SUBSTITUTE_REASON,
+            INSTANCE_COMPONENTS.INSTALLED_AT,
+            INSTANCE_COMPONENTS.INSTALLED_BY,
+            USERS.FULL_NAME
+        )
+            .from(INSTANCE_COMPONENTS)
+            .leftJoin(NOMENCLATURE).on(NOMENCLATURE.ID.eq(INSTANCE_COMPONENTS.NOMENCLATURE_ID))
+            .leftJoin(USERS).on(USERS.ID.eq(INSTANCE_COMPONENTS.INSTALLED_BY))
+            .where(INSTANCE_COMPONENTS.INSTANCE_ID.eq(instanceId))
+            .orderBy(INSTANCE_COMPONENTS.ID.asc())
+            .fetch { r ->
+                ProductInstanceComponentDto(
+                    id = r[INSTANCE_COMPONENTS.ID],
+                    nomenclatureId = r[INSTANCE_COMPONENTS.NOMENCLATURE_ID],
+                    nomenclatureCode = r[NOMENCLATURE.CODE],
+                    nomenclatureName = r[NOMENCLATURE.NAME],
+                    quantity = r[INSTANCE_COMPONENTS.QUANTITY].stripTrailingZeros().toPlainString(),
+                    lotId = r[INSTANCE_COMPONENTS.LOT_ID],
+                    serialId = r[INSTANCE_COMPONENTS.SERIAL_ID],
+                    substituteReason = r[INSTANCE_COMPONENTS.SUBSTITUTE_REASON],
+                    installedAt = r[INSTANCE_COMPONENTS.INSTALLED_AT].toString(),
+                    installedById = r[INSTANCE_COMPONENTS.INSTALLED_BY],
+                    installedByName = r[USERS.FULL_NAME]
+                )
+            }
+
+        val documents = dsl.select(
+            INSTANCE_DOCUMENTS.ID,
+            DOCUMENTS.ID,
+            DOCUMENTS.NAME,
+            INSTANCE_DOCUMENTS.DOCUMENT_VERSION_ID,
+            DOCUMENT_VERSIONS.VERSION_NUMBER,
+            INSTANCE_DOCUMENTS.DOC_KIND,
+            INSTANCE_DOCUMENTS.CREATED_AT,
+            INSTANCE_DOCUMENTS.CREATED_BY,
+            USERS.FULL_NAME
+        )
+            .from(INSTANCE_DOCUMENTS)
+            .leftJoin(DOCUMENT_VERSIONS).on(DOCUMENT_VERSIONS.ID.eq(INSTANCE_DOCUMENTS.DOCUMENT_VERSION_ID))
+            .leftJoin(DOCUMENTS).on(DOCUMENTS.ID.eq(DOCUMENT_VERSIONS.DOCUMENT_ID))
+            .leftJoin(USERS).on(USERS.ID.eq(INSTANCE_DOCUMENTS.CREATED_BY))
+            .where(INSTANCE_DOCUMENTS.INSTANCE_ID.eq(instanceId))
+            .orderBy(INSTANCE_DOCUMENTS.ID.asc())
+            .fetch { r ->
+                ProductInstanceDocumentDto(
+                    id = r[INSTANCE_DOCUMENTS.ID],
+                    documentId = r[DOCUMENTS.ID],
+                    documentTitle = r[DOCUMENTS.NAME],
+                    documentVersionId = r[INSTANCE_DOCUMENTS.DOCUMENT_VERSION_ID],
+                    documentVersionNumber = r[DOCUMENT_VERSIONS.VERSION_NUMBER],
+                    docKind = r[INSTANCE_DOCUMENTS.DOC_KIND],
+                    createdAt = r[INSTANCE_DOCUMENTS.CREATED_AT].toString(),
+                    createdById = r[INSTANCE_DOCUMENTS.CREATED_BY],
+                    createdByName = r[USERS.FULL_NAME]
+                )
+            }
+
+        val software = dsl.select(
+            INSTANCE_SOFTWARE.ID,
+            INSTANCE_SOFTWARE.NAME,
+            INSTANCE_SOFTWARE.VERSION,
+            INSTANCE_SOFTWARE.BUILD,
+            INSTANCE_SOFTWARE.INSTALLED_AT,
+            INSTANCE_SOFTWARE.INSTALLED_BY,
+            USERS.FULL_NAME
+        )
+            .from(INSTANCE_SOFTWARE)
+            .leftJoin(USERS).on(USERS.ID.eq(INSTANCE_SOFTWARE.INSTALLED_BY))
+            .where(INSTANCE_SOFTWARE.INSTANCE_ID.eq(instanceId))
+            .orderBy(INSTANCE_SOFTWARE.ID.asc())
+            .fetch { r ->
+                ProductInstanceSoftwareDto(
+                    id = r[INSTANCE_SOFTWARE.ID],
+                    name = r[INSTANCE_SOFTWARE.NAME],
+                    version = r[INSTANCE_SOFTWARE.VERSION],
+                    build = r[INSTANCE_SOFTWARE.BUILD],
+                    installedAt = r[INSTANCE_SOFTWARE.INSTALLED_AT].toString(),
+                    installedById = r[INSTANCE_SOFTWARE.INSTALLED_BY],
+                    installedByName = r[USERS.FULL_NAME]
+                )
+            }
+
+        val tests = dsl.select(
+            INSTANCE_TESTS.ID,
+            INSTANCE_TESTS.RESULT,
+            INSTANCE_TESTS.NOTES,
+            INSTANCE_TESTS.PROTOCOL_DOCUMENT_VERSION_ID,
+            INSTANCE_TESTS.PERFORMED_AT,
+            INSTANCE_TESTS.PERFORMED_BY,
+            USERS.FULL_NAME,
+            INSTANCE_TESTS.TECHNICAL_DECISION,
+            INSTANCE_TESTS.TECHNICAL_DECISION_BY,
+            INSTANCE_TESTS.TECHNICAL_DECISION_AT
+        )
+            .from(INSTANCE_TESTS)
+            .leftJoin(USERS).on(USERS.ID.eq(INSTANCE_TESTS.PERFORMED_BY))
+            .where(INSTANCE_TESTS.INSTANCE_ID.eq(instanceId))
+            .orderBy(INSTANCE_TESTS.ID.asc())
+            .fetch { r ->
+                ProductInstanceTestDto(
+                    id = r[INSTANCE_TESTS.ID],
+                    result = r[INSTANCE_TESTS.RESULT],
+                    notes = r[INSTANCE_TESTS.NOTES],
+                    protocolDocumentVersionId = r[INSTANCE_TESTS.PROTOCOL_DOCUMENT_VERSION_ID],
+                    performedAt = r[INSTANCE_TESTS.PERFORMED_AT].toString(),
+                    performedById = r[INSTANCE_TESTS.PERFORMED_BY],
+                    performedByName = r[USERS.FULL_NAME],
+                    technicalDecision = r[INSTANCE_TESTS.TECHNICAL_DECISION],
+                    technicalDecisionById = r[INSTANCE_TESTS.TECHNICAL_DECISION_BY],
+                    technicalDecisionAt = r[INSTANCE_TESTS.TECHNICAL_DECISION_AT]?.toString()
+                )
+            }
+
+        val remarks = dsl.select(
+            INSTANCE_REMARKS.ID,
+            INSTANCE_REMARKS.TEST_ID,
+            INSTANCE_REMARKS.DESCRIPTION,
+            INSTANCE_REMARKS.SEVERITY,
+            INSTANCE_REMARKS.BLOCKS_SHIPMENT,
+            INSTANCE_REMARKS.STATUS,
+            INSTANCE_REMARKS.CREATED_BY,
+            USERS.FULL_NAME,
+            INSTANCE_REMARKS.ALLOWED_BY,
+            INSTANCE_REMARKS.ALLOWED_AT,
+            INSTANCE_REMARKS.CORRECTIVE_TASK_ID,
+            INSTANCE_REMARKS.CREATED_AT
+        )
+            .from(INSTANCE_REMARKS)
+            .leftJoin(USERS).on(USERS.ID.eq(INSTANCE_REMARKS.CREATED_BY))
+            .where(INSTANCE_REMARKS.INSTANCE_ID.eq(instanceId))
+            .orderBy(INSTANCE_REMARKS.ID.asc())
+            .fetch { r ->
+                ProductInstanceRemarkDto(
+                    id = r[INSTANCE_REMARKS.ID],
+                    testId = r[INSTANCE_REMARKS.TEST_ID],
+                    description = r[INSTANCE_REMARKS.DESCRIPTION],
+                    severity = r[INSTANCE_REMARKS.SEVERITY],
+                    blocksShipment = r[INSTANCE_REMARKS.BLOCKS_SHIPMENT],
+                    status = r[INSTANCE_REMARKS.STATUS],
+                    createdById = r[INSTANCE_REMARKS.CREATED_BY],
+                    createdByName = r[USERS.FULL_NAME],
+                    allowedById = r[INSTANCE_REMARKS.ALLOWED_BY],
+                    allowedAt = r[INSTANCE_REMARKS.ALLOWED_AT]?.toString(),
+                    correctiveTaskId = r[INSTANCE_REMARKS.CORRECTIVE_TASK_ID],
+                    createdAt = r[INSTANCE_REMARKS.CREATED_AT].toString()
+                )
+            }
+
+        return ProductInstanceDetailDto(
+            id = row[PRODUCT_INSTANCES.ID],
+            orderId = row[PRODUCT_INSTANCES.ORDER_ID],
+            orderNumber = row[PRODUCTION_ORDERS.NUMBER],
+            projectId = row[PRODUCT_INSTANCES.PROJECT_ID],
+            productModelId = row[PRODUCT_INSTANCES.PRODUCT_MODEL_ID],
+            productModelCode = row[PRODUCT_MODELS.CODE],
+            productModelName = row[PRODUCT_MODELS.NAME],
+            bomRevisionId = row[PRODUCT_INSTANCES.BOM_REVISION_ID],
+            serialNumber = row[PRODUCT_INSTANCES.SERIAL_NUMBER],
+            status = row[PRODUCT_INSTANCES.STATUS],
+            manufacturedAt = row[PRODUCT_INSTANCES.MANUFACTURED_AT]?.toString(),
+            acceptedAt = row[PRODUCT_INSTANCES.ACCEPTED_AT]?.toString(),
+            shippedAt = row[PRODUCT_INSTANCES.SHIPPED_AT]?.toString(),
+            version = row[PRODUCT_INSTANCES.VERSION],
+            components = components,
+            documents = documents,
+            software = software,
+            tests = tests,
+            remarks = remarks
+        )
+    }
+
+    fun findInstanceOrderId(instanceId: Long): Long? =
+        dsl.select(PRODUCT_INSTANCES.ORDER_ID)
+            .from(PRODUCT_INSTANCES)
+            .where(PRODUCT_INSTANCES.ID.eq(instanceId))
+            .fetchOne(PRODUCT_INSTANCES.ORDER_ID)
+
+    fun insertInstanceTest(
+        instanceId: Long,
+        orderId: Long?,
+        result: String,
+        notes: String?,
+        protocolDocumentVersionId: Long?,
+        technicalDecision: String,
+        userId: Long
+    ): Long =
+        dsl.insertInto(INSTANCE_TESTS)
+            .set(INSTANCE_TESTS.INSTANCE_ID, instanceId)
+            .set(INSTANCE_TESTS.ORDER_ID, orderId)
+            .set(INSTANCE_TESTS.PROTOCOL_DOCUMENT_VERSION_ID, protocolDocumentVersionId)
+            .set(INSTANCE_TESTS.PERFORMED_BY, userId)
+            .set(INSTANCE_TESTS.RESULT, result)
+            .set(INSTANCE_TESTS.NOTES, notes)
+            .set(INSTANCE_TESTS.TECHNICAL_DECISION, technicalDecision)
+            .set(INSTANCE_TESTS.CREATED_BY, userId)
+            .returning(INSTANCE_TESTS.ID)
+            .fetchOne()!!
+            .id
+
+    fun insertInstanceRemark(
+        instanceId: Long,
+        testId: Long?,
+        description: String,
+        severity: String,
+        blocksShipment: Boolean,
+        userId: Long
+    ): Long =
+        dsl.insertInto(INSTANCE_REMARKS)
+            .set(INSTANCE_REMARKS.INSTANCE_ID, instanceId)
+            .set(INSTANCE_REMARKS.TEST_ID, testId)
+            .set(INSTANCE_REMARKS.DESCRIPTION, description)
+            .set(INSTANCE_REMARKS.SEVERITY, severity)
+            .set(INSTANCE_REMARKS.BLOCKS_SHIPMENT, blocksShipment)
+            .set(INSTANCE_REMARKS.CREATED_BY, userId)
+            .returning(INSTANCE_REMARKS.ID)
+            .fetchOne()!!
+            .id
+
+    fun insertInstanceSoftware(
+        instanceId: Long,
+        name: String,
+        version: String,
+        build: String?,
+        userId: Long
+    ): Long =
+        dsl.insertInto(INSTANCE_SOFTWARE)
+            .set(INSTANCE_SOFTWARE.INSTANCE_ID, instanceId)
+            .set(INSTANCE_SOFTWARE.NAME, name)
+            .set(INSTANCE_SOFTWARE.VERSION, version)
+            .set(INSTANCE_SOFTWARE.BUILD, build)
+            .set(INSTANCE_SOFTWARE.INSTALLED_BY, userId)
+            .set(INSTANCE_SOFTWARE.CREATED_BY, userId)
+            .returning(INSTANCE_SOFTWARE.ID)
+            .fetchOne()!!
+            .id
+
+    fun resolveInstanceRemark(instanceId: Long, remarkId: Long, status: String, userId: Long): Int =
+        dsl.update(INSTANCE_REMARKS)
+            .set(INSTANCE_REMARKS.STATUS, status)
+            .set(INSTANCE_REMARKS.ALLOWED_BY, userId)
+            .set(INSTANCE_REMARKS.ALLOWED_AT, OffsetDateTime.now())
+            .set(INSTANCE_REMARKS.VERSION, INSTANCE_REMARKS.VERSION.plus(1L))
+            .where(
+                INSTANCE_REMARKS.ID.eq(remarkId)
+                    .and(INSTANCE_REMARKS.INSTANCE_ID.eq(instanceId))
+                    .and(INSTANCE_REMARKS.STATUS.eq("OPEN"))
+            )
+            .execute()
+
+    fun hasBlockingOpenRemarks(instanceId: Long): Boolean =
+        dsl.fetchExists(
+            dsl.selectOne()
+                .from(INSTANCE_REMARKS)
+                .where(
+                    INSTANCE_REMARKS.INSTANCE_ID.eq(instanceId)
+                        .and(INSTANCE_REMARKS.BLOCKS_SHIPMENT.isTrue)
+                        .and(INSTANCE_REMARKS.STATUS.eq("OPEN"))
+                )
+        )
+
+    fun hasUnresolvedFailedTests(instanceId: Long): Boolean =
+        dsl.fetchExists(
+            dsl.selectOne()
+                .from(INSTANCE_TESTS)
+                .where(
+                    INSTANCE_TESTS.INSTANCE_ID.eq(instanceId)
+                        .and(INSTANCE_TESTS.RESULT.eq("NOT_GOOD"))
+                        .and(INSTANCE_TESTS.TECHNICAL_DECISION.ne("GOOD"))
+                )
+        )
+
+    fun updateInstanceStatus(
+        instanceId: Long,
+        newStatus: String,
+        acceptedAt: OffsetDateTime? = null,
+        shippedAt: OffsetDateTime? = null
+    ): Int {
+        var step = dsl.update(PRODUCT_INSTANCES)
+            .set(PRODUCT_INSTANCES.STATUS, newStatus)
+            .set(PRODUCT_INSTANCES.VERSION, PRODUCT_INSTANCES.VERSION.plus(1L))
+        if (acceptedAt != null) {
+            step = step.set(PRODUCT_INSTANCES.ACCEPTED_AT, acceptedAt)
+        }
+        if (shippedAt != null) {
+            step = step.set(PRODUCT_INSTANCES.SHIPPED_AT, shippedAt)
+        }
+        return step.where(PRODUCT_INSTANCES.ID.eq(instanceId)).execute()
     }
 }

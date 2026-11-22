@@ -42,6 +42,7 @@ fun SupplierDialogs(state: SupplierUiState, viewModel: SupplierViewModel) {
         SupplierDialog.Verify -> VerifyDialog(state, viewModel)
         SupplierDialog.CreateOffer -> CreateOfferDialog(state, viewModel)
         is SupplierDialog.SelectOffer -> SelectOfferDialog(dialog, state, viewModel)
+        SupplierDialog.CreateClaim -> { }
     }
 }
 

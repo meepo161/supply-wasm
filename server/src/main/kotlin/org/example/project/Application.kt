@@ -37,6 +37,17 @@ fun Application.module(pushTransport: org.example.project.service.PushTransport?
     install(WebSockets)
 
     configureHTTP(config)
+    intercept(ApplicationCallPipeline.Plugins) {
+        val requestId = call.request.headers["X-Request-Id"]?.takeIf { it.isNotBlank() }
+            ?: java.util.UUID.randomUUID().toString()
+        call.response.headers.append("X-Request-Id", requestId)
+        org.slf4j.MDC.put("requestId", requestId)
+        try {
+            proceed()
+        } finally {
+            org.slf4j.MDC.remove("requestId")
+        }
+    }
     configureStatusPages()
     configureRouting()
 

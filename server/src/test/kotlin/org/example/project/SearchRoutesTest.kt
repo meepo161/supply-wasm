@@ -258,7 +258,7 @@ class SearchRoutesTest {
 
         val fullResult = client.get("/api/search?q=Gamma&limit=10")
             .bodyAs<ApiResponse<SearchResponse>>().data!!
-        assertEquals(listOf(SearchResultType.PROJECT, SearchResultType.TASK), fullResult.groups.map { it.type })
+        assertEquals(listOf(SearchResultType.PROJECT, SearchResultType.TASK, SearchResultType.MESSAGE), fullResult.groups.map { it.type })
         assertEquals(1, fullResult.groups.single { it.type == SearchResultType.PROJECT }.items.size)
         val fullTasks = fullResult.groups.single { it.type == SearchResultType.TASK }
         assertEquals(3, fullTasks.items.size)
@@ -455,7 +455,7 @@ class SearchRoutesTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

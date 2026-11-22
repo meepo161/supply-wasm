@@ -23,3 +23,31 @@
 Сервер запускает Netty на порту 8080. Обработчик `GET /` вызывает `sayHello("Ktor")` и возвращает текстовый ответ. В исходниках нет вызова сервера из веб-приложения: эти две точки входа работают независимо, разделяя только модуль `:core`.
 
 Состав модулей задаёт [`settings.gradle.kts`](../settings.gradle.kts), а версии зависимостей — [`gradle/libs.versions.toml`](../gradle/libs.versions.toml).
+
+## Диаграмма архитектуры (Mermaid)
+
+```mermaid
+flowchart LR
+    WebApp[":app:webApp (Kotlin/Wasm Compose)"] --> Shared[":app:shared (UI, ViewModels, API Clients)"]
+    Shared --> Core[":core (Shared DTOs, Validation)"]
+    Server[":server (Ktor, Netty, Koin, jOOQ)"] --> Core
+    Server --> Postgres[(PostgreSQL + Flyway V1..V41)]
+    Shared -->|REST / WebSocket| Server
+```
+
+## Бизнес-модули ERP
+
+```mermaid
+flowchart TD
+    IAM["IAM & Audit"] --> Home["Главная, Поиск, Уведомления"]
+    Home --> Tasks["Задачи + Task Chat + Единый Chat"]
+    Home --> Projects["Проекты (Этапы, Точки, Риски)"]
+    Projects --> BOM["НСИ и BOM (Ревизии, Diff, Where-Used)"]
+    BOM --> Production["Производство и Качество (Материалы, ECN, NCR, Паспорт)"]
+    Projects --> Supply["Снабжение (Потребности, Объединение, План закупок)"]
+    Supply --> Suppliers["Поставщики, Предложения, Заказы, Рекламации"]
+    Suppliers --> WMS["WMS (Склад, Ячейки, Приёмка ОТК, Движения, Инвентаризация)"]
+    Production --> WMS
+    Home --> DMS["Документы (Версии, Шаблоны) и Согласования"]
+    Home --> Analytics["Аналитика, Календарь, Гант, Экспорт/Импорт, CRM"]
+```

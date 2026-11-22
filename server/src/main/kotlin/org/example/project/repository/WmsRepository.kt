@@ -1,8 +1,14 @@
 package org.example.project.repository
 
+import org.example.project.generated.jooq.tables.BomLines.BOM_LINES
+import org.example.project.generated.jooq.tables.DemandLines.DEMAND_LINES
+import org.example.project.generated.jooq.tables.Demands.DEMANDS
 import org.example.project.generated.jooq.tables.Lots.LOTS
 import org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
+import org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS
 import org.example.project.generated.jooq.tables.NomenclatureBarcodes.NOMENCLATURE_BARCODES
+import org.example.project.generated.jooq.tables.NomenclatureUnitConversions.NOMENCLATURE_UNIT_CONVERSIONS
+import org.example.project.generated.jooq.tables.ProductRevisions.PRODUCT_REVISIONS
 import org.example.project.generated.jooq.tables.Projects.PROJECTS
 import org.example.project.generated.jooq.tables.PurchaseDeliveries.PURCHASE_DELIVERIES
 import org.example.project.generated.jooq.tables.PurchaseOrderLines.PURCHASE_ORDER_LINES
@@ -209,6 +215,9 @@ class WmsRepository(private val dsl: DSLContext) {
         unit: String,
         lotTracked: Boolean,
         serialTracked: Boolean,
+        minStock: BigDecimal = BigDecimal.ZERO,
+        safetyStock: BigDecimal = BigDecimal.ZERO,
+        leadTimeDays: Int = 0,
         createdBy: Long
     ): NomenclatureRecord {
         val record = dsl.newRecord(NOMENCLATURE)
@@ -219,10 +228,127 @@ class WmsRepository(private val dsl: DSLContext) {
         record.unit = unit
         record.lotTracked = lotTracked
         record.serialTracked = serialTracked
+        record.minStock = minStock
+        record.safetyStock = safetyStock
+        record.leadTimeDays = leadTimeDays
         record.createdBy = createdBy
         record.store()
         return findNomenclatureById(record.id)!!
     }
+
+    fun updateNomenclatureThresholds(
+        id: Long,
+        minStock: BigDecimal,
+        safetyStock: BigDecimal,
+        leadTimeDays: Int,
+        expectedVersion: Long
+    ): NomenclatureRecord? {
+        return dsl.update(NOMENCLATURE)
+            .set(NOMENCLATURE.MIN_STOCK, minStock)
+            .set(NOMENCLATURE.SAFETY_STOCK, safetyStock)
+            .set(NOMENCLATURE.LEAD_TIME_DAYS, leadTimeDays)
+            .set(NOMENCLATURE.VERSION, NOMENCLATURE.VERSION.plus(1))
+            .where(NOMENCLATURE.ID.eq(id))
+            .and(NOMENCLATURE.VERSION.eq(expectedVersion))
+            .returning()
+            .fetchOne()
+    }
+
+    fun findActiveNomenclatureReference(id: Long): String? {
+        val hasStock = dsl.fetchExists(
+            dsl.selectOne().from(STOCK_BALANCE)
+                .where(STOCK_BALANCE.NOMENCLATURE_ID.eq(id))
+                .and(STOCK_BALANCE.PHYSICAL_QTY.gt(BigDecimal.ZERO))
+        )
+        if (hasStock) return "stock_balance"
+        val hasActiveBom = dsl.fetchExists(
+            dsl.selectOne().from(BOM_LINES)
+                .join(PRODUCT_REVISIONS).on(PRODUCT_REVISIONS.ID.eq(BOM_LINES.REVISION_ID))
+                .where(BOM_LINES.CHILD_NOMENCLATURE_ID.eq(id).or(BOM_LINES.PARENT_NOMENCLATURE_ID.eq(id)))
+                .and(PRODUCT_REVISIONS.STATUS.notIn("CANCELLED", "REPLACED"))
+        )
+        if (hasActiveBom) return "bom_lines"
+        val hasOpenDemand = dsl.fetchExists(
+            dsl.selectOne().from(DEMAND_LINES)
+                .join(DEMANDS).on(DEMANDS.ID.eq(DEMAND_LINES.DEMAND_ID))
+                .where(DEMAND_LINES.NOMENCLATURE_ID.eq(id))
+                .and(DEMANDS.STATUS.notIn("COVERED", "CANCELLED"))
+        )
+        if (hasOpenDemand) return "demand_lines"
+        return null
+    }
+
+    fun findNomenclatureByBarcode(barcode: String): NomenclatureRecord? {
+        val nomId = dsl.select(NOMENCLATURE_BARCODES.NOMENCLATURE_ID)
+            .from(NOMENCLATURE_BARCODES)
+            .where(NOMENCLATURE_BARCODES.BARCODE.eq(barcode))
+            .fetchOne(NOMENCLATURE_BARCODES.NOMENCLATURE_ID)
+            ?: return null
+        return findNomenclatureById(nomId)
+    }
+
+    fun deleteBarcode(nomenclatureId: Long, barcodeId: Long): Boolean {
+        return dsl.deleteFrom(NOMENCLATURE_BARCODES)
+            .where(NOMENCLATURE_BARCODES.ID.eq(barcodeId))
+            .and(NOMENCLATURE_BARCODES.NOMENCLATURE_ID.eq(nomenclatureId))
+            .execute() > 0
+    }
+
+    fun listUnitConversions(nomenclatureId: Long) =
+        dsl.selectFrom(NOMENCLATURE_UNIT_CONVERSIONS)
+            .where(NOMENCLATURE_UNIT_CONVERSIONS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(NOMENCLATURE_UNIT_CONVERSIONS.ID.asc())
+            .fetch()
+
+    fun createUnitConversion(
+        nomenclatureId: Long,
+        fromUnit: String,
+        toUnit: String,
+        factor: BigDecimal,
+        createdBy: Long
+    ) = dsl.insertInto(NOMENCLATURE_UNIT_CONVERSIONS)
+        .set(NOMENCLATURE_UNIT_CONVERSIONS.NOMENCLATURE_ID, nomenclatureId)
+        .set(NOMENCLATURE_UNIT_CONVERSIONS.FROM_UNIT, fromUnit)
+        .set(NOMENCLATURE_UNIT_CONVERSIONS.TO_UNIT, toUnit)
+        .set(NOMENCLATURE_UNIT_CONVERSIONS.FACTOR, factor)
+        .set(NOMENCLATURE_UNIT_CONVERSIONS.CREATED_BY, createdBy)
+        .returning()
+        .fetchOne()!!
+
+    fun listAnalogs(nomenclatureId: Long) =
+        dsl.select(
+            NOMENCLATURE_ANALOGS.ID,
+            NOMENCLATURE_ANALOGS.NOMENCLATURE_ID,
+            NOMENCLATURE_ANALOGS.ANALOG_NOMENCLATURE_ID,
+            NOMENCLATURE.CODE,
+            NOMENCLATURE.NAME,
+            NOMENCLATURE_ANALOGS.CONVERSION_FACTOR,
+            NOMENCLATURE_ANALOGS.APPLICABILITY_CONDITION,
+            NOMENCLATURE_ANALOGS.PRIORITY,
+            NOMENCLATURE_ANALOGS.ACTIVE
+        )
+            .from(NOMENCLATURE_ANALOGS)
+            .join(NOMENCLATURE).on(NOMENCLATURE.ID.eq(NOMENCLATURE_ANALOGS.ANALOG_NOMENCLATURE_ID))
+            .where(NOMENCLATURE_ANALOGS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(NOMENCLATURE_ANALOGS.PRIORITY.asc(), NOMENCLATURE_ANALOGS.ID.asc())
+            .fetch()
+
+    fun createAnalog(
+        nomenclatureId: Long,
+        analogNomenclatureId: Long,
+        factor: BigDecimal,
+        condition: String?,
+        priority: Int,
+        createdBy: Long
+    ) = dsl.insertInto(NOMENCLATURE_ANALOGS)
+        .set(NOMENCLATURE_ANALOGS.NOMENCLATURE_ID, nomenclatureId)
+        .set(NOMENCLATURE_ANALOGS.ANALOG_NOMENCLATURE_ID, analogNomenclatureId)
+        .set(NOMENCLATURE_ANALOGS.CONVERSION_FACTOR, factor)
+        .set(NOMENCLATURE_ANALOGS.APPLICABILITY_CONDITION, condition)
+        .set(NOMENCLATURE_ANALOGS.PRIORITY, priority)
+        .set(NOMENCLATURE_ANALOGS.CREATED_BY, createdBy)
+        .returning()
+        .fetchOne()!!
 
     fun archiveNomenclature(id: Long): NomenclatureRecord? {
         return dsl.update(NOMENCLATURE)

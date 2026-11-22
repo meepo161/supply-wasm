@@ -80,6 +80,8 @@ fun GlobalSearchBox(
     viewModel: SearchViewModel,
     onOpenTask: (Long) -> Unit,
     onOpenProject: (Long) -> Unit,
+    onOpenDocument: (Long) -> Unit = {},
+    onOpenNomenclature: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -120,7 +122,7 @@ fun GlobalSearchBox(
             Box(modifier = Modifier.weight(1f)) {
                 if (state.query.isEmpty()) {
                     Text(
-                        text = "Поиск задач, проектов, сотрудников",
+                        text = "Поиск: задачи, проекты, заказы, склад, сотрудники",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                         maxLines = 1,
@@ -166,7 +168,7 @@ fun GlobalSearchBox(
                                     val target = viewModel.highlighted()
                                     if (target != null) {
                                         expanded = false
-                                        openResult(target, onOpenTask, onOpenProject)
+                                        openResult(target, onOpenTask, onOpenProject, onOpenDocument, onOpenNomenclature)
                                         true
                                     } else {
                                         viewModel.submitImmediately()
@@ -211,7 +213,7 @@ fun GlobalSearchBox(
                 onHover = { index -> viewModel.setHighlighted(index) },
                 onSelect = { ref ->
                     expanded = false
-                    openResult(ref, onOpenTask, onOpenProject)
+                    openResult(ref, onOpenTask, onOpenProject, onOpenDocument, onOpenNomenclature)
                 },
                 modifier = Modifier.padding(top = 46.dp)
             )
@@ -229,12 +231,22 @@ fun GlobalSearchBox(
 private fun openResult(
     ref: SearchResultRef,
     onOpenTask: (Long) -> Unit,
-    onOpenProject: (Long) -> Unit
+    onOpenProject: (Long) -> Unit,
+    onOpenDocument: (Long) -> Unit,
+    onOpenNomenclature: (Long) -> Unit
 ) {
     when (ref.type) {
         SearchResultType.TASK -> onOpenTask(ref.id)
         SearchResultType.PROJECT -> onOpenProject(ref.id)
-        SearchResultType.USER -> Unit
+        SearchResultType.DOCUMENT -> onOpenDocument(ref.id)
+        SearchResultType.NOMENCLATURE -> onOpenNomenclature(ref.id)
+        SearchResultType.MESSAGE -> (ref.parentId ?: ref.id).let(onOpenTask)
+        SearchResultType.USER,
+        SearchResultType.PURCHASE_ORDER,
+        SearchResultType.DEMAND,
+        SearchResultType.SUPPLIER,
+        SearchResultType.RECEIPT,
+        SearchResultType.PRODUCTION_ORDER -> Unit
     }
 }
 
@@ -320,7 +332,8 @@ private fun SearchDropdown(
                                         type = item.type,
                                         id = item.id,
                                         title = item.title,
-                                        number = item.number
+                                        number = item.number,
+                                        parentId = item.parentId
                                     )
                                 )
                             },
@@ -347,6 +360,14 @@ private fun GroupHeader(group: SearchGroupDto) {
         SearchResultType.PROJECT -> Triple("Проекты", Brand.Indigo, ErpIconGlyph.Projects)
         SearchResultType.TASK -> Triple("Задачи", Brand.Blue, ErpIconGlyph.Tasks)
         SearchResultType.USER -> Triple("Сотрудники", Brand.Teal, ErpIconGlyph.User)
+        SearchResultType.DOCUMENT -> Triple("Документы", Brand.Violet, ErpIconGlyph.Documents)
+        SearchResultType.NOMENCLATURE -> Triple("Номенклатура", Brand.Amber, ErpIconGlyph.Layers)
+        SearchResultType.MESSAGE -> Triple("Сообщения", Brand.Cyan, ErpIconGlyph.Send)
+        SearchResultType.PURCHASE_ORDER -> Triple("Заказы поставщикам", Brand.Teal, ErpIconGlyph.Documents)
+        SearchResultType.DEMAND -> Triple("Потребности", Brand.Amber, ErpIconGlyph.Documents)
+        SearchResultType.SUPPLIER -> Triple("Поставщики", Brand.Indigo, ErpIconGlyph.User)
+        SearchResultType.RECEIPT -> Triple("Приёмки", Brand.Blue, ErpIconGlyph.Layers)
+        SearchResultType.PRODUCTION_ORDER -> Triple("Производство", Brand.Violet, ErpIconGlyph.Layers)
     }
     Row(
         modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 4.dp),
@@ -395,16 +416,40 @@ private fun SearchResultRow(
         SearchResultType.PROJECT -> Brand.Indigo
         SearchResultType.TASK -> Brand.Blue
         SearchResultType.USER -> Brand.Teal
+        SearchResultType.DOCUMENT -> Brand.Violet
+        SearchResultType.NOMENCLATURE -> Brand.Amber
+        SearchResultType.MESSAGE -> Brand.Cyan
+        SearchResultType.PURCHASE_ORDER -> Brand.Teal
+        SearchResultType.DEMAND -> Brand.Amber
+        SearchResultType.SUPPLIER -> Brand.Indigo
+        SearchResultType.RECEIPT -> Brand.Blue
+        SearchResultType.PRODUCTION_ORDER -> Brand.Violet
     }
     val gradient = when (item.type) {
         SearchResultType.PROJECT -> Gradients.Aurora
         SearchResultType.TASK -> Gradients.Ocean
         SearchResultType.USER -> Gradients.Emerald
+        SearchResultType.DOCUMENT -> Gradients.Slate
+        SearchResultType.NOMENCLATURE -> Gradients.AmberGlow
+        SearchResultType.MESSAGE -> Gradients.Ocean
+        SearchResultType.PURCHASE_ORDER -> Gradients.Emerald
+        SearchResultType.DEMAND -> Gradients.AmberGlow
+        SearchResultType.SUPPLIER -> Gradients.Aurora
+        SearchResultType.RECEIPT -> Gradients.Ocean
+        SearchResultType.PRODUCTION_ORDER -> Gradients.Slate
     }
     val glyph = when (item.type) {
         SearchResultType.PROJECT -> ErpIconGlyph.Projects
         SearchResultType.TASK -> ErpIconGlyph.Tasks
         SearchResultType.USER -> ErpIconGlyph.User
+        SearchResultType.DOCUMENT -> ErpIconGlyph.Documents
+        SearchResultType.NOMENCLATURE -> ErpIconGlyph.Layers
+        SearchResultType.MESSAGE -> ErpIconGlyph.Send
+        SearchResultType.PURCHASE_ORDER -> ErpIconGlyph.Documents
+        SearchResultType.DEMAND -> ErpIconGlyph.Documents
+        SearchResultType.SUPPLIER -> ErpIconGlyph.User
+        SearchResultType.RECEIPT -> ErpIconGlyph.Layers
+        SearchResultType.PRODUCTION_ORDER -> ErpIconGlyph.Layers
     }
 
     LaunchedEffect(hovered) {

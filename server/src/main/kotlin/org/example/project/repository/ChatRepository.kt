@@ -83,6 +83,7 @@ class ChatRepository(private val dsl: DSLContext) {
     fun canRead(taskId: Long, userId: Long, hasReadAny: Boolean): Boolean {
         if (hasReadAny) return true
         return isTaskParticipant(taskId, userId)
+            || isDirectTaskOwner(taskId, userId)
             || isDepartmentTaskMember(taskId, userId)
             || isProjectTaskMember(taskId, userId)
     }

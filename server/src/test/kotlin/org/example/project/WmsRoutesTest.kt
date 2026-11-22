@@ -321,7 +321,6 @@ class WmsRoutesTest {
         val warehouse = createWarehouse(client, "WH-1")
         val location = createLocation(client, warehouse.id, "A-01")
         val nomenclature = createNomenclature(client, "MAT-1")
-        postInitialStock(client, warehouse.id, location.id, nomenclature.id, "10")
 
         val archiveResponse = client.post("/api/wms/nomenclature/${nomenclature.id}/archive")
         assertEquals(HttpStatusCode.OK, archiveResponse.status, archiveResponse.bodyAsText())
@@ -837,7 +836,7 @@ class WmsRoutesTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }
@@ -873,7 +872,7 @@ class WmsRoutesTest {
     }
 
     companion object {
-        private const val TEST_URL = "jdbc:postgresql://localhost:5433/erp_test"
+        private val TEST_URL = TestDatabase.TEST_URL
         private const val USER = "erp"
         private const val PASSWORD = "erp"
 

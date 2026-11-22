@@ -3,9 +3,11 @@ package org.example.project.ui.bom
 import org.example.project.dto.ApiError
 import org.example.project.dto.BomExplodeReportDto
 import org.example.project.dto.BomLineDto
+import org.example.project.dto.BomRevisionDiffDto
 import org.example.project.dto.BomRevisionDto
 import org.example.project.dto.BomRevisionStatus
 import org.example.project.dto.BomRevisionSummaryDto
+import org.example.project.dto.BomWhereUsedItemDto
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ProductModelDto
 import org.example.project.dto.ProductModelStatus
@@ -32,7 +34,11 @@ data class BomUiState(
     val copyRevisionForm: CopyRevisionForm = CopyRevisionForm(),
     val createLineForm: CreateLineForm = CreateLineForm(),
     val editLineForm: EditLineForm = EditLineForm(),
-    val explodeForm: ExplodeForm = ExplodeForm()
+    val explodeForm: ExplodeForm = ExplodeForm(),
+    val revisionDiff: BomRevisionDiffDto? = null,
+    val diffTargetRevisionId: Long? = null,
+    val whereUsedNomenclatureId: Long? = null,
+    val whereUsedItems: List<BomWhereUsedItemDto> = emptyList()
 )
 
 enum class BomPage(val title: String) {
@@ -50,6 +56,8 @@ sealed class BomDialog {
     data object CreateLine : BomDialog()
     data class EditLine(val line: BomLineDto) : BomDialog()
     data object Explode : BomDialog()
+    data object Diff : BomDialog()
+    data object WhereUsed : BomDialog()
 }
 
 data class CreateProductModelForm(

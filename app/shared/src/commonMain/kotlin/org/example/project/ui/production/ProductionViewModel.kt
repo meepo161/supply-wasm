@@ -11,6 +11,7 @@ import org.example.project.data.BomRepository
 import org.example.project.data.ProjectRepository
 import org.example.project.data.ProductionRepository
 import org.example.project.data.UserRepository
+import org.example.project.dto.AddInstanceSoftwareRequest
 import org.example.project.dto.ApiError
 import org.example.project.dto.BomRevisionStatus
 import org.example.project.dto.CancelProductionOrderRequest
@@ -23,6 +24,8 @@ import org.example.project.dto.ProductionOrderStatus
 import org.example.project.dto.ProductionStageActionRequest
 import org.example.project.dto.ProductionStageStatus
 import org.example.project.dto.ProductionStageType
+import org.example.project.dto.RecordInstanceRemarkRequest
+import org.example.project.dto.RecordInstanceTestRequest
 import org.example.project.dto.UserDto
 import org.example.project.dto.hasPermission
 
@@ -136,6 +139,9 @@ class ProductionViewModel(
         _uiState.value = _uiState.value.copy(
             selectedOrder = order,
             instances = emptyList(),
+            materials = emptyList(),
+            engineeringChanges = emptyList(),
+            nonconformities = emptyList(),
             operationError = null,
             successMessage = null
         )
@@ -152,8 +158,26 @@ class ProductionViewModel(
                 is ApiResult.Success -> {
                     _uiState.value = _uiState.value.copy(selectedOrder = result.data)
                     loadInstances(id)
+                    loadOrderExtras(id)
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+            }
+        }
+    }
+
+    private fun loadOrderExtras(orderId: Long) {
+        viewModelScope.launch {
+            when (val m = productionRepository.listMaterials(orderId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(materials = m.data)
+                is ApiResult.Error -> { }
+            }
+            when (val ec = productionRepository.listEngineeringChanges(orderId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(engineeringChanges = ec.data)
+                is ApiResult.Error -> { }
+            }
+            when (val nc = productionRepository.listNonconformities(objectType = "PRODUCTION", objectId = orderId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(nonconformities = nc.data)
+                is ApiResult.Error -> { }
             }
         }
     }
@@ -176,6 +200,8 @@ class ProductionViewModel(
     fun dismissDialog() {
         _uiState.value = _uiState.value.copy(
             activeDialog = null,
+            selectedInstanceDetail = null,
+            isInstanceDetailLoading = false,
             operationError = null,
             cancelReason = "",
             skipReason = "",
@@ -505,6 +531,272 @@ class ProductionViewModel(
     }
 
     /** Допустимые действия заказа — те же правила, что и в сервисе. */
+    fun openInstanceDetail(instanceId: Long) {
+        _uiState.value = _uiState.value.copy(
+            activeDialog = ProductionDialog.InstanceDetail(instanceId),
+            selectedInstanceDetail = null,
+            isInstanceDetailLoading = true,
+            operationError = null
+        )
+        viewModelScope.launch {
+            when (val res = productionRepository.getInstance(instanceId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    selectedInstanceDetail = res.data,
+                    isInstanceDetailLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    operationError = res.error,
+                    isInstanceDetailLoading = false
+                )
+            }
+        }
+    }
+
+    fun updateInstanceTestResult(value: String) {
+        _uiState.value = _uiState.value.copy(instanceTestResult = value)
+    }
+
+    fun updateInstanceTestDecision(value: String) {
+        _uiState.value = _uiState.value.copy(instanceTestDecision = value)
+    }
+
+    fun updateInstanceTestNotes(value: String) {
+        _uiState.value = _uiState.value.copy(instanceTestNotes = value)
+    }
+
+    fun updateInstanceRemarkDescription(value: String) {
+        _uiState.value = _uiState.value.copy(instanceRemarkDescription = value)
+    }
+
+    fun updateInstanceRemarkSeverity(value: String) {
+        _uiState.value = _uiState.value.copy(instanceRemarkSeverity = value)
+    }
+
+    fun updateInstanceSoftwareName(value: String) {
+        _uiState.value = _uiState.value.copy(instanceSoftwareName = value)
+    }
+
+    fun updateInstanceSoftwareVersion(value: String) {
+        _uiState.value = _uiState.value.copy(instanceSoftwareVersion = value)
+    }
+
+    fun updateInstanceSoftwareBuild(value: String) {
+        _uiState.value = _uiState.value.copy(instanceSoftwareBuild = value)
+    }
+
+    fun submitInstanceTest(instanceId: Long) {
+        val current = _uiState.value
+        if (current.isActionRunning) return
+        _uiState.value = current.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.recordInstanceTest(
+                instanceId,
+                RecordInstanceTestRequest(
+                    result = current.instanceTestResult,
+                    notes = current.instanceTestNotes.trim().takeIf { it.isNotEmpty() },
+                    technicalDecision = current.instanceTestDecision
+                )
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    selectedInstanceDetail = res.data,
+                    isActionRunning = false,
+                    instanceTestNotes = ""
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun submitInstanceRemark(instanceId: Long) {
+        val current = _uiState.value
+        val desc = current.instanceRemarkDescription.trim()
+        if (desc.isEmpty() || current.isActionRunning) return
+        _uiState.value = current.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.recordInstanceRemark(
+                instanceId,
+                RecordInstanceRemarkRequest(
+                    description = desc,
+                    severity = current.instanceRemarkSeverity,
+                    blocksShipment = current.instanceRemarkSeverity == "CRITICAL"
+                )
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    selectedInstanceDetail = res.data,
+                    isActionRunning = false,
+                    instanceRemarkDescription = ""
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun submitInstanceSoftware(instanceId: Long) {
+        val current = _uiState.value
+        val name = current.instanceSoftwareName.trim()
+        val version = current.instanceSoftwareVersion.trim()
+        if (name.isEmpty() || version.isEmpty() || current.isActionRunning) return
+        _uiState.value = current.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.addInstanceSoftware(
+                instanceId,
+                AddInstanceSoftwareRequest(
+                    name = name,
+                    version = version,
+                    build = current.instanceSoftwareBuild.trim().takeIf { it.isNotEmpty() }
+                )
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    selectedInstanceDetail = res.data,
+                    isActionRunning = false,
+                    instanceSoftwareName = "",
+                    instanceSoftwareVersion = "",
+                    instanceSoftwareBuild = ""
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun resolveInstanceRemark(instanceId: Long, remarkId: Long) {
+        val current = _uiState.value
+        if (current.isActionRunning) return
+        _uiState.value = current.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.resolveInstanceRemark(instanceId, remarkId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    selectedInstanceDetail = res.data,
+                    isActionRunning = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun acceptInstance(instanceId: Long) {
+        val current = _uiState.value
+        if (current.isActionRunning) return
+        _uiState.value = current.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.acceptInstance(instanceId)) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedInstanceDetail = res.data,
+                        isActionRunning = false
+                    )
+                    _uiState.value.selectedOrder?.let { loadInstances(it.id) }
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun shipInstance(instanceId: Long) {
+        val current = _uiState.value
+        if (current.isActionRunning) return
+        _uiState.value = current.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.shipInstance(instanceId)) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedInstanceDetail = res.data,
+                        isActionRunning = false
+                    )
+                    _uiState.value.selectedOrder?.let { loadInstances(it.id) }
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun initMaterialsFromBom() {
+        val orderId = _uiState.value.selectedOrder?.id ?: return
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.initMaterialsFromBom(orderId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    materials = res.data,
+                    isActionRunning = false,
+                    successMessage = "Материалы загружены из BOM"
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun createNonconformity(category: String, description: String) {
+        val orderId = _uiState.value.selectedOrder?.id ?: return
+        if (description.isBlank()) return
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.createNonconformity(
+                org.example.project.dto.CreateNonconformityRequest(
+                    category = category.ifBlank { "PRODUCTION" },
+                    objectType = "PRODUCTION",
+                    objectId = orderId,
+                    description = description.trim()
+                )
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    nonconformities = listOf(res.data) + _uiState.value.nonconformities,
+                    activeDialog = null,
+                    isActionRunning = false,
+                    successMessage = "Несоответствие ${res.data.number} зарегистрировано"
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    fun transitionNonconformity(
+        nc: org.example.project.dto.NonconformityDto,
+        target: org.example.project.dto.NonconformityStatus
+    ) {
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = productionRepository.transitionNonconformity(
+                nc.id,
+                org.example.project.dto.TransitionNonconformityRequest(
+                    targetStatus = target,
+                    version = nc.version
+                )
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    nonconformities = _uiState.value.nonconformities.map { if (it.id == res.data.id) res.data else it },
+                    isActionRunning = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
     companion object {
         fun canPlan(status: ProductionOrderStatus) = status == ProductionOrderStatus.DRAFT
         fun canStart(status: ProductionOrderStatus) = status == ProductionOrderStatus.PLANNED

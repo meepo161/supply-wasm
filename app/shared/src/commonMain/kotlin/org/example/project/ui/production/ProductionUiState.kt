@@ -2,9 +2,13 @@ package org.example.project.ui.production
 
 import org.example.project.dto.ApiError
 import org.example.project.dto.BomRevisionSummaryDto
+import org.example.project.dto.EngineeringChangeImpactDto
+import org.example.project.dto.NonconformityDto
+import org.example.project.dto.ProductInstanceDetailDto
 import org.example.project.dto.ProductInstanceDto
 import org.example.project.dto.ProductModelDto
 import org.example.project.dto.ProductionOrderDto
+import org.example.project.dto.ProductionOrderMaterialDto
 import org.example.project.dto.ProductionOrderStatus
 import org.example.project.dto.ProductionStageType
 import org.example.project.dto.ProjectDto
@@ -14,6 +18,19 @@ data class ProductionUiState(
     val orders: List<ProductionOrderDto> = emptyList(),
     val selectedOrder: ProductionOrderDto? = null,
     val instances: List<ProductInstanceDto> = emptyList(),
+    val materials: List<ProductionOrderMaterialDto> = emptyList(),
+    val engineeringChanges: List<EngineeringChangeImpactDto> = emptyList(),
+    val nonconformities: List<NonconformityDto> = emptyList(),
+    val selectedInstanceDetail: ProductInstanceDetailDto? = null,
+    val isInstanceDetailLoading: Boolean = false,
+    val instanceTestResult: String = "GOOD",
+    val instanceTestDecision: String = "PENDING",
+    val instanceTestNotes: String = "",
+    val instanceRemarkDescription: String = "",
+    val instanceRemarkSeverity: String = "MINOR",
+    val instanceSoftwareName: String = "",
+    val instanceSoftwareVersion: String = "",
+    val instanceSoftwareBuild: String = "",
     val projects: List<ProjectDto> = emptyList(),
     val models: List<ProductModelDto> = emptyList(),
     val revisions: List<BomRevisionSummaryDto> = emptyList(),
@@ -43,6 +60,9 @@ sealed class ProductionDialog {
     data object CompleteOrder : ProductionDialog()
     data object HoldOrder : ProductionDialog()
     data class SkipStage(val stageId: Long, val stageName: String) : ProductionDialog()
+    data class InstanceDetail(val instanceId: Long) : ProductionDialog()
+    data object CreateEngineeringChange : ProductionDialog()
+    data object CreateNonconformity : ProductionDialog()
 }
 
 data class CreateProductionOrderForm(

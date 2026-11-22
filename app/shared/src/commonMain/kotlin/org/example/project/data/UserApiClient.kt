@@ -5,8 +5,13 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.get
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
+import org.example.project.dto.UpdateOwnProfileRequest
 import org.example.project.dto.UserDto
 import org.example.project.dto.UserOptionDto
 
@@ -15,6 +20,21 @@ class UserApiClient(private val client: HttpClient) : UserRepository {
     override suspend fun list(): ApiResult<List<UserDto>> = get("/api/users")
 
     override suspend fun listOptions(): ApiResult<List<UserOptionDto>> = get("/api/users/options")
+
+    override suspend fun updateOwnProfile(request: UpdateOwnProfileRequest): ApiResult<UserDto> =
+        try {
+            val response = client.put("/api/users/me") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+            parseResponse(response.status.value, response.body())
+        } catch (e: HttpRequestTimeoutException) {
+            ApiResult.Error(networkError(e.message ?: "Request timeout"))
+        } catch (e: ClientRequestException) {
+            ApiResult.Error(networkError(e.message))
+        } catch (e: Exception) {
+            ApiResult.Error(networkError(e.message ?: "Unexpected error"))
+        }
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         try {

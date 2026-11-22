@@ -147,7 +147,7 @@ private open class FakeConversationRepository : org.example.project.data.Convers
     ): kotlinx.coroutines.flow.Flow<org.example.project.data.ConversationRealtimeEvent> {
         observeArguments += Triple(conversationId, after, afterEvent)
         return if (observeFlows.isEmpty()) {
-            kotlinx.coroutines.flow.flow { throw org.example.project.data.ConversationAccessRevokedException() }
+            kotlinx.coroutines.flow.flow { kotlinx.coroutines.awaitCancellation() }
         } else {
             observeFlows.removeAt(0)
         }

@@ -78,6 +78,8 @@ tasks.named("compileKotlin").configure {
 
 tasks.test {
     maxParallelForks = 1
+    forkEvery = 10
+    maxHeapSize = "512m"
     testLogging {
         showStandardStreams = true
         events("passed", "skipped", "failed")

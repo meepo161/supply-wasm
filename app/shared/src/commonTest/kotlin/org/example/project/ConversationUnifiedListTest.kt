@@ -244,7 +244,7 @@ private class RecordingEngine(
             headers = io.ktor.http.headersOf(io.ktor.http.HttpHeaders.ContentType, "application/json"),
             version = io.ktor.http.HttpProtocolVersion.HTTP_1_1,
             body = responseBody(body),
-            callContext = kotlinx.coroutines.currentCoroutineContext()
+            callContext = kotlinx.coroutines.currentCoroutineContext() + kotlinx.coroutines.Job() + dispatcher
         )
     }
 

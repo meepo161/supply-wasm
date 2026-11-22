@@ -12,8 +12,10 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
+import org.example.project.dto.AdminResetPasswordRequest
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
+import org.example.project.dto.AuditLogEntryDto
 import org.example.project.dto.CreateDepartmentRequest
 import org.example.project.dto.CreateRoleRequest
 import org.example.project.dto.CreateUserRequest
@@ -36,6 +38,9 @@ class AdminApiClient(private val client: HttpClient) : AdminRepository {
 
     override suspend fun setUserActive(id: Long, active: Boolean, version: Long): ApiResult<UserDto> =
         put("/api/users/$id/active", SetActiveBody(active, version))
+
+    override suspend fun resetUserPassword(id: Long, request: AdminResetPasswordRequest): ApiResult<UserDto> =
+        post("/api/users/$id/reset-password", request)
 
     override suspend fun listDepartments(): ApiResult<List<DepartmentDto>> = get("/api/departments")
 
@@ -82,6 +87,20 @@ class AdminApiClient(private val client: HttpClient) : AdminRepository {
         } catch (e: Exception) {
             ApiResult.Error(networkError(e.message ?: "Unexpected error"))
         }
+
+    override suspend fun listAuditLogs(
+        entityType: String?,
+        action: String?,
+        limit: Int
+    ): ApiResult<List<AuditLogEntryDto>> = execute {
+        client.get("/api/audit") {
+            url {
+                entityType?.trim()?.takeIf { it.isNotEmpty() }?.let { parameters.append("entityType", it) }
+                action?.trim()?.takeIf { it.isNotEmpty() }?.let { parameters.append("action", it) }
+                parameters.append("limit", limit.toString())
+            }
+        }
+    }
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         execute { client.get(path) }

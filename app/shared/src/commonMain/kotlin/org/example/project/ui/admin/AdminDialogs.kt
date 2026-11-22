@@ -185,6 +185,52 @@ fun EditUserDialog(
 }
 
 @Composable
+fun ResetPasswordDialog(
+    form: ResetPasswordForm,
+    error: ApiError?,
+    onFormChange: (ResetPasswordForm) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Сброс пароля") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Пользователь: ${form.userName}. После сброса все активные сеансы пользователя будут завершены.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                error?.let { ErrorMessageCard(error = it) }
+                OutlinedTextField(
+                    value = form.newPassword,
+                    onValueChange = { onFormChange(form.copy(newPassword = it)) },
+                    label = { Text("Новый пароль * (от 6 символов)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = form.confirmPassword,
+                    onValueChange = { onFormChange(form.copy(confirmPassword = it)) },
+                    label = { Text("Подтверждение пароля *") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) { Text("Сбросить") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Отмена") }
+        }
+    )
+}
+
+@Composable
 fun DepartmentDialog(
     form: DepartmentForm,
     departments: List<DepartmentDto>,

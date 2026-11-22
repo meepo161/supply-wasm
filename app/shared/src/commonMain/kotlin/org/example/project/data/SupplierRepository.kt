@@ -4,12 +4,15 @@ import org.example.project.dto.AddSupplierAddressRequest
 import org.example.project.dto.AddSupplierContactRequest
 import org.example.project.dto.AddSupplierDocumentRequest
 import org.example.project.dto.CreateSupplierCategoryRequest
+import org.example.project.dto.CreateSupplierClaimRequest
 import org.example.project.dto.CreateSupplierOfferRequest
 import org.example.project.dto.CreateSupplierRequest
 import org.example.project.dto.SelectSupplierOfferRequest
 import org.example.project.dto.SetSupplierCategoriesRequest
 import org.example.project.dto.SupplierCardDto
 import org.example.project.dto.SupplierCategoryDto
+import org.example.project.dto.SupplierClaimDto
+import org.example.project.dto.SupplierClaimStatus
 import org.example.project.dto.SupplierDto
 import org.example.project.dto.SupplierOfferComparisonDto
 import org.example.project.dto.SupplierOfferDto
@@ -18,6 +21,7 @@ import org.example.project.dto.SupplierOfferStatus
 import org.example.project.dto.SupplierOfferStatusRequest
 import org.example.project.dto.SupplierVerificationRequest
 import org.example.project.dto.SupplierVerificationStatus
+import org.example.project.dto.TransitionSupplierClaimRequest
 import org.example.project.dto.UpdateSupplierOfferRequest
 import org.example.project.dto.UpdateSupplierRequest
 
@@ -55,4 +59,19 @@ interface SupplierRepository {
     suspend fun clearSelection(id: Long, version: Long): ApiResult<SupplierOfferDto>
     suspend fun offerHistory(id: Long): ApiResult<List<SupplierOfferHistoryDto>>
     suspend fun compareOffers(demandId: Long): ApiResult<SupplierOfferComparisonDto>
+
+    suspend fun listClaims(
+        supplierId: Long? = null,
+        purchaseOrderId: Long? = null,
+        status: SupplierClaimStatus? = null
+    ): ApiResult<List<SupplierClaimDto>> = ApiResult.Success(emptyList())
+
+    suspend fun createClaim(request: CreateSupplierClaimRequest): ApiResult<SupplierClaimDto> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
+
+    suspend fun transitionClaim(
+        id: Long,
+        request: TransitionSupplierClaimRequest
+    ): ApiResult<SupplierClaimDto> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
 }

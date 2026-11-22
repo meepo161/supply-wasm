@@ -204,7 +204,7 @@ class ConversationApiClient(private val client: HttpClient) : ConversationReposi
         messageId: Long,
         request: EditMessageRequest
     ): ApiResult<ConversationMessageDto> = if (conversationId < 0) {
-        mapTaskMessage(execute {
+        mapTaskMessage(execute<ChatMessageDto> {
             client.post("/api/tasks/${-conversationId}/chat/messages/$messageId/edit") {
                 contentType(ContentType.Application.Json)
                 setBody(request)
@@ -224,7 +224,7 @@ class ConversationApiClient(private val client: HttpClient) : ConversationReposi
         messageId: Long,
         version: Long? = null
     ): ApiResult<ConversationMessageDto> = if (conversationId < 0) {
-        mapTaskMessage(execute {
+        mapTaskMessage(execute<ChatMessageDto> {
             client.post("/api/tasks/${-conversationId}/chat/messages/$messageId/revoke") {
                 contentType(ContentType.Application.Json)
                 setBody(RevokeMessageRequest(version))
@@ -239,7 +239,7 @@ class ConversationApiClient(private val client: HttpClient) : ConversationReposi
         messageId: Long,
         request: ForwardMessageRequest
     ): ApiResult<ConversationMessageDto> = if (conversationId < 0) {
-        mapTaskMessage(execute {
+        mapTaskMessage(execute<ChatMessageDto> {
             client.post("/api/tasks/${-conversationId}/chat/messages/$messageId/forward") {
                 contentType(ContentType.Application.Json)
                 setBody(request)

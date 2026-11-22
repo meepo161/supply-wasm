@@ -11,6 +11,9 @@ import org.example.project.service.*
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
+import org.jooq.impl.DataSourceConnectionProvider
+import org.jooq.impl.DefaultConfiguration
+import org.jooq.impl.ThreadLocalTransactionProvider
 import org.koin.dsl.module
 import javax.sql.DataSource
 
@@ -29,7 +32,10 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     }
 
     single<DSLContext> {
-        DSL.using(get<DataSource>(), SQLDialect.POSTGRES)
+        val configuration = DefaultConfiguration()
+            .set(SQLDialect.POSTGRES)
+            .set(ThreadLocalTransactionProvider(DataSourceConnectionProvider(get<DataSource>()), true))
+        DSL.using(configuration)
     }
 
     single { PasswordHasher() }
@@ -101,6 +107,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { SearchService(get(), get()) }
     single { WmsService(get(), get(), get()) }
     single { ReceiptService(get(), get(), get(), get()) }
+    single { ReceiptQcService(get(), get()) }
     single { WmsTransferService(get(), get(), get()) }
     single { WmsIssueService(get(), get(), get()) }
     single { WmsWriteOffRepository(get()) }
@@ -110,8 +117,11 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { WmsInventoryService(get(), get(), get()) }
     single { ProductionRepository(get()) }
     single { ProductionService(get(), get(), get()) }
+    single { ProductionExtrasService(get(), get(), get()) }
     single { SupplierRepository(get()) }
     single { SupplierService(get(), get(), get(), get()) }
+    single { SupplierClaimService(get(), get()) }
+    single { AnalyticsService(get(), get()) }
     single { PurchaseOrderRepository(get()) }
     single { PurchaseOrderService(get(), get(), get(), get()) }
     single { AttachmentService(get(), get(), get(), get(), get(), get(), get()) }
@@ -122,13 +132,23 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { DemandRepository(get()) }
     single { ApprovalRepository(get()) }
     single { DemandApprovalTarget(get(), get(), get()) }
+    single { PurchaseOrderApprovalTarget(get(), get()) }
+    single { DocumentApprovalTarget(get(), get()) }
+    single { ProductionOrderApprovalTarget(get(), get()) }
     single<ApprovalGuard> { ApprovalRouteGuard(get()) }
     single {
         ApprovalService(
             get(),
-            listOf<ApprovalTargetPort>(get<DemandApprovalTarget>(), get<WriteOffApprovalTarget>()),
+            listOf<ApprovalTargetPort>(
+                get<DemandApprovalTarget>(),
+                get<WriteOffApprovalTarget>(),
+                get<PurchaseOrderApprovalTarget>(),
+                get<DocumentApprovalTarget>(),
+                get<ProductionOrderApprovalTarget>()
+            ),
             get(), get(), get(), get()
         )
     }
     single { DemandService(get(), get(), get(), get(), get(), get()) }
+    single { ErpExtrasService(get(), get(), get()) }
 }

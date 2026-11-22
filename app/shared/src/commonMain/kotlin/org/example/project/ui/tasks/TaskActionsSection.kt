@@ -2,18 +2,30 @@ package org.example.project.ui.tasks
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
 import org.example.project.dto.TaskWorkType
@@ -226,6 +238,133 @@ fun TaskActionsSection(
                 ) {
                     Text("Отменить задачу")
                 }
+            }
+
+            // PRJ-12: Зависимости задачи
+            val extrasRepo: org.example.project.data.ErpExtrasRepository = koinInject()
+            val depScope = rememberCoroutineScope()
+            var deps by remember(task.id) {
+                mutableStateOf<List<org.example.project.dto.TaskDependencyDto>>(emptyList())
+            }
+            var predIdInput by remember(task.id) { mutableStateOf("") }
+            var depError by remember(task.id) { mutableStateOf<String?>(null) }
+            LaunchedEffect(task.id) {
+                val res = extrasRepo.listTaskDependencies(task.id)
+                if (res is org.example.project.data.ApiResult.Success) deps = res.data
+            }
+            HorizontalDivider()
+            Text("Зависимости задачи (${deps.size})", style = MaterialTheme.typography.titleSmall)
+            depError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            deps.forEach { d ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "#${d.predecessorTaskId} ${d.predecessorTitle} → #${d.successorTaskId} ${d.successorTitle}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        depScope.launch {
+                            val del = extrasRepo.deleteTaskDependency(d.id)
+                            if (del is org.example.project.data.ApiResult.Success) {
+                                deps = deps.filterNot { it.id == d.id }
+                            }
+                        }
+                    }) { Text("Удалить") }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = predIdInput,
+                    onValueChange = { predIdInput = it },
+                    label = { Text("ID задачи-предшественника") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = {
+                    val predId = predIdInput.trim().toLongOrNull()
+                    if (predId != null) {
+                        depScope.launch {
+                            when (val res = extrasRepo.addTaskDependency(
+                                org.example.project.dto.CreateTaskDependencyRequest(
+                                    predecessorTaskId = predId,
+                                    successorTaskId = task.id
+                                )
+                            )) {
+                                is org.example.project.data.ApiResult.Success -> {
+                                    deps = deps + res.data
+                                    predIdInput = ""
+                                    depError = null
+                                }
+                                is org.example.project.data.ApiResult.Error -> depError = res.error.message
+                            }
+                        }
+                    }
+                }) { Text("Связать") }
+            }
+
+            // TASK-33: Связи задачи с объектами ERP
+            var objLinks by remember(task.id) {
+                mutableStateOf<List<org.example.project.dto.TaskObjectLinkDto>>(emptyList())
+            }
+            var linkObjType by remember(task.id) { mutableStateOf("DEMAND") }
+            var linkObjIdInput by remember(task.id) { mutableStateOf("") }
+            LaunchedEffect(task.id) {
+                val lRes = extrasRepo.listTaskObjectLinks(task.id)
+                if (lRes is org.example.project.data.ApiResult.Success) objLinks = lRes.data
+            }
+            HorizontalDivider()
+            Text("Связи с объектами ERP (${objLinks.size})", style = MaterialTheme.typography.titleSmall)
+            objLinks.forEach { link ->
+                Text(
+                    "${link.objectType} #${link.objectId}${link.note?.let { " — $it" } ?: ""}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = linkObjType,
+                    onValueChange = { linkObjType = it },
+                    label = { Text("Тип (DEMAND/DOCUMENT/...)") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = linkObjIdInput,
+                    onValueChange = { linkObjIdInput = it },
+                    label = { Text("ID объекта") },
+                    singleLine = true,
+                    modifier = Modifier.weight(0.8f)
+                )
+                Button(onClick = {
+                    val objId = linkObjIdInput.trim().toLongOrNull()
+                    if (objId != null && linkObjType.isNotBlank()) {
+                        depScope.launch {
+                            val res = extrasRepo.addTaskObjectLink(
+                                task.id,
+                                org.example.project.dto.CreateTaskObjectLinkRequest(
+                                    objectType = linkObjType.trim().uppercase(),
+                                    objectId = objId
+                                )
+                            )
+                            if (res is org.example.project.data.ApiResult.Success) {
+                                objLinks = listOf(res.data) + objLinks
+                                linkObjIdInput = ""
+                            }
+                        }
+                    }
+                }) { Text("Привязать") }
             }
         }
     }

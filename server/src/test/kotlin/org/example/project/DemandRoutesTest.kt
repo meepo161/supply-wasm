@@ -524,7 +524,7 @@ class DemandRoutesTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }
@@ -560,7 +560,7 @@ class DemandRoutesTest {
     }
 
     companion object {
-        private const val TEST_URL = "jdbc:postgresql://localhost:5433/erp_test"
+        private val TEST_URL = TestDatabase.TEST_URL
         private const val USER = "erp"
         private const val PASSWORD = "erp"
 

@@ -64,6 +64,7 @@ class SupplierViewModel(
     fun selectTab(tab: SupplierTab) {
         update { it.copy(selectedTab = tab, operationError = null) }
         if (tab == SupplierTab.OFFERS && _uiState.value.offers.isEmpty()) loadOffers()
+        if (tab == SupplierTab.CLAIMS && _uiState.value.claims.isEmpty()) loadClaims()
     }
 
     // --- Загрузка ---
@@ -747,6 +748,79 @@ class SupplierViewModel(
     /** Ключ идемпотентности на попытку команды: повтор защищён сервером. */
     private fun newKey(prefix: String): String =
         "$prefix-${currentUser.id}-${kotlin.random.Random.nextLong().toString(16)}"
+
+    // --- Рекламации ---
+
+    fun loadClaims() {
+        update { it.copy(isClaimsLoading = true, operationError = null) }
+        viewModelScope.launch {
+            when (val result = supplierRepository.listClaims()) {
+                is ApiResult.Success -> update { it.copy(claims = result.data, isClaimsLoading = false) }
+                is ApiResult.Error -> update { it.copy(isClaimsLoading = false, operationError = result.error) }
+            }
+        }
+    }
+
+    fun updateClaimForm(form: CreateClaimForm) = update { it.copy(claimForm = form) }
+
+    fun createClaim() {
+        val form = _uiState.value.claimForm
+        val supplierId = form.supplierId ?: _uiState.value.suppliers.firstOrNull()?.id
+            ?: return fail("Выберите поставщика")
+        if (form.description.isBlank()) return fail("Укажите описание рекламации")
+        update { it.copy(isActionRunning = true, operationError = null) }
+        viewModelScope.launch {
+            when (val result = supplierRepository.createClaim(
+                org.example.project.dto.CreateSupplierClaimRequest(
+                    supplierId = supplierId,
+                    claimType = form.claimType,
+                    description = form.description.trim(),
+                    claimAmount = form.claimAmount.trim().ifEmpty { "0" }
+                )
+            )) {
+                is ApiResult.Success -> {
+                    update {
+                        it.copy(
+                            isActionRunning = false,
+                            activeDialog = null,
+                            claimForm = CreateClaimForm(),
+                            claims = listOf(result.data) + it.claims,
+                            successMessage = "Рекламация ${result.data.number} создана"
+                        )
+                    }
+                }
+                is ApiResult.Error -> failWith(result.error)
+            }
+        }
+    }
+
+    fun transitionClaim(
+        claim: org.example.project.dto.SupplierClaimDto,
+        targetStatus: org.example.project.dto.SupplierClaimStatus
+    ) {
+        update { it.copy(isActionRunning = true, operationError = null) }
+        viewModelScope.launch {
+            when (val result = supplierRepository.transitionClaim(
+                claim.id,
+                org.example.project.dto.TransitionSupplierClaimRequest(
+                    targetStatus = targetStatus,
+                    resolution = if (targetStatus == org.example.project.dto.SupplierClaimStatus.RESOLVED) "Урегулировано" else null,
+                    version = claim.version
+                )
+            )) {
+                is ApiResult.Success -> {
+                    update {
+                        it.copy(
+                            isActionRunning = false,
+                            claims = it.claims.map { c -> if (c.id == result.data.id) result.data else c },
+                            successMessage = "Статус рекламации ${result.data.number}: ${result.data.status.name}"
+                        )
+                    }
+                }
+                is ApiResult.Error -> failWith(result.error)
+            }
+        }
+    }
 }
 
 private fun String.isIsoDate(): Boolean =

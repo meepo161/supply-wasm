@@ -60,6 +60,59 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             call.respond(HttpStatusCode.OK, ApiResponse.success(nomenclature))
         }
 
+        put("/nomenclature/{id}/thresholds") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            val request = call.receive<UpdateNomenclatureThresholdsRequest>()
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.updateNomenclatureThresholds(id, request, call.currentUser())))
+        }
+
+        get("/nomenclature/by-barcode/{code}") {
+            val code = call.parameters["code"] ?: throw ValidationException("Barcode is required")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.findByBarcode(code, call.currentUser())))
+        }
+
+        post("/nomenclature/{id}/barcodes") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            val request = call.receive<CreateNomenclatureBarcodeRequest>()
+            call.respond(HttpStatusCode.Created, ApiResponse.success(wmsService.addBarcode(id, request, call.currentUser())))
+        }
+
+        delete("/nomenclature/{id}/barcodes/{barcodeId}") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            val barcodeId = call.parameters["barcodeId"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid barcode id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.deleteBarcode(id, barcodeId, call.currentUser())))
+        }
+
+        get("/nomenclature/{id}/unit-conversions") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listUnitConversions(id, call.currentUser())))
+        }
+
+        post("/nomenclature/{id}/unit-conversions") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            val request = call.receive<CreateUnitConversionRequest>()
+            call.respond(HttpStatusCode.Created, ApiResponse.success(wmsService.createUnitConversion(id, request, call.currentUser())))
+        }
+
+        get("/nomenclature/{id}/analogs") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listAnalogs(id, call.currentUser())))
+        }
+
+        post("/nomenclature/{id}/analogs") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            val request = call.receive<CreateNomenclatureAnalogRequest>()
+            call.respond(HttpStatusCode.Created, ApiResponse.success(wmsService.createAnalog(id, request, call.currentUser())))
+        }
+
         get("/stock") {
             val warehouseId = call.request.queryParameters["warehouseId"]?.let {
                 it.toLongOrNull() ?: throw ValidationException("Invalid warehouseId")
@@ -68,6 +121,28 @@ fun Route.wmsRoutes(wmsService: WmsService) {
                 it.toLongOrNull() ?: throw ValidationException("Invalid nomenclatureId")
             }
             call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getStock(warehouseId, nomenclatureId, call.currentUser())))
+        }
+
+        get("/movements") {
+            val warehouseId = call.request.queryParameters["warehouseId"]?.toLongOrNull()
+            val nomenclatureId = call.request.queryParameters["nomenclatureId"]?.toLongOrNull()
+            val type = call.request.queryParameters["type"]
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listMovements(warehouseId, nomenclatureId, type, limit, call.currentUser())))
+        }
+
+        get("/reports/low-stock") {
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listLowStock(call.currentUser())))
+        }
+
+        get("/lots") {
+            val nomenclatureId = call.request.queryParameters["nomenclatureId"]?.toLongOrNull()
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listLots(nomenclatureId, call.currentUser())))
+        }
+
+        get("/serials") {
+            val nomenclatureId = call.request.queryParameters["nomenclatureId"]?.toLongOrNull()
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listSerials(nomenclatureId, call.currentUser())))
         }
 
         // Приёмки обрабатываются в receiptRoutes: там же находятся основания,

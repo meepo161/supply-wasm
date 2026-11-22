@@ -8,7 +8,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.project.data.ApiResult
 import org.example.project.data.AuthRepository
+import org.example.project.dto.ApiError
 import org.example.project.dto.BootstrapRequest
+import org.example.project.dto.ChangePasswordRequest
 import org.example.project.dto.LoginRequest
 
 class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
@@ -90,6 +92,55 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
     }
 
     fun dismissError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        _uiState.value = _uiState.value.copy(error = null, passwordChangeError = null, passwordChangeSuccess = false)
+    }
+
+    fun changePassword(currentPassword: String, newPassword: String, confirmPassword: String) {
+        when {
+            currentPassword.isBlank() -> {
+                _uiState.value = _uiState.value.copy(
+                    passwordChangeError = ApiError("VALIDATION_ERROR", "Введите текущий пароль")
+                )
+                return
+            }
+            newPassword.length < 6 -> {
+                _uiState.value = _uiState.value.copy(
+                    passwordChangeError = ApiError("VALIDATION_ERROR", "Новый пароль должен быть не короче 6 символов")
+                )
+                return
+            }
+            newPassword != confirmPassword -> {
+                _uiState.value = _uiState.value.copy(
+                    passwordChangeError = ApiError("VALIDATION_ERROR", "Новый пароль и подтверждение не совпадают")
+                )
+                return
+            }
+        }
+        _uiState.value = _uiState.value.copy(
+            passwordChangeLoading = true,
+            passwordChangeError = null,
+            passwordChangeSuccess = false
+        )
+        viewModelScope.launch {
+            when (val result = repository.changePassword(ChangePasswordRequest(currentPassword, newPassword))) {
+                is ApiResult.Success -> _uiState.value = AuthUiState(
+                    currentUser = null,
+                    permissions = emptySet(),
+                    isLoading = false,
+                    passwordChangeSuccess = true
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    passwordChangeLoading = false,
+                    passwordChangeError = result.error
+                )
+            }
+        }
+    }
+
+    fun clearPasswordChangeState() {
+        _uiState.value = _uiState.value.copy(
+            passwordChangeError = null,
+            passwordChangeSuccess = false
+        )
     }
 }

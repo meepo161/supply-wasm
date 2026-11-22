@@ -41,5 +41,18 @@ data class UpdateUserRequest(
     val version: Long
 )
 
+@Serializable
+data class UpdateOwnProfileRequest(
+    val fullName: String,
+    val email: String? = null,
+    val version: Long
+)
+
+@Serializable
+data class AdminResetPasswordRequest(
+    val newPassword: String,
+    val version: Long
+)
+
 fun UserDto.hasPermission(resource: String, action: String): Boolean =
     permissions.any { it == "*:*" || it == "$resource:*" || it == "$resource:$action" }

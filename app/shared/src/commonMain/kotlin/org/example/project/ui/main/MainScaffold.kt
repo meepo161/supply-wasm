@@ -63,6 +63,7 @@ import org.example.project.data.SearchRepository
 import org.example.project.data.TaskRepository
 import org.example.project.data.UserRepository
 import org.example.project.data.WmsRepository
+import org.example.project.dto.ApiError
 import org.example.project.dto.UserDto
 import org.example.project.ui.admin.AdminScreen
 import org.example.project.ui.admin.AdminViewModel
@@ -105,6 +106,10 @@ import org.koin.compose.koinInject
 fun MainScaffold(
     user: UserDto,
     onLogout: () -> Unit,
+    passwordChangeLoading: Boolean = false,
+    passwordChangeError: ApiError? = null,
+    onChangePassword: (String, String, String) -> Unit = { _, _, _ -> },
+    onClearPasswordError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selected by remember { mutableStateOf(NavigationDestination.HOME) }
@@ -260,6 +265,25 @@ fun MainScaffold(
         projectViewModel.selectDetailTab(ProjectTab.DISCUSSION)
         selected = NavigationDestination.PROJECTS
     }
+    val onOpenDocument: (Long) -> Unit = { _ ->
+        selected = NavigationDestination.DOCUMENTS
+    }
+    val onOpenNomenclature: (Long) -> Unit = { _ ->
+        if (NavigationDestination.WMS in destinations) {
+            selected = NavigationDestination.WMS
+        } else if (NavigationDestination.BOM in destinations) {
+            selected = NavigationDestination.BOM
+        }
+    }
+    var sidebarCollapsed by remember { mutableStateOf(false) }
+    var favoriteDestinations by remember { mutableStateOf(setOf(NavigationDestination.TASKS, NavigationDestination.PROJECTS)) }
+    val onToggleFavorite: (NavigationDestination) -> Unit = { dest ->
+        favoriteDestinations = if (dest in favoriteDestinations) {
+            favoriteDestinations - dest
+        } else {
+            favoriteDestinations + dest
+        }
+    }
     val onOpenNotifications: () -> Unit = {
         selected = NavigationDestination.NOTIFICATIONS
     }
@@ -286,7 +310,11 @@ fun MainScaffold(
                     searchViewModel = searchViewModel,
                     showSearch = !isCompact,
                     onOpenTask = onOpenTask,
-                    onOpenProject = onOpenProject
+                    onOpenProject = onOpenProject,
+                    onOpenDocument = onOpenDocument,
+                    onOpenNomenclature = onOpenNomenclature,
+                    isFavorite = selected in favoriteDestinations,
+                    onToggleFavorite = { onToggleFavorite(selected) }
                 )
             },
             bottomBar = {
@@ -326,7 +354,10 @@ fun MainScaffold(
                         selected = selected,
                         onSelect = { selected = it },
                         user = user,
-                        onLogout = onLogout
+                        onLogout = onLogout,
+                        collapsed = sidebarCollapsed,
+                        onToggleCollapse = { sidebarCollapsed = !sidebarCollapsed },
+                        favorites = favoriteDestinations.filter { it in destinations }
                     )
                 }
                 Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -334,6 +365,10 @@ fun MainScaffold(
                         destination = selected,
                         user = user,
                         onLogout = onLogout,
+                        passwordChangeLoading = passwordChangeLoading,
+                        passwordChangeError = passwordChangeError,
+                        onChangePassword = onChangePassword,
+                        onClearPasswordError = onClearPasswordError,
                         homeViewModel = homeViewModel,
                         projectViewModel = projectViewModel,
                         taskViewModel = taskViewModel,
@@ -375,12 +410,17 @@ private fun TopBar(
     searchViewModel: SearchViewModel,
     showSearch: Boolean,
     onOpenTask: (Long) -> Unit,
-    onOpenProject: (Long) -> Unit
+    onOpenProject: (Long) -> Unit,
+    onOpenDocument: (Long) -> Unit,
+    onOpenNomenclature: (Long) -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit
 ) {
     val palette = LocalBrandPalette.current
     val theme = LocalThemeController.current
     var menuExpanded by remember { mutableStateOf(false) }
     var userMenuExpanded by remember { mutableStateOf(false) }
+    var quickActionsExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -434,6 +474,16 @@ private fun TopBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (isFavorite) "★" else "☆",
+                style = MaterialTheme.typography.titleMedium,
+                color = if (isFavorite) Brand.Amber else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onToggleFavorite)
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            )
         }
 
         if (showSearch) {
@@ -441,12 +491,71 @@ private fun TopBar(
                 viewModel = searchViewModel,
                 onOpenTask = onOpenTask,
                 onOpenProject = onOpenProject,
+                onOpenDocument = onOpenDocument,
+                onOpenNomenclature = onOpenNomenclature,
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
             Spacer(Modifier.width(6.dp))
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                RoundIconButton(
+                    glyph = ErpIconGlyph.Plus,
+                    onClick = { quickActionsExpanded = true }
+                )
+                DropdownMenu(
+                    expanded = quickActionsExpanded,
+                    onDismissRequest = { quickActionsExpanded = false }
+                ) {
+                    if (NavigationDestination.TASKS in destinations) {
+                        DropdownMenuItem(
+                            text = { Text("Перейти к задачам") },
+                            onClick = {
+                                quickActionsExpanded = false
+                                onSelect(NavigationDestination.TASKS)
+                            }
+                        )
+                    }
+                    if (NavigationDestination.PROJECTS in destinations) {
+                        DropdownMenuItem(
+                            text = { Text("Перейти к проектам") },
+                            onClick = {
+                                quickActionsExpanded = false
+                                onSelect(NavigationDestination.PROJECTS)
+                            }
+                        )
+                    }
+                    if (NavigationDestination.DEMANDS in destinations) {
+                        DropdownMenuItem(
+                            text = { Text("Создать потребность (Снабжение)") },
+                            onClick = {
+                                quickActionsExpanded = false
+                                onSelect(NavigationDestination.DEMANDS)
+                            }
+                        )
+                    }
+                    if (NavigationDestination.DOCUMENTS in destinations) {
+                        DropdownMenuItem(
+                            text = { Text("Документы") },
+                            onClick = {
+                                quickActionsExpanded = false
+                                onSelect(NavigationDestination.DOCUMENTS)
+                            }
+                        )
+                    }
+                    if (NavigationDestination.WMS in destinations) {
+                        DropdownMenuItem(
+                            text = { Text("Склад (WMS)") },
+                            onClick = {
+                                quickActionsExpanded = false
+                                onSelect(NavigationDestination.WMS)
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(8.dp))
             RoundIconButton(
                 glyph = ErpIconGlyph.Bell,
                 onClick = onOpenNotifications
@@ -551,12 +660,15 @@ private fun Sidebar(
     selected: NavigationDestination,
     onSelect: (NavigationDestination) -> Unit,
     user: UserDto,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    collapsed: Boolean,
+    onToggleCollapse: () -> Unit,
+    favorites: List<NavigationDestination>
 ) {
     val palette = LocalBrandPalette.current
     Column(
         modifier = Modifier
-            .width(268.dp)
+            .width(if (collapsed) 92.dp else 268.dp)
             .fillMaxHeight()
             .padding(start = 16.dp, top = 0.dp, bottom = 16.dp)
             .clip(RoundedCornerShape(26.dp))
@@ -567,35 +679,54 @@ private fun Sidebar(
                 RoundedCornerShape(26.dp)
             )
     ) {
-        // Логотип
+        // Логотип и кнопка сворачивания
         Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = if (collapsed) 14.dp else 20.dp, vertical = 22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.SpaceBetween
         ) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Brush.linearGradient(listOf(Brand.BlueBright, Brand.Violet))),
-                contentAlignment = Alignment.Center
-            ) {
-                ErpIcon(
-                    glyph = ErpIconGlyph.Sparkle,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Brush.linearGradient(listOf(Brand.BlueBright, Brand.Violet)))
+                        .clickable(onClick = onToggleCollapse),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ErpIcon(
+                        glyph = ErpIconGlyph.Sparkle,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (!collapsed) {
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Авиаагрегат",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "ERP · WMS · MES",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.55f)
+                        )
+                    }
+                }
             }
-            Spacer(Modifier.width(12.dp))
-            Column {
+            if (!collapsed) {
                 Text(
-                    text = "Авиаагрегат",
+                    text = "‹",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
-                )
-                Text(
-                    text = "ERP · WMS · MES",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.55f)
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onToggleCollapse)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }
         }
@@ -606,20 +737,45 @@ private fun Sidebar(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp)
         ) {
+            if (favorites.isNotEmpty()) {
+                if (!collapsed) {
+                    Text(
+                        text = "ИЗБРАННОЕ",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Brand.Amber.copy(alpha = 0.85f),
+                        modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 8.dp)
+                    )
+                }
+                favorites.forEach { dest ->
+                    SidebarItem(
+                        destination = dest,
+                        selected = dest == selected,
+                        collapsed = collapsed,
+                        onClick = { onSelect(dest) }
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+            }
             NavGroup.entries.forEach { group ->
                 val items = destinations.filter { it.group == group }
                 if (items.isNotEmpty()) {
-                    Text(
-                        text = group.label.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.38f),
-                        modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 8.dp)
-                    )
+                    if (!collapsed) {
+                        Text(
+                            text = group.label.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.38f),
+                            modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 8.dp)
+                        )
+                    } else {
+                        Spacer(Modifier.height(8.dp))
+                    }
                     items.forEach { dest ->
                         SidebarItem(
                             destination = dest,
                             selected = dest == selected,
+                            collapsed = collapsed,
                             onClick = { onSelect(dest) }
                         )
                         Spacer(Modifier.height(4.dp))
@@ -688,6 +844,7 @@ private fun Sidebar(
 private fun SidebarItem(
     destination: NavigationDestination,
     selected: Boolean,
+    collapsed: Boolean = false,
     onClick: () -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -746,15 +903,17 @@ private fun SidebarItem(
                 modifier = Modifier.size(16.dp)
             )
         }
-        Spacer(Modifier.width(11.dp))
-        Text(
-            text = destination.label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Color.White else Color.White.copy(alpha = 0.78f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        if (!collapsed) {
+            Spacer(Modifier.width(11.dp))
+            Text(
+                text = destination.label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) Color.White else Color.White.copy(alpha = 0.78f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -889,6 +1048,10 @@ private fun MainContent(
     destination: NavigationDestination,
     user: UserDto,
     onLogout: () -> Unit,
+    passwordChangeLoading: Boolean,
+    passwordChangeError: ApiError?,
+    onChangePassword: (String, String, String) -> Unit,
+    onClearPasswordError: () -> Unit,
     homeViewModel: HomeViewModel,
     projectViewModel: ProjectViewModel,
     taskViewModel: TaskViewModel,
@@ -938,6 +1101,8 @@ private fun MainContent(
             onOpenTask = onOpenTask
         )
 
+        NavigationDestination.ANALYTICS -> org.example.project.ui.analytics.AnalyticsScreen()
+
         NavigationDestination.WMS -> wmsViewModel?.let {
             WmsScreen(viewModel = it)
         }
@@ -978,7 +1143,11 @@ private fun MainContent(
 
         NavigationDestination.PROFILE -> ProfileScreen(
             user = user,
-            onLogout = onLogout
+            onLogout = onLogout,
+            passwordChangeLoading = passwordChangeLoading,
+            passwordChangeError = passwordChangeError,
+            onChangePassword = onChangePassword,
+            onClearPasswordError = onClearPasswordError
         )
     }
 }

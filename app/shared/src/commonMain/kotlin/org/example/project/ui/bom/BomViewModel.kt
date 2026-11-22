@@ -643,4 +643,74 @@ class BomViewModel(
     fun updateExplodeForm(form: ExplodeForm) {
         _uiState.value = _uiState.value.copy(explodeForm = form)
     }
+
+    fun openDiffDialog() {
+        val current = _uiState.value.selectedRevision ?: return
+        val other = _uiState.value.revisions.firstOrNull { it.id != current.id }
+        _uiState.value = _uiState.value.copy(
+            activeDialog = BomDialog.Diff,
+            diffTargetRevisionId = other?.id,
+            revisionDiff = null,
+            operationError = null
+        )
+        if (other != null) {
+            loadDiff(other.id)
+        }
+    }
+
+    fun loadDiff(otherRevisionId: Long) {
+        val current = _uiState.value.selectedRevision ?: return
+        _uiState.value = _uiState.value.copy(
+            diffTargetRevisionId = otherRevisionId,
+            isLoading = true,
+            operationError = null
+        )
+        viewModelScope.launch {
+            when (val result = bomRepository.diffRevisions(current.id, otherRevisionId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    revisionDiff = result.data,
+                    isLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun openWhereUsedDialog(nomenclatureId: Long? = null) {
+        val initialId = nomenclatureId
+            ?: _uiState.value.revisionLines.firstOrNull()?.childNomenclatureId
+            ?: _uiState.value.nomenclature.firstOrNull()?.id
+        _uiState.value = _uiState.value.copy(
+            activeDialog = BomDialog.WhereUsed,
+            whereUsedNomenclatureId = initialId,
+            whereUsedItems = emptyList(),
+            operationError = null
+        )
+        if (initialId != null) {
+            loadWhereUsed(initialId)
+        }
+    }
+
+    fun loadWhereUsed(nomenclatureId: Long) {
+        _uiState.value = _uiState.value.copy(
+            whereUsedNomenclatureId = nomenclatureId,
+            isLoading = true,
+            operationError = null
+        )
+        viewModelScope.launch {
+            when (val result = bomRepository.whereUsed(nomenclatureId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    whereUsedItems = result.data,
+                    isLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
 }

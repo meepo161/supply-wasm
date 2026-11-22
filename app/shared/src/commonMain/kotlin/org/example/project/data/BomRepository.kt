@@ -4,8 +4,10 @@ import org.example.project.dto.ApproveBomRevisionRequest
 import org.example.project.dto.BomExplodeReportDto
 import org.example.project.dto.BomExplodeRequest
 import org.example.project.dto.BomLineDto
+import org.example.project.dto.BomRevisionDiffDto
 import org.example.project.dto.BomRevisionDto
 import org.example.project.dto.BomRevisionSummaryDto
+import org.example.project.dto.BomWhereUsedItemDto
 import org.example.project.dto.CopyBomRevisionRequest
 import org.example.project.dto.CreateBomLineRequest
 import org.example.project.dto.CreateBomRevisionRequest
@@ -36,4 +38,8 @@ interface BomRepository {
     suspend fun deleteLine(revisionId: Long, lineId: Long): ApiResult<Unit>
 
     suspend fun explodeRevision(id: Long, request: BomExplodeRequest): ApiResult<BomExplodeReportDto>
+    suspend fun diffRevisions(id: Long, otherId: Long): ApiResult<BomRevisionDiffDto> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
+    suspend fun whereUsed(nomenclatureId: Long): ApiResult<List<BomWhereUsedItemDto>> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
 }

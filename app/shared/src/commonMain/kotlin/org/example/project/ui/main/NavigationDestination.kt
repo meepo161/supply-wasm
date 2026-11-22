@@ -43,6 +43,8 @@ enum class NavigationDestination(
         group = NavGroup.SUPPLY, gradient = Gradients.Sunset, description = "Заявки и закупки"),
     DOCUMENTS("Документы", glyph = ErpIconGlyph.Documents, group = NavGroup.SUPPLY,
         gradient = Gradients.AmberGlow, description = "Файлы и версии"),
+    ANALYTICS("Аналитика и календарь", glyph = ErpIconGlyph.TrendUp, group = NavGroup.SUPPLY,
+        gradient = Gradients.Ocean, description = "Показатели, календарь и экспорт"),
     NOTIFICATIONS("Уведомления", glyph = ErpIconGlyph.Bell, group = NavGroup.SYSTEM,
         gradient = Gradients.Sunset, description = "Центр событий"),
     ADMIN(

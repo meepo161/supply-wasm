@@ -31,6 +31,12 @@ fun Route.userRoutes(userService: UserService) {
             call.respond(HttpStatusCode.OK, ApiResponse.success(userService.listOptions()))
         }
 
+        put("/me") {
+            val request = call.receive<UpdateOwnProfileRequest>()
+            val user = userService.updateOwnProfile(request, call.currentUser())
+            call.respond(HttpStatusCode.OK, ApiResponse.success(user))
+        }
+
         get("/{id}") {
             val id = call.parameters["id"]?.toLongOrNull() ?: throw org.example.project.exception.ValidationException("Invalid user id")
             val user = userService.get(id, call.currentUser())
@@ -50,6 +56,14 @@ fun Route.userRoutes(userService: UserService) {
             val id = call.parameters["id"]?.toLongOrNull() ?: throw org.example.project.exception.ValidationException("Invalid user id")
             val request = call.receive<SetActiveRequest>()
             val user = userService.setActive(id, request.active, request.version, call.currentUser())
+            call.respond(HttpStatusCode.OK, ApiResponse.success(user))
+        }
+
+        post("/{id}/reset-password") {
+            call.requirePermission("users", "reset_password")
+            val id = call.parameters["id"]?.toLongOrNull() ?: throw org.example.project.exception.ValidationException("Invalid user id")
+            val request = call.receive<AdminResetPasswordRequest>()
+            val user = userService.resetPassword(id, request, call.currentUser())
             call.respond(HttpStatusCode.OK, ApiResponse.success(user))
         }
     }
