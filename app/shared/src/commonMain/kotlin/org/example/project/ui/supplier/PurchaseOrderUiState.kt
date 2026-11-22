@@ -37,7 +37,8 @@ data class PurchaseOrderUiState(
 
 enum class PurchaseOrderTab(val title: String) {
     ORDERS("Заказы"),
-    DELIVERIES("Поставки")
+    DELIVERIES("Поставки"),
+    INVOICES("Счета")
 }
 
 sealed class PurchaseOrderDialog {

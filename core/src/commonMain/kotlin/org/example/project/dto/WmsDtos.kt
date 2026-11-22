@@ -482,7 +482,10 @@ data class ReceiptDto(
     /** Связи, добавленные после проведения: заказ или накладная, пришедшие позже. */
     val links: List<ReceiptLinkDto> = emptyList(),
     /** Есть ли по документу расхождения «ожидалось / принято». */
-    val hasDiscrepancies: Boolean = false
+    val hasDiscrepancies: Boolean = false,
+    /** Счёт поставщика, по которому снабжение оформило поступление (D-61). */
+    val supplierInvoiceId: Long? = null,
+    val supplierInvoiceNumber: String? = null
 )
 
 @Serializable

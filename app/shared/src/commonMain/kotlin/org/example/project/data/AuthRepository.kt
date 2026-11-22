@@ -12,5 +12,7 @@ interface AuthRepository {
     suspend fun logout(): ApiResult<Unit>
     suspend fun me(): ApiResult<MeResponse>
     suspend fun bootstrap(request: BootstrapRequest): ApiResult<LoginResponse>
+    suspend fun bootstrapStatus(): ApiResult<org.example.project.dto.BootstrapStatusDto> =
+        ApiResult.Success(org.example.project.dto.BootstrapStatusDto(required = false))
     suspend fun changePassword(request: ChangePasswordRequest): ApiResult<UserDto>
 }

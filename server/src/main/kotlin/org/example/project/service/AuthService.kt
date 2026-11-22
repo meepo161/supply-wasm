@@ -17,6 +17,8 @@ class AuthService(
     private val loginThrottleService: LoginThrottleService
 ) {
 
+    fun bootstrapRequired(): Boolean = userRepository.count() == 0
+
     fun bootstrap(request: BootstrapRequest): LoginResponse {
         if (request.login.isBlank()) throw ValidationException("Login is required")
         if (request.fullName.isBlank()) throw ValidationException("Full name is required")

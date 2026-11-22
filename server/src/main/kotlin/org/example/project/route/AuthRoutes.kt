@@ -27,6 +27,12 @@ private fun AppConfig.sessionCookie(value: String, maxAge: Int): Cookie = Cookie
 
 fun Route.authRoutes(authService: AuthService, sessionService: SessionService, config: AppConfig) {
     route("/api/admin") {
+        // Публичный: экран входа показывает «Создать первого администратора»
+        // только для пустой базы (аудит UX-07). Раскрывает лишь факт наличия пользователей.
+        get("/bootstrap-status") {
+            call.respond(HttpStatusCode.OK, ApiResponse.success(BootstrapStatusDto(authService.bootstrapRequired())))
+        }
+
         post("/bootstrap") {
             val request = call.receive<BootstrapRequest>()
             val response = authService.bootstrap(request)

@@ -70,11 +70,10 @@ fun CreateDocumentDialog(
                     onSelect = { onFormChange(form.copy(confidentiality = it)) },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.retentionUntil,
                     onValueChange = { onFormChange(form.copy(retentionUntil = it)) },
-                    label = { Text("Срок хранения до (ГГГГ-ММ-ДД)") },
-                    singleLine = true,
+                    label = "Срок хранения до",
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -123,11 +122,10 @@ fun EditDocumentDialog(
                     onSelect = { onFormChange(form.copy(confidentiality = it)) },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.retentionUntil,
                     onValueChange = { onFormChange(form.copy(retentionUntil = it)) },
-                    label = { Text("Срок хранения до (ГГГГ-ММ-ДД)") },
-                    singleLine = true,
+                    label = "Срок хранения до",
                     modifier = Modifier.fillMaxWidth()
                 )
             }

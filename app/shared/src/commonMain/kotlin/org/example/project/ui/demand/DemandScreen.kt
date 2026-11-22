@@ -2,6 +2,7 @@
 
 package org.example.project.ui.demand
 
+import org.example.project.ui.userText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.layout.Box
@@ -180,7 +181,7 @@ private fun DemandListPage(
                                         showMergeDialog = false
                                         viewModel.loadDemands()
                                     }
-                                    is org.example.project.data.ApiResult.Error -> mergeError = res.error.message
+                                    is org.example.project.data.ApiResult.Error -> mergeError = res.error.userText()
                                 }
                             }
                         }

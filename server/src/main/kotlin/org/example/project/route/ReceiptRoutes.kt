@@ -55,6 +55,17 @@ fun Route.receiptRoutes(receiptService: ReceiptService, receiptQcService: Receip
             call.respond(HttpStatusCode.OK, ApiResponse.success(receiptService.getReceipt(id, call.currentUser())))
         }
 
+        // Склад вносит факт, ячейки и расхождения в поступление (в т. ч. по счёту от снабжения).
+        put("/{id}/acceptance") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid receipt id")
+            val request = call.receive<AcceptReceiptLinesRequest>()
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(receiptService.acceptLines(id, request, call.currentUser()))
+            )
+        }
+
         post("/{id}/post") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid receipt id")

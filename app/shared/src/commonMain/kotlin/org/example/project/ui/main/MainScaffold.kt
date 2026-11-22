@@ -229,6 +229,19 @@ fun MainScaffold(
     } else {
         null
     }
+    val supplierInvoiceRepository: org.example.project.data.SupplierInvoiceRepository = koinInject()
+    val supplierInvoiceViewModel = if (NavigationDestination.PURCHASE_ORDERS in destinations) {
+        remember(user) {
+            org.example.project.ui.supplier.SupplierInvoiceViewModel(
+                supplierInvoiceRepository,
+                documentRepository,
+                wmsRepository,
+                user
+            )
+        }
+    } else {
+        null
+    }
     val demandViewModel = if (NavigationDestination.DEMANDS in destinations) {
         remember(user) { DemandViewModel(demandRepository, wmsRepository, projectRepository, bomRepository, user) }
     } else {
@@ -381,6 +394,7 @@ fun MainScaffold(
                         demandViewModel = demandViewModel,
                         supplierViewModel = supplierViewModel,
                         purchaseOrderViewModel = purchaseOrderViewModel,
+                        supplierInvoiceViewModel = supplierInvoiceViewModel,
                         documentViewModel = documentViewModel,
                         adminViewModel = adminViewModel,
                         onOpenTask = onOpenTask,
@@ -1064,6 +1078,7 @@ private fun MainContent(
     demandViewModel: DemandViewModel?,
     supplierViewModel: SupplierViewModel?,
     purchaseOrderViewModel: PurchaseOrderViewModel?,
+    supplierInvoiceViewModel: org.example.project.ui.supplier.SupplierInvoiceViewModel? = null,
     documentViewModel: DocumentViewModel,
     adminViewModel: AdminViewModel?,
     onOpenTask: (Long) -> Unit,
@@ -1120,7 +1135,7 @@ private fun MainContent(
         }
 
         NavigationDestination.PURCHASE_ORDERS -> purchaseOrderViewModel?.let {
-            PurchaseOrderScreen(viewModel = it)
+            PurchaseOrderScreen(viewModel = it, invoiceViewModel = supplierInvoiceViewModel)
         }
 
         NavigationDestination.DEMANDS -> demandViewModel?.let {

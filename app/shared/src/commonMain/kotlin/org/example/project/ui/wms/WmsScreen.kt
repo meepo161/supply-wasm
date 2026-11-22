@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import org.example.project.ui.userText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -495,7 +496,7 @@ private fun NomenclatureDetailDialog(
                         )
                         localStatus = when (res) {
                             is org.example.project.data.ApiResult.Success -> "Пороги обновлены"
-                            is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.message}"
+                            is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.userText()}"
                         }
                     }
                 }) { Text("Сохранить пороги") }
@@ -524,7 +525,7 @@ private fun NomenclatureDetailDialog(
                                         newBarcode = ""
                                         "Штрихкод $code добавлен"
                                     }
-                                    is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.message}"
+                                    is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.userText()}"
                                 }
                             }
                         }
@@ -583,7 +584,7 @@ private fun NomenclatureDetailDialog(
                                         analogIdInput = ""
                                         localStatus = "Аналог #$aId добавлен"
                                     }
-                                    is org.example.project.data.ApiResult.Error -> localStatus = "Ошибка: ${res.error.message}"
+                                    is org.example.project.data.ApiResult.Error -> localStatus = "Ошибка: ${res.error.userText()}"
                                 }
                             }
                         }
@@ -981,7 +982,18 @@ private fun ReceiptsTab(
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        state.receipts.forEach { receipt ->
+                        val pendingFromProcurement = state.receipts.filter {
+                            it.supplierInvoiceId != null &&
+                                (it.status == ReceiptStatus.DRAFT || it.status == ReceiptStatus.IN_PROGRESS)
+                        }
+                        if (pendingFromProcurement.isNotEmpty()) {
+                            Text(
+                                "Ожидается к приёмке по счетам от снабжения: ${pendingFromProcurement.size}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        (pendingFromProcurement + (state.receipts - pendingFromProcurement.toSet())).forEach { receipt ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
@@ -993,6 +1005,7 @@ private fun ReceiptsTab(
                                     )
                                     Text(
                                         text = listOfNotNull(
+                                            receipt.supplierInvoiceId?.let { "по счёту от снабжения" },
                                             receipt.sourceDocumentNo,
                                             receipt.purchaseOrderNumber?.let { "заказ $it" },
                                             if (receipt.hasDiscrepancies) "есть расхождения" else null
@@ -1028,7 +1041,8 @@ private fun ReceiptsTab(
                 warehouse = state.warehouses.find { it.id == state.currentReceipt.warehouseId },
                 nomenclature = state.nomenclature,
                 onPost = viewModel::postReceipt,
-                onClose = viewModel::clearCurrentReceipt
+                onClose = viewModel::clearCurrentReceipt,
+                onAccept = viewModel::acceptReceiptLines
             )
         }
     }
@@ -1048,6 +1062,7 @@ private fun ReceiptDetailCard(
     nomenclature: List<NomenclatureDto>,
     onPost: () -> Unit,
     onClose: () -> Unit,
+    onAccept: (List<org.example.project.dto.AcceptReceiptLineInput>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1115,6 +1130,9 @@ private fun ReceiptDetailCard(
                     )
                 }
             }
+            if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
+                ReceiptAcceptance(receipt = receipt, onSave = onAccept)
+            }
             val wmsRepoForQc: org.example.project.data.WmsRepository = koinInject()
             val qcScope = rememberCoroutineScope()
             var showQcDialog by remember(receipt.id) { mutableStateOf(false) }
@@ -1123,7 +1141,10 @@ private fun ReceiptDetailCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
-                    Button(onClick = onPost) { Text("Провести") }
+                    Button(
+                        onClick = onPost,
+                        enabled = receipt.lines.none { it.locationId == null }
+                    ) { Text("Провести") }
                 }
                 if (receipt.status == ReceiptStatus.POSTED) {
                     Button(onClick = {
@@ -1131,7 +1152,7 @@ private fun ReceiptDetailCard(
                         qcScope.launch {
                             when (val res = wmsRepoForQc.getReceiptQc(receipt.id)) {
                                 is org.example.project.data.ApiResult.Success -> qcInfo = res.data
-                                is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.message
+                                is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.userText()
                             }
                         }
                     }) { Text("Контроль ОТК") }
@@ -1179,7 +1200,7 @@ private fun ReceiptDetailCard(
                                         qcInfo = res.data
                                         qcStatusMsg = "ОТК проведён: ${res.data.status.name}"
                                     }
-                                    is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.message
+                                    is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.userText()
                                 }
                             }
                         }) { Text("Принять всё (ОТК)") }

@@ -309,7 +309,8 @@ fun ReceiptSourceTypeDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            ReceiptSourceType.entries.forEach { type ->
+            // D-61: приёмку по счёту оформляет снабжение из карточки счёта, вручную её не создают.
+            ReceiptSourceType.entries.filter { it != ReceiptSourceType.INVOICE }.forEach { type ->
                 DropdownMenuItem(
                     text = { Text(type.localizedName()) },
                     onClick = {

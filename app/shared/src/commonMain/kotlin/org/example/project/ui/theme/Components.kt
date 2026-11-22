@@ -518,13 +518,14 @@ fun DetailRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(160.dp)
         )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = valueColor,
-            modifier = Modifier.weight(1f)
-        )
+        androidx.compose.foundation.text.selection.SelectionContainer(modifier = Modifier.weight(1f)) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = valueColor
+            )
+        }
     }
 }
 

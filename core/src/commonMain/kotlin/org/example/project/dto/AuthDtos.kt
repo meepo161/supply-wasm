@@ -25,6 +25,12 @@ data class BootstrapRequest(
     val fullName: String
 )
 
+/** Нужно ли создавать первого администратора (в базе ещё нет пользователей). */
+@Serializable
+data class BootstrapStatusDto(
+    val required: Boolean
+)
+
 @Serializable
 data class ChangePasswordRequest(
     val currentPassword: String,

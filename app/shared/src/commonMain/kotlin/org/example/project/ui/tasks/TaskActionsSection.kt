@@ -1,5 +1,6 @@
 package org.example.project.ui.tasks
 
+import org.example.project.ui.userText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -303,7 +304,7 @@ fun TaskActionsSection(
                                     predIdInput = ""
                                     depError = null
                                 }
-                                is org.example.project.data.ApiResult.Error -> depError = res.error.message
+                                is org.example.project.data.ApiResult.Error -> depError = res.error.userText()
                             }
                         }
                     }

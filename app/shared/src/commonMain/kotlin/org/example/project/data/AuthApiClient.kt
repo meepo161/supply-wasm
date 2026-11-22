@@ -32,6 +32,9 @@ class AuthApiClient(private val client: HttpClient) : AuthRepository {
     override suspend fun bootstrap(request: BootstrapRequest): ApiResult<LoginResponse> =
         post("/api/admin/bootstrap", request)
 
+    override suspend fun bootstrapStatus(): ApiResult<org.example.project.dto.BootstrapStatusDto> =
+        get("/api/admin/bootstrap-status")
+
     override suspend fun changePassword(request: ChangePasswordRequest): ApiResult<UserDto> =
         post("/api/auth/password", request)
 

@@ -40,7 +40,13 @@ class AuthViewModel(private val repository: AuthRepository) : ViewModel() {
                     error = if (result.statusCode == 401) null else result.error
                 )
             }
+            if (_uiState.value.currentUser == null) loadBootstrapStatus()
         }
+    }
+
+    private suspend fun loadBootstrapStatus() {
+        val required = (repository.bootstrapStatus() as? ApiResult.Success)?.data?.required ?: false
+        _uiState.value = _uiState.value.copy(bootstrapRequired = required)
     }
 
     fun login(login: String, password: String) {

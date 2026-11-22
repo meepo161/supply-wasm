@@ -88,6 +88,12 @@ interface WmsRepository {
     suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto>
     suspend fun getReceipt(id: Long): ApiResult<ReceiptDto>
     suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto>
+    /** Склад вносит факт, ячейки и расхождения в поступление (D-61). */
+    suspend fun acceptReceiptLines(
+        id: Long,
+        request: org.example.project.dto.AcceptReceiptLinesRequest
+    ): ApiResult<ReceiptDto> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
     suspend fun getReceiptQc(receiptId: Long): ApiResult<org.example.project.dto.ReceiptQcDto> =
         ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
     suspend fun inspectReceiptQc(

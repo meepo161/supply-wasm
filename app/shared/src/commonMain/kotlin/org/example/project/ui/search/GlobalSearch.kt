@@ -1,5 +1,6 @@
 package org.example.project.ui.search
 
+import org.example.project.ui.userText
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -284,7 +285,7 @@ private fun SearchDropdown(
                     color = scheme.onSurface
                 )
                 Text(
-                    text = state.error.message,
+                    text = state.error.userText(),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant
                 )

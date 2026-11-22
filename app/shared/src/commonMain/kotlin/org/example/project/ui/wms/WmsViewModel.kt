@@ -501,6 +501,31 @@ class WmsViewModel(
         }
     }
 
+    /** Склад вносит факт, ячейки и расхождения в поступление (в т. ч. по счёту от снабжения, D-61). */
+    fun acceptReceiptLines(lines: List<org.example.project.dto.AcceptReceiptLineInput>) {
+        val receipt = _uiState.value.currentReceipt ?: return
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = repository.acceptReceiptLines(
+                receipt.id,
+                org.example.project.dto.AcceptReceiptLinesRequest(receipt.version, lines)
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        currentReceipt = result.data,
+                        isLoading = false,
+                        successMessage = "Факт приёмки ${result.data.number} сохранён — проверьте и проведите документ"
+                    )
+                    loadReceipts()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
     fun clearCurrentReceipt() {
         _uiState.value = _uiState.value.copy(currentReceipt = null)
     }

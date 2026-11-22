@@ -1,5 +1,6 @@
 package org.example.project.ui.production
 
+import org.example.project.ui.userText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -426,7 +427,7 @@ private fun InstanceDetailDialog(
                                         docVerInput = ""
                                         docAttachMsg = "Версия документа #$verId привязана"
                                     }
-                                    is org.example.project.data.ApiResult.Error -> docAttachMsg = res.error.message
+                                    is org.example.project.data.ApiResult.Error -> docAttachMsg = res.error.userText()
                                 }
                             }
                         }

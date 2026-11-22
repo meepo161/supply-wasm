@@ -2,6 +2,7 @@
 
 package org.example.project.ui.documents
 
+import org.example.project.ui.userText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -141,7 +142,7 @@ private fun DocumentListPage(
                     tplScope.launch {
                         when (val res = extrasRepo.listDocumentTemplates()) {
                             is org.example.project.data.ApiResult.Success -> templates = res.data
-                            is org.example.project.data.ApiResult.Error -> tplError = res.error.message
+                            is org.example.project.data.ApiResult.Error -> tplError = res.error.userText()
                         }
                     }
                 })
@@ -188,7 +189,7 @@ private fun DocumentListPage(
                                             tplName = ""
                                             tplError = null
                                         }
-                                        is org.example.project.data.ApiResult.Error -> tplError = res.error.message
+                                        is org.example.project.data.ApiResult.Error -> tplError = res.error.userText()
                                     }
                                 }
                             }
