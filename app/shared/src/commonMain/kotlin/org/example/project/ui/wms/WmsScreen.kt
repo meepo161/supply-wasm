@@ -981,7 +981,18 @@ private fun ReceiptsTab(
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        state.receipts.forEach { receipt ->
+                        val pendingFromProcurement = state.receipts.filter {
+                            it.supplierInvoiceId != null &&
+                                (it.status == ReceiptStatus.DRAFT || it.status == ReceiptStatus.IN_PROGRESS)
+                        }
+                        if (pendingFromProcurement.isNotEmpty()) {
+                            Text(
+                                "Ожидается к приёмке по счетам от снабжения: ${pendingFromProcurement.size}",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        (pendingFromProcurement + (state.receipts - pendingFromProcurement.toSet())).forEach { receipt ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
@@ -993,6 +1004,7 @@ private fun ReceiptsTab(
                                     )
                                     Text(
                                         text = listOfNotNull(
+                                            receipt.supplierInvoiceId?.let { "по счёту от снабжения" },
                                             receipt.sourceDocumentNo,
                                             receipt.purchaseOrderNumber?.let { "заказ $it" },
                                             if (receipt.hasDiscrepancies) "есть расхождения" else null
@@ -1028,7 +1040,8 @@ private fun ReceiptsTab(
                 warehouse = state.warehouses.find { it.id == state.currentReceipt.warehouseId },
                 nomenclature = state.nomenclature,
                 onPost = viewModel::postReceipt,
-                onClose = viewModel::clearCurrentReceipt
+                onClose = viewModel::clearCurrentReceipt,
+                onAccept = viewModel::acceptReceiptLines
             )
         }
     }
@@ -1048,6 +1061,7 @@ private fun ReceiptDetailCard(
     nomenclature: List<NomenclatureDto>,
     onPost: () -> Unit,
     onClose: () -> Unit,
+    onAccept: (List<org.example.project.dto.AcceptReceiptLineInput>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1115,6 +1129,9 @@ private fun ReceiptDetailCard(
                     )
                 }
             }
+            if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
+                ReceiptAcceptance(receipt = receipt, onSave = onAccept)
+            }
             val wmsRepoForQc: org.example.project.data.WmsRepository = koinInject()
             val qcScope = rememberCoroutineScope()
             var showQcDialog by remember(receipt.id) { mutableStateOf(false) }
@@ -1123,7 +1140,10 @@ private fun ReceiptDetailCard(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
-                    Button(onClick = onPost) { Text("Провести") }
+                    Button(
+                        onClick = onPost,
+                        enabled = receipt.lines.none { it.locationId == null }
+                    ) { Text("Провести") }
                 }
                 if (receipt.status == ReceiptStatus.POSTED) {
                     Button(onClick = {

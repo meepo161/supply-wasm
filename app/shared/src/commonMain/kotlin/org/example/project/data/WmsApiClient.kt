@@ -141,6 +141,11 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
 
     override suspend fun getReceipt(id: Long): ApiResult<ReceiptDto> = get("/api/wms/receipts/$id")
 
+    override suspend fun acceptReceiptLines(
+        id: Long,
+        request: org.example.project.dto.AcceptReceiptLinesRequest
+    ): ApiResult<ReceiptDto> = put("/api/wms/receipts/$id/acceptance", request)
+
     override suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto> =
         post("/api/wms/receipts/$id/post", request)
 

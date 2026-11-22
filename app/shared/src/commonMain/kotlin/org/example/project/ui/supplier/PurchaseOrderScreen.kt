@@ -43,8 +43,13 @@ import org.example.project.ui.theme.SectionHeader
 import org.example.project.ui.theme.SoftButton
 
 @Composable
-fun PurchaseOrderScreen(viewModel: PurchaseOrderViewModel, modifier: Modifier = Modifier) {
+fun PurchaseOrderScreen(
+    viewModel: PurchaseOrderViewModel,
+    modifier: Modifier = Modifier,
+    invoiceViewModel: SupplierInvoiceViewModel? = null
+) {
     val state by viewModel.uiState.collectAsState()
+    val tabs = PurchaseOrderTab.entries.filter { it != PurchaseOrderTab.INVOICES || invoiceViewModel?.canRead() == true }
 
     Column(modifier = modifier.fillMaxSize()) {
         PageHeader(
@@ -65,8 +70,8 @@ fun PurchaseOrderScreen(viewModel: PurchaseOrderViewModel, modifier: Modifier = 
             }
         )
         Spacer(Modifier.height(8.dp))
-        ScrollableTabRow(selectedTabIndex = PurchaseOrderTab.entries.indexOf(state.activeTab)) {
-            PurchaseOrderTab.entries.forEach { tab ->
+        ScrollableTabRow(selectedTabIndex = tabs.indexOf(state.activeTab).coerceAtLeast(0)) {
+            tabs.forEach { tab ->
                 Tab(
                     selected = state.activeTab == tab,
                     onClick = { viewModel.selectTab(tab) },
@@ -79,7 +84,7 @@ fun PurchaseOrderScreen(viewModel: PurchaseOrderViewModel, modifier: Modifier = 
                 PurchaseOrderSuccessNote(message, viewModel::dismissSuccess)
             }
         }
-        state.operationError?.let { error ->
+        state.operationError?.takeIf { state.activeTab != PurchaseOrderTab.INVOICES }?.let { error ->
             Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp)) {
                 ErrorMessageCard(error = error)
             }
@@ -90,17 +95,23 @@ fun PurchaseOrderScreen(viewModel: PurchaseOrderViewModel, modifier: Modifier = 
                 .padding(horizontal = 24.dp, vertical = 12.dp)
         ) {
             when (state.activeTab) {
-                PurchaseOrderTab.ORDERS -> OrdersPane(state, viewModel)
+                PurchaseOrderTab.ORDERS -> OrdersPane(state, viewModel, invoiceViewModel)
                 PurchaseOrderTab.DELIVERIES -> DeliveriesPane(state, viewModel)
+                PurchaseOrderTab.INVOICES -> invoiceViewModel?.let { SupplierInvoicesPane(it) }
             }
         }
     }
 
     PurchaseOrderDialogs(state = state, viewModel = viewModel)
+    invoiceViewModel?.let { SupplierInvoiceDialogs(it) }
 }
 
 @Composable
-private fun OrdersPane(state: PurchaseOrderUiState, viewModel: PurchaseOrderViewModel) {
+private fun OrdersPane(
+    state: PurchaseOrderUiState,
+    viewModel: PurchaseOrderViewModel,
+    invoiceViewModel: SupplierInvoiceViewModel?
+) {
     Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         GlassCard(modifier = Modifier.weight(0.42f).fillMaxHeight(), contentPadding = 14.dp) {
             SectionHeader(
@@ -135,7 +146,7 @@ private fun OrdersPane(state: PurchaseOrderUiState, viewModel: PurchaseOrderView
                 )
             }
         }
-        OrderCardPane(state, viewModel, Modifier.weight(0.58f).fillMaxHeight())
+        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.weight(0.58f).fillMaxHeight())
     }
 }
 
@@ -143,6 +154,7 @@ private fun OrdersPane(state: PurchaseOrderUiState, viewModel: PurchaseOrderView
 private fun OrderCardPane(
     state: PurchaseOrderUiState,
     viewModel: PurchaseOrderViewModel,
+    invoiceViewModel: SupplierInvoiceViewModel?,
     modifier: Modifier = Modifier
 ) {
     val order = state.selectedOrder
@@ -204,6 +216,11 @@ private fun OrderCardPane(
                 PurchaseOrderLinesGrid(order = order, modifier = Modifier.fillMaxWidth().height(180.dp))
                 Spacer(Modifier.height(8.dp))
                 TotalsRow(order)
+            }
+
+            invoiceViewModel?.let { invoices ->
+                Spacer(Modifier.height(12.dp))
+                OrderInvoicesSection(order, invoices, onOpenInvoices = { viewModel.selectTab(PurchaseOrderTab.INVOICES) })
             }
 
             Spacer(Modifier.height(12.dp))
