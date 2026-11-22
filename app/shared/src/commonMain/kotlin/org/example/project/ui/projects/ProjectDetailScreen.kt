@@ -157,88 +157,80 @@ fun ProjectDetailScreen(
             }
         }
 
-        when (activeTab) {
-            ProjectTab.OVERVIEW -> ProjectOverviewTab(
-                project = project,
-                canClose = canClose,
-                isOwner = isOwner,
-                isClosing = isClosing,
-                openError = openError,
-                openForm = openForm,
-                onCloseRequest = { closeRequested = true },
-                onOpenReasonChange = onOpenReasonChange,
-                onOpenProject = onOpenProject
-            )
-            ProjectTab.TASKS -> ProjectTasksTab(
-                tasks = projectTasks,
-                users = users,
-                currentUserId = currentUser.id,
-                isLoading = projectTasksLoading,
-                error = projectTasksError,
-                onRefresh = onRefreshTasks,
-                onTaskClick = { onOpenTask(it.id) }
-            )
-            ProjectTab.DISCUSSION -> {
-                val conversationState by conversationViewModel.uiState.collectAsState()
-                val chat = conversationState.selectedConversation
-                ConversationPanel(
-                    messages = conversationState.messages,
-                    canWrite = chat?.canWrite ?: true,
-                    currentUserId = currentUser.id,
-                    readOnlyHint = "Обсуждение доступно только для чтения.",
-                    onDraftChange = conversationViewModel::updateDraft,
-                    onSend = conversationViewModel::sendMessage,
-                    onRefresh = { conversationViewModel.refreshMessages() },
-                    onLoadMore = conversationViewModel::loadMoreNewer,
-                    onPickFile = conversationViewModel::pickFile,
-                    onClearFile = conversationViewModel::clearPendingFile,
-                    onDownloadAttachment = conversationViewModel::downloadAttachment,
-                    onOpenTask = onOpenTask,
-                    conversationKey = "PROJECT:${chat?.id ?: project.id}",
-                    participants = chat?.members.orEmpty(),
-                    forwardTargets = conversationState.items,
-                    viewModel = conversationViewModel
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            when (activeTab) {
+                ProjectTab.OVERVIEW -> ProjectOverviewTab(
+                    project = project,
+                    canClose = canClose,
+                    isOwner = isOwner,
+                    isClosing = isClosing,
+                    openError = openError,
+                    openForm = openForm,
+                    onCloseRequest = { closeRequested = true },
+                    onOpenReasonChange = onOpenReasonChange,
+                    onOpenProject = onOpenProject,
+                    summary = tabsState?.summary,
+                    planSummary = tabsState?.planSummary,
+                    users = users,
+                    canManageMembers = canManageMembers,
+                    memberError = memberError,
+                    onAddMember = onAddMember,
+                    onRemoveMember = onRemoveMember,
+                    canWriteAttachments = isOwner || currentUser.hasPermission("projects", "manage_members")
                 )
+                ProjectTab.TASKS -> ProjectTasksTab(
+                    tasks = projectTasks,
+                    users = users,
+                    currentUserId = currentUser.id,
+                    isLoading = projectTasksLoading,
+                    error = projectTasksError,
+                    onRefresh = onRefreshTasks,
+                    onTaskClick = { onOpenTask(it.id) }
+                )
+                ProjectTab.DISCUSSION -> {
+                    val conversationState by conversationViewModel.uiState.collectAsState()
+                    val chat = conversationState.selectedConversation
+                    ConversationPanel(
+                        messages = conversationState.messages,
+                        canWrite = chat?.canWrite ?: true,
+                        currentUserId = currentUser.id,
+                        readOnlyHint = "Обсуждение доступно только для чтения.",
+                        onDraftChange = conversationViewModel::updateDraft,
+                        onSend = conversationViewModel::sendMessage,
+                        onRefresh = { conversationViewModel.refreshMessages() },
+                        onLoadMore = conversationViewModel::loadMoreNewer,
+                        onPickFile = conversationViewModel::pickFile,
+                        onClearFile = conversationViewModel::clearPendingFile,
+                        onDownloadAttachment = conversationViewModel::downloadAttachment,
+                        onOpenTask = onOpenTask,
+                        conversationKey = "PROJECT:${chat?.id ?: project.id}",
+                        participants = chat?.members.orEmpty(),
+                        forwardTargets = conversationState.items,
+                        viewModel = conversationViewModel
+                    )
+                }
+                ProjectTab.STAGES,
+                ProjectTab.RISKS,
+                ProjectTab.DEMANDS,
+                ProjectTab.DOCUMENTS,
+                ProjectTab.HISTORY -> {
+                    if (tabsState != null) {
+                        ProjectTabsSection(
+                            state = tabsState,
+                            currentUser = currentUser,
+                            onTabSelected = onTabSelected,
+                            onRefresh = onTabRefresh,
+                            onTaskStatusFilter = onTaskStatusFilter,
+                            onTaskClick = onOpenTask,
+                            canManagePlan = canManagePlan,
+                            onRiskFilter = onRiskFilter,
+                            planActions = planActions,
+                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                        )
+                    }
+                }
             }
-            // Этапы, риски, потребности, документы и история отрисовываются
-            // секцией ProjectTabsSection master ниже — она же хранит состояние
-            // загрузки и действия плана.
-            ProjectTab.STAGES,
-            ProjectTab.RISKS,
-            ProjectTab.DEMANDS,
-            ProjectTab.DOCUMENTS,
-            ProjectTab.HISTORY -> Unit
         }
-
-        if (tabsState != null) {
-            ProjectTabsSection(
-                state = tabsState,
-                currentUser = currentUser,
-                onTabSelected = onTabSelected,
-                onRefresh = onTabRefresh,
-                onTaskStatusFilter = onTaskStatusFilter,
-                onTaskClick = onOpenTask,
-                canManagePlan = canManagePlan,
-                onRiskFilter = onRiskFilter,
-                planActions = planActions
-            )
-        }
-
-        MembersSection(
-            project = project,
-            users = users,
-            canManageMembers = canManageMembers,
-            error = memberError,
-            onAddMember = onAddMember,
-            onRemoveMember = onRemoveMember
-        )
-
-        AttachmentsSection(
-            entityType = AttachmentEntityType.PROJECT,
-            entityId = project.id,
-            canWrite = isOwner || currentUser.hasPermission("projects", "manage_members"),
-            readOnly = false
-        )
     }
 
     if (closeRequested) {
@@ -291,17 +283,29 @@ private fun ProjectOverviewTab(
     onCloseRequest: () -> Unit,
     onOpenReasonChange: (String) -> Unit,
     onOpenProject: () -> Unit,
+    summary: org.example.project.dto.ProjectSummaryDto? = null,
+    planSummary: org.example.project.dto.ProjectPlanSummaryDto? = null,
+    users: List<UserDto> = emptyList(),
+    canManageMembers: Boolean = false,
+    memberError: org.example.project.dto.ApiError? = null,
+    onAddMember: (Long) -> Unit = {},
+    onRemoveMember: (Long) -> Unit = {},
+    canWriteAttachments: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         ProjectHeader(project = project)
 
         ProjectInfoSection(project = project)
+
+        if (summary != null) {
+            OverviewTab(summary = summary, planSummary = planSummary)
+        }
 
         if (canClose) {
             OutlinedButton(
@@ -321,8 +325,22 @@ private fun ProjectOverviewTab(
                 onOpen = onOpenProject
             )
         }
-        // Участники и вложения показываются один раз — секциями master
-        // ниже основного when, а не внутри вкладки «Обзор».
+
+        MembersSection(
+            project = project,
+            users = users,
+            canManageMembers = canManageMembers,
+            error = memberError,
+            onAddMember = onAddMember,
+            onRemoveMember = onRemoveMember
+        )
+
+        AttachmentsSection(
+            entityType = AttachmentEntityType.PROJECT,
+            entityId = project.id,
+            canWrite = canWriteAttachments,
+            readOnly = false
+        )
     }
 }
 

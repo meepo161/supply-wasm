@@ -31,8 +31,11 @@ import androidx.compose.ui.unit.dp
 import org.example.project.dto.UserDto
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.GradientButton
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.PageHeader
+import org.example.project.ui.theme.SoftButton
 
 @Composable
 fun AdminScreen(
@@ -65,6 +68,26 @@ fun AdminScreen(
                 }
             }
             state.operationError?.let { ErrorMessageCard(error = it) }
+            state.successMessage?.let { message ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = viewModel::dismissSuccess) { Text("Ок") }
+                    }
+                }
+            }
             if (state.isLoading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
@@ -72,6 +95,7 @@ fun AdminScreen(
                 AdminTab.USERS -> UsersTab(state, viewModel)
                 AdminTab.DEPARTMENTS -> DepartmentsTab(state, viewModel)
                 AdminTab.ROLES -> RolesTab(state, viewModel)
+                AdminTab.AUDIT -> AuditTab(state, viewModel)
             }
         }
     }
@@ -93,6 +117,13 @@ fun AdminScreen(
             error = state.operationError,
             onFormChange = viewModel::updateEditUserForm,
             onSave = viewModel::updateUser,
+            onDismiss = viewModel::dismissDialog
+        )
+        AdminDialog.ResetPassword -> ResetPasswordDialog(
+            form = state.resetPasswordForm,
+            error = state.operationError,
+            onFormChange = viewModel::updateResetPasswordForm,
+            onConfirm = viewModel::resetUserPassword,
             onDismiss = viewModel::dismissDialog
         )
         AdminDialog.CreateDepartment, AdminDialog.EditDepartment -> DepartmentDialog(
@@ -139,12 +170,15 @@ private fun UsersTab(state: AdminUiState, viewModel: AdminViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (viewModel.can("users", "create")) {
-                Button(onClick = { viewModel.showDialog(AdminDialog.CreateUser) }) {
-                    Text("Новый пользователь")
-                }
+                GradientButton(
+                    text = "Новый пользователь",
+                    onClick = { viewModel.showDialog(AdminDialog.CreateUser) },
+                    gradient = Gradients.Aurora,
+                    compact = true
+                )
                 Spacer(modifier = Modifier.width(8.dp))
             }
-            TextButton(onClick = viewModel::loadUsers) { Text("Обновить") }
+            SoftButton(text = "Обновить", onClick = viewModel::loadUsers)
         }
         if (state.users.isEmpty()) {
             EmptyState("Нет пользователей.")
@@ -185,6 +219,11 @@ private fun UserActionsCard(user: UserDto, viewModel: AdminViewModel) {
                 if (viewModel.can("users", "update_any")) {
                     OutlinedButton(onClick = { viewModel.showDialog(AdminDialog.EditUser) }) {
                         Text("Изменить")
+                    }
+                }
+                if (viewModel.can("users", "reset_password")) {
+                    OutlinedButton(onClick = { viewModel.showDialog(AdminDialog.ResetPassword) }) {
+                        Text("Сбросить пароль")
                     }
                 }
                 if (viewModel.can("users", "activate") && !viewModel.isSelf(user.id)) {
@@ -386,5 +425,81 @@ private fun EmptyState(text: String) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun AuditTab(state: AdminUiState, viewModel: AdminViewModel) {
+    if (!viewModel.can("audit", "read")) {
+        NoAccess("Недостаточно прав для просмотра журнала аудита (audit:read).")
+        return
+    }
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.material3.OutlinedTextField(
+                value = state.auditEntityTypeFilter,
+                onValueChange = viewModel::updateAuditEntityTypeFilter,
+                label = { Text("Сущность (USER, PROJECT, TASK...)") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            androidx.compose.material3.OutlinedTextField(
+                value = state.auditActionFilter,
+                onValueChange = viewModel::updateAuditActionFilter,
+                label = { Text("Действие (CREATE, UPDATE...)") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            SoftButton(text = "Найти", onClick = viewModel::loadAuditLogs)
+        }
+        if (state.auditLogs.isEmpty()) {
+            EmptyState("Записи аудита не найдены.")
+            return@Column
+        }
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(state.auditLogs.size) { index ->
+                val entry = state.auditLogs[index]
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "${entry.action} · ${entry.entityType} #${entry.entityId}",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = entry.createdAt,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = "Пользователь: ${entry.userName ?: entry.userId?.let { "ID $it" } ?: "Система"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (entry.payloadJson.isNotBlank() && entry.payloadJson != "{}") {
+                            Text(
+                                text = entry.payloadJson,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

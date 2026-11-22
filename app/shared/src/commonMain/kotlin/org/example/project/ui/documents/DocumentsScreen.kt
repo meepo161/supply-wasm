@@ -13,19 +13,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +34,11 @@ import androidx.compose.ui.unit.dp
 import org.example.project.dto.DocumentDto
 import org.example.project.dto.DocumentLinkDto
 import org.example.project.dto.DocumentLinkType
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.GradientButton
+import org.example.project.ui.theme.GradientSpinner
+import org.example.project.ui.theme.SoftButton
 import org.example.project.dto.DocumentVersionDto
 import org.example.project.dto.DocumentVersionStatus
 import org.example.project.ui.demand.ProjectDropdown
@@ -114,19 +120,90 @@ private fun DocumentListPage(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val extrasRepo: org.example.project.data.ErpExtrasRepository = koinInject()
+            val tplScope = rememberCoroutineScope()
+            var showTemplates by remember { mutableStateOf(false) }
+            var templates by remember { mutableStateOf<List<org.example.project.dto.DocumentTemplateDto>>(emptyList()) }
+            var tplCode by remember { mutableStateOf("") }
+            var tplName by remember { mutableStateOf("") }
+            var tplError by remember { mutableStateOf<String?>(null) }
+
             Text(text = "Документы", style = MaterialTheme.typography.headlineSmall)
-            Row {
-                Button(onClick = { viewModel.showDialog(DocumentDialog.CreateDocument) }) {
-                    Text("Новый документ")
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                TextButton(onClick = viewModel::loadDocuments) { Text("Обновить") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                GradientButton(
+                    text = "Новый документ",
+                    onClick = { viewModel.showDialog(DocumentDialog.CreateDocument) },
+                    gradient = Gradients.Aurora,
+                    compact = true
+                )
+                SoftButton(text = "Шаблоны", onClick = {
+                    showTemplates = true
+                    tplScope.launch {
+                        when (val res = extrasRepo.listDocumentTemplates()) {
+                            is org.example.project.data.ApiResult.Success -> templates = res.data
+                            is org.example.project.data.ApiResult.Error -> tplError = res.error.message
+                        }
+                    }
+                })
+                SoftButton(text = "Обновить", onClick = viewModel::loadDocuments)
+            }
+
+            if (showTemplates) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { showTemplates = false },
+                    title = { Text("Шаблоны документов") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            tplError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            templates.forEach { t ->
+                                Text("${t.code} — ${t.name} (${t.docType})", style = MaterialTheme.typography.bodySmall)
+                            }
+                            HorizontalDivider()
+                            org.example.project.ui.theme.ErpTextField(
+                                value = tplCode,
+                                onValueChange = { tplCode = it },
+                                label = "Код шаблона"
+                            )
+                            org.example.project.ui.theme.ErpTextField(
+                                value = tplName,
+                                onValueChange = { tplName = it },
+                                label = "Название шаблона"
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        SoftButton(text = "Создать шаблон", onClick = {
+                            if (tplCode.isNotBlank() && tplName.isNotBlank()) {
+                                tplScope.launch {
+                                    when (val res = extrasRepo.createDocumentTemplate(
+                                        org.example.project.dto.CreateDocumentTemplateRequest(
+                                            code = tplCode.trim(),
+                                            name = tplName.trim(),
+                                            docType = "INSTRUCTION"
+                                        )
+                                    )) {
+                                        is org.example.project.data.ApiResult.Success -> {
+                                            templates = listOf(res.data) + templates
+                                            tplCode = ""
+                                            tplName = ""
+                                            tplError = null
+                                        }
+                                        is org.example.project.data.ApiResult.Error -> tplError = res.error.message
+                                    }
+                                }
+                            }
+                        })
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showTemplates = false }) { Text("Закрыть") }
+                    }
+                )
             }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.documents.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                GradientSpinner()
             }
         } else if (state.documents.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -161,7 +238,7 @@ private fun DocumentDetailPage(
     ) {
         if (document == null) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                GradientSpinner()
             }
             return@Column
         }
@@ -178,12 +255,11 @@ private fun DocumentHeaderCard(
     state: DocumentUiState,
     viewModel: DocumentViewModel
 ) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
+        contentPadding = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
@@ -205,12 +281,17 @@ private fun DocumentHeaderCard(
             if (viewModel.canManage(document)) {
                 HorizontalDivider()
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { viewModel.showDialog(DocumentDialog.EditDocument) }) {
-                        Text("Изменить реквизиты")
-                    }
-                    Button(onClick = { viewModel.showDialog(DocumentDialog.UploadVersion) }) {
-                        Text("Загрузить новую версию")
-                    }
+                    SoftButton(
+                        text = "Изменить реквизиты",
+                        onClick = { viewModel.showDialog(DocumentDialog.EditDocument) },
+                        tint = Brand.Indigo
+                    )
+                    GradientButton(
+                        text = "Загрузить новую версию",
+                        onClick = { viewModel.showDialog(DocumentDialog.UploadVersion) },
+                        gradient = Gradients.Ocean,
+                        compact = true
+                    )
                 }
             }
         }
@@ -223,12 +304,11 @@ private fun VersionsSection(
     state: DocumentUiState,
     viewModel: DocumentViewModel
 ) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
+        contentPadding = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = "Версии", style = MaterialTheme.typography.titleMedium)
@@ -335,12 +415,11 @@ private fun LinksSection(
     viewModel: DocumentViewModel
 ) {
     val canManage = viewModel.canManage(document)
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
+        contentPadding = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = "Связи", style = MaterialTheme.typography.titleMedium)
@@ -369,13 +448,14 @@ private fun LinksSection(
                     label = "Связать с проектом",
                     modifier = Modifier.fillMaxWidth()
                 )
-                Button(
+                GradientButton(
+                    text = "Добавить связь",
                     onClick = viewModel::addProjectLink,
                     enabled = state.linkProjectId != null,
+                    gradient = Gradients.Ocean,
+                    compact = true,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Добавить связь")
-                }
+                )
             }
         }
     }

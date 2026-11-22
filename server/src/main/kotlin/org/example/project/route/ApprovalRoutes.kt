@@ -49,6 +49,10 @@ fun Route.approvalRoutes(approvalService: ApprovalService) {
             )
         }
 
+        get("/my-queue") {
+            call.respond(HttpStatusCode.OK, ApiResponse.success(approvalService.myQueue(call.currentUser())))
+        }
+
         get("/routes/{id}") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid route id")

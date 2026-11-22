@@ -8,4 +8,7 @@ data class AuthUiState(
     val permissions: Set<String> = emptySet(),
     val isLoading: Boolean = false,
     val error: ApiError? = null,
+    val passwordChangeLoading: Boolean = false,
+    val passwordChangeError: ApiError? = null,
+    val passwordChangeSuccess: Boolean = false,
 )

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.project.data.AdminRepository
 import org.example.project.data.ApiResult
+import org.example.project.dto.AdminResetPasswordRequest
 import org.example.project.dto.ApiError
 import org.example.project.dto.CreateDepartmentRequest
 import org.example.project.dto.CreatePermissionRequest
@@ -36,11 +37,44 @@ class AdminViewModel(
     fun isSelf(userId: Long): Boolean = currentUser.id == userId
 
     fun selectTab(tab: AdminTab) {
-        _uiState.value = _uiState.value.copy(selectedTab = tab, operationError = null)
+        _uiState.value = _uiState.value.copy(selectedTab = tab, operationError = null, successMessage = null)
+        if (tab == AdminTab.AUDIT && _uiState.value.auditLogs.isEmpty()) {
+            loadAuditLogs()
+        }
+    }
+
+    fun updateAuditEntityTypeFilter(value: String) {
+        _uiState.value = _uiState.value.copy(auditEntityTypeFilter = value)
+    }
+
+    fun updateAuditActionFilter(value: String) {
+        _uiState.value = _uiState.value.copy(auditActionFilter = value)
+    }
+
+    fun loadAuditLogs() {
+        if (!can("audit", "read")) return
+        val state = _uiState.value
+        _uiState.value = state.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            when (val res = adminRepository.listAuditLogs(
+                entityType = state.auditEntityTypeFilter.ifBlank { null },
+                action = state.auditActionFilter.ifBlank { null },
+                limit = 150
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    auditLogs = res.data,
+                    isLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = res.error
+                )
+            }
+        }
     }
 
     fun selectUser(id: Long) {
-        _uiState.value = _uiState.value.copy(selectedUserId = id)
+        _uiState.value = _uiState.value.copy(selectedUserId = id, successMessage = null)
     }
 
     fun selectDepartment(id: Long) {
@@ -55,6 +89,10 @@ class AdminViewModel(
         _uiState.value = _uiState.value.copy(operationError = null)
     }
 
+    fun dismissSuccess() {
+        _uiState.value = _uiState.value.copy(successMessage = null)
+    }
+
     fun showDialog(dialog: AdminDialog) {
         val state = _uiState.value
         _uiState.value = when (dialog) {
@@ -63,12 +101,26 @@ class AdminViewModel(
                 state.copy(
                     activeDialog = dialog,
                     operationError = null,
+                    successMessage = null,
                     editUserForm = EditUserForm(
                         id = user.id,
                         version = user.version,
                         fullName = user.fullName,
                         email = user.email ?: "",
                         departmentId = user.departmentId
+                    )
+                )
+            }
+            AdminDialog.ResetPassword -> {
+                val user = state.users.find { it.id == state.selectedUserId } ?: return
+                state.copy(
+                    activeDialog = dialog,
+                    operationError = null,
+                    successMessage = null,
+                    resetPasswordForm = ResetPasswordForm(
+                        userId = user.id,
+                        version = user.version,
+                        userName = "${user.fullName} (${user.login})"
                     )
                 )
             }
@@ -213,11 +265,44 @@ class AdminViewModel(
     fun setUserActive(user: UserDto, active: Boolean) {
         if (!can("users", "activate")) return
         if (isSelf(user.id)) return
-        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null, successMessage = null)
         viewModelScope.launch {
             when (val result = adminRepository.setUserActive(user.id, active, user.version)) {
                 is ApiResult.Success -> {
                     _uiState.value = _uiState.value.copy(isLoading = false)
+                    loadUsers()
+                }
+                is ApiResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        operationError = result.error
+                    )
+                    if (result.statusCode == 409) loadUsers()
+                }
+            }
+        }
+    }
+
+    fun resetUserPassword() {
+        if (!can("users", "reset_password")) return
+        val form = _uiState.value.resetPasswordForm
+        when {
+            form.newPassword.length < 6 -> return setValidationError("Пароль должен быть не короче 6 символов")
+            form.newPassword != form.confirmPassword -> return setValidationError("Пароль и подтверждение не совпадают")
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null, successMessage = null)
+        viewModelScope.launch {
+            when (val result = adminRepository.resetUserPassword(
+                form.userId,
+                AdminResetPasswordRequest(form.newPassword, form.version)
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        activeDialog = null,
+                        isLoading = false,
+                        resetPasswordForm = ResetPasswordForm(),
+                        successMessage = "Пароль пользователя ${result.data.login} обновлён, активные сеансы завершены"
+                    )
                     loadUsers()
                 }
                 is ApiResult.Error -> {
@@ -389,6 +474,10 @@ class AdminViewModel(
 
     fun updateEditUserForm(form: EditUserForm) {
         _uiState.value = _uiState.value.copy(editUserForm = form)
+    }
+
+    fun updateResetPasswordForm(form: ResetPasswordForm) {
+        _uiState.value = _uiState.value.copy(resetPasswordForm = form)
     }
 
     fun updateDepartmentForm(form: DepartmentForm) {

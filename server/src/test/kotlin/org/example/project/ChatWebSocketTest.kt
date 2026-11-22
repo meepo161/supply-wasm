@@ -234,10 +234,10 @@ class ChatWebSocketTest {
             status = "IN_PROGRESS",
             type = "GENERAL",
             initiatorId = adminUser.id,
-            assigneeId = member.id,
+            assigneeId = adminUser.id,
             createdBy = adminUser.id
         )
-        addTaskParticipant(taskId, member.id, "ASSIGNEE")
+        addTaskParticipant(taskId, member.id, "OBSERVER")
         val adminAuthor = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
 
         val memberClient = loginClient("wsmember5", "password")
@@ -414,7 +414,7 @@ class ChatWebSocketTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

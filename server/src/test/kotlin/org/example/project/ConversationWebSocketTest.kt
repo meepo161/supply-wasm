@@ -430,7 +430,7 @@ class ConversationWebSocketTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

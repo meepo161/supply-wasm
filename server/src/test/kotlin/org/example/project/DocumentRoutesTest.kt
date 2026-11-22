@@ -29,7 +29,7 @@ class DocumentRoutesTest {
     fun reset() {
         TestDatabase.reset()
         val conn = org.postgresql.ds.PGSimpleDataSource().apply {
-            setUrl("jdbc:postgresql://localhost:5433/erp_test")
+            setUrl("${TestDatabase.TEST_URL}")
             user = "erp"
             password = "erp"
         }
@@ -596,7 +596,7 @@ class DocumentRoutesTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

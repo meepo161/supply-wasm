@@ -195,3 +195,48 @@ data class BomExplodeReportDto(
     val lines: List<BomExplodeLineDto> = emptyList(),
     val summary: List<BomMaterialSummaryDto> = emptyList()
 )
+
+@Serializable
+enum class BomDiffKind {
+    ADDED,
+    REMOVED,
+    CHANGED,
+    UNCHANGED
+}
+
+@Serializable
+data class BomRevisionDiffLineDto(
+    val kind: BomDiffKind,
+    val childNomenclatureId: Long,
+    val code: String,
+    val name: String,
+    val unit: String,
+    val leftQuantity: String? = null,
+    val rightQuantity: String? = null,
+    val leftPosition: String? = null,
+    val rightPosition: String? = null
+)
+
+@Serializable
+data class BomRevisionDiffDto(
+    val leftRevisionId: Long,
+    val leftRevisionNumber: String,
+    val rightRevisionId: Long,
+    val rightRevisionNumber: String,
+    val items: List<BomRevisionDiffLineDto> = emptyList()
+)
+
+@Serializable
+data class BomWhereUsedItemDto(
+    val productModelId: Long,
+    val modelCode: String,
+    val modelName: String,
+    val revisionId: Long,
+    val revisionNumber: String,
+    val revisionStatus: BomRevisionStatus,
+    val lineId: Long,
+    val quantity: String,
+    val unit: String,
+    val level: Int,
+    val position: String? = null
+)

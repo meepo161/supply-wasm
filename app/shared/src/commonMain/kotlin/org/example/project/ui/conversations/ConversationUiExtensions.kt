@@ -65,9 +65,9 @@ fun conversationEmptyState(
 ) ConversationEmptyState.NO_CHATS else ConversationEmptyState.NO_MATCHES
 
 fun filterEmployeeOptions(users: List<UserOptionDto>, query: String): List<UserOptionDto> {
-    val normalized = query.trim().lowercase()
+    val normalized = query.trim().lowercase().replace('ё', 'е')
     if (normalized.isEmpty()) return users
-    return users.filter { it.fullName.lowercase().contains(normalized) }
+    return users.filter { it.fullName.lowercase().replace('ё', 'е').contains(normalized) }
 }
 
 fun applyConversationDialogState(
@@ -95,8 +95,8 @@ fun ConversationListItemDto.toConversationDto(): ConversationDto = ConversationD
     id = if (kind == ConversationKind.TASK) -id else id,
     kind = kind,
     title = title,
-    projectId = projectId,
-    taskId = taskId,
+    projectId = projectId ?: if (kind == ConversationKind.PROJECT) id else null,
+    taskId = taskId ?: if (kind == ConversationKind.TASK) id else null,
     canWrite = canWrite,
     members = members
 )

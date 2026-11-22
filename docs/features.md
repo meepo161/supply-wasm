@@ -23,7 +23,7 @@ When the user is not authenticated, the app shows `LoginScreen` with:
 
 The login flow preserves entered data on validation and server errors and exposes loading/error states. `POST /api/auth/password` allows the current user to change the password with the current-password check and audit.
 
-For emergency recovery, the server has a reserved `admin` account whose recovery credentials are checked in code. A successful recovery login recreates or repairs the database-backed administrator, active state, `ADMIN` role and global permission before issuing a normal session; recovery use is audited as `EMERGENCY_ADMIN_LOGIN`.
+For emergency recovery, the server has a reserved `admin` account whose recovery credentials are checked in code (kept temporarily by the user's decision D-60). A successful recovery login recreates or repairs the database-backed administrator, active state, `ADMIN` role and global permission before issuing a normal session; recovery use is audited as `EMERGENCY_ADMIN_LOGIN`.
 
 ### Main scaffold, tasks and projects
 

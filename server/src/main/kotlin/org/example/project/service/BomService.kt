@@ -432,6 +432,79 @@ class BomService(
         return bomRepository.listBomLinesByRevision(revisionId).map { it.toDto() }
     }
 
+    fun diffRevisions(leftId: Long, rightId: Long, currentUser: CurrentUser): BomRevisionDiffDto {
+        currentUser.requirePermission("bom", "read_any")
+        val leftRev = bomRepository.findRevisionById(leftId) ?: throw NotFoundException("bom_revision", leftId)
+        val rightRev = bomRepository.findRevisionById(rightId) ?: throw NotFoundException("bom_revision", rightId)
+        val leftLines = bomRepository.listBomLinesByRevision(leftId).associateBy { it.childNomenclatureId }
+        val rightLines = bomRepository.listBomLinesByRevision(rightId).associateBy { it.childNomenclatureId }
+        val allIds = (leftLines.keys + rightLines.keys).distinct()
+        val names = bomRepository.loadNomenclatureNames(allIds.toSet())
+        val items = allIds.map { nomId ->
+            val l = leftLines[nomId]
+            val r = rightLines[nomId]
+            val info = names[nomId] ?: ("?" to "?")
+            val lQty = l?.quantity?.stripTrailingZeros()?.toPlainString()
+            val rQty = r?.quantity?.stripTrailingZeros()?.toPlainString()
+            val kind = when {
+                l == null -> BomDiffKind.ADDED
+                r == null -> BomDiffKind.REMOVED
+                lQty != rQty || l.position != r.position -> BomDiffKind.CHANGED
+                else -> BomDiffKind.UNCHANGED
+            }
+            BomRevisionDiffLineDto(
+                kind = kind,
+                childNomenclatureId = nomId,
+                code = info.first,
+                name = info.second,
+                unit = (r ?: l)!!.unit,
+                leftQuantity = lQty,
+                rightQuantity = rQty,
+                leftPosition = l?.position,
+                rightPosition = r?.position
+            )
+        }
+        return BomRevisionDiffDto(
+            leftRevisionId = leftRev.id,
+            leftRevisionNumber = leftRev.revisionNumber,
+            rightRevisionId = rightRev.id,
+            rightRevisionNumber = rightRev.revisionNumber,
+            items = items
+        )
+    }
+
+    fun whereUsed(nomenclatureId: Long, currentUser: CurrentUser): List<BomWhereUsedItemDto> {
+        currentUser.requirePermission("bom", "read_any")
+        val bl = org.example.project.generated.jooq.tables.BomLines.BOM_LINES
+        val pr = org.example.project.generated.jooq.tables.ProductRevisions.PRODUCT_REVISIONS
+        val pm = org.example.project.generated.jooq.tables.ProductModels.PRODUCT_MODELS
+        return dsl.select(
+            pm.ID, pm.CODE, pm.NAME,
+            pr.ID, pr.REVISION_NUMBER, pr.STATUS,
+            bl.ID, bl.QUANTITY, bl.UNIT, bl.LEVEL, bl.POSITION
+        )
+            .from(bl)
+            .join(pr).on(pr.ID.eq(bl.REVISION_ID))
+            .join(pm).on(pm.ID.eq(pr.PRODUCT_MODEL_ID))
+            .where(bl.CHILD_NOMENCLATURE_ID.eq(nomenclatureId))
+            .orderBy(pm.CODE.asc(), pr.ID.desc())
+            .fetch { row ->
+                BomWhereUsedItemDto(
+                    productModelId = row.get(pm.ID)!!,
+                    modelCode = row.get(pm.CODE)!!,
+                    modelName = row.get(pm.NAME)!!,
+                    revisionId = row.get(pr.ID)!!,
+                    revisionNumber = row.get(pr.REVISION_NUMBER)!!,
+                    revisionStatus = BomRevisionStatus.valueOf(row.get(pr.STATUS)!!),
+                    lineId = row.get(bl.ID)!!,
+                    quantity = row.get(bl.QUANTITY)!!.stripTrailingZeros().toPlainString(),
+                    unit = row.get(bl.UNIT)!!,
+                    level = row.get(bl.LEVEL)!!,
+                    position = row.get(bl.POSITION)
+                )
+            }
+    }
+
     // --- Explosion ---
 
     fun explodeRevision(

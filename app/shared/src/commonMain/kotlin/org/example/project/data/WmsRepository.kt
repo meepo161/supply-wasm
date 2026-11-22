@@ -60,6 +60,23 @@ interface WmsRepository {
     suspend fun getNomenclatureDetails(id: Long): ApiResult<org.example.project.dto.NomenclatureDetailsDto>
     suspend fun createNomenclature(request: CreateNomenclatureRequest): ApiResult<NomenclatureDto>
     suspend fun archiveNomenclature(id: Long): ApiResult<NomenclatureDto>
+    suspend fun updateNomenclatureThresholds(
+        id: Long,
+        request: org.example.project.dto.UpdateNomenclatureThresholdsRequest
+    ): ApiResult<NomenclatureDto> = ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
+    suspend fun findByBarcode(code: String): ApiResult<NomenclatureDto> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
+    suspend fun addBarcode(
+        id: Long,
+        request: org.example.project.dto.CreateNomenclatureBarcodeRequest
+    ): ApiResult<NomenclatureDto> = ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
+    suspend fun listAnalogs(id: Long): ApiResult<List<org.example.project.dto.NomenclatureAnalogDto>> =
+        ApiResult.Success(emptyList())
+    suspend fun createAnalog(
+        id: Long,
+        request: org.example.project.dto.CreateNomenclatureAnalogRequest
+    ): ApiResult<List<org.example.project.dto.NomenclatureAnalogDto>> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
 
     suspend fun getStock(warehouseId: Long?, nomenclatureId: Long?): ApiResult<List<StockBalanceDto>>
 
@@ -71,6 +88,24 @@ interface WmsRepository {
     suspend fun createReceipt(request: CreateReceiptRequest): ApiResult<ReceiptDto>
     suspend fun getReceipt(id: Long): ApiResult<ReceiptDto>
     suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto>
+    suspend fun getReceiptQc(receiptId: Long): ApiResult<org.example.project.dto.ReceiptQcDto> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
+    suspend fun inspectReceiptQc(
+        receiptId: Long,
+        request: org.example.project.dto.InspectReceiptQcRequest
+    ): ApiResult<org.example.project.dto.ReceiptQcDto> =
+        ApiResult.Error(org.example.project.dto.ApiError("NOT_IMPLEMENTED", "Not implemented"))
+    suspend fun listMovements(
+        warehouseId: Long? = null,
+        nomenclatureId: Long? = null,
+        type: String? = null,
+        limit: Int = 100
+    ): ApiResult<List<org.example.project.dto.StockMovementDto>> = ApiResult.Success(emptyList())
+    suspend fun listLowStock(): ApiResult<List<org.example.project.dto.LowStockItemDto>> = ApiResult.Success(emptyList())
+    suspend fun listLots(nomenclatureId: Long? = null): ApiResult<List<org.example.project.dto.LotDto>> =
+        ApiResult.Success(emptyList())
+    suspend fun listSerials(nomenclatureId: Long? = null): ApiResult<List<org.example.project.dto.SerialItemDto>> =
+        ApiResult.Success(emptyList())
 
     /** Поздняя связь проведённой приёмки с заказом или накладной. */
     suspend fun linkReceipt(id: Long, request: LinkReceiptRequest): ApiResult<ReceiptDto>

@@ -626,6 +626,61 @@ class ApplicationTest {
     }
 
     @Test
+    fun `admin resets user password and revokes active sessions`() = testApp {
+        val adminClient = jsonClient()
+        adminClient.post("/api/admin/bootstrap") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(BootstrapRequest("admin", "admin123", "Admin User")))
+        }
+        adminClient.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("admin", "admin123")))
+        }
+
+        val createResponse = adminClient.post("/api/users") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(CreateUserRequest("ivan", "password", "Ivan Ivanov")))
+        }
+        assertEquals(HttpStatusCode.Created, createResponse.status)
+        val created = createResponse.bodyAs<ApiResponse<UserDto>>().data!!
+
+        val ivanClient = jsonClient()
+        val firstLogin = ivanClient.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("ivan", "password")))
+        }
+        assertEquals(HttpStatusCode.OK, firstLogin.status)
+
+        // Обычный пользователь без права users:reset_password не может сбросить пароль.
+        val forbiddenReset = ivanClient.post("/api/users/${created.id}/reset-password") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(AdminResetPasswordRequest("newpass123", created.version)))
+        }
+        assertEquals(HttpStatusCode.Forbidden, forbiddenReset.status)
+
+        // Администратор сбрасывает пароль — активная сессия Ивана должна быть аннулирована.
+        val resetResponse = adminClient.post("/api/users/${created.id}/reset-password") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(AdminResetPasswordRequest("newpass123", created.version)))
+        }
+        assertEquals(HttpStatusCode.OK, resetResponse.status, resetResponse.bodyAsText())
+
+        assertEquals(HttpStatusCode.Unauthorized, ivanClient.get("/api/auth/me").status)
+
+        val oldLogin = ivanClient.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("ivan", "password")))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, oldLogin.status)
+
+        val newLogin = ivanClient.post("/api/auth/login") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(LoginRequest("ivan", "newpass123")))
+        }
+        assertEquals(HttpStatusCode.OK, newLogin.status)
+    }
+
+    @Test
     fun `user options require authentication`() = testApp {
         val response = jsonClient().get("/api/users/options")
         assertEquals(HttpStatusCode.Unauthorized, response.status)
@@ -648,7 +703,7 @@ class ApplicationTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

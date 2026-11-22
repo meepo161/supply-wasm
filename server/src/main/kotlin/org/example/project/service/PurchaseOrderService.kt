@@ -94,7 +94,6 @@ class PurchaseOrderService(
         return executeIdempotent(
             "PURCHASE_ORDER_CREATE", request.idempotencyKey, payload, HttpStatusCode.Created, currentUser
         ) {
-            dsl.transactionResult(TransactionalCallable {
                 val offer = purchaseRepository.lockOfferById(request.offerId)
                     ?: throw NotFoundException("supplier_offer", request.offerId)
                 // D-28: заказ возможен только по предложению, выбранному инициатором.
@@ -171,7 +170,6 @@ class PurchaseOrderService(
                     )
                 )
                 order.id to json.encodeToString(PurchaseOrderDto.serializer(), build(order))
-            })
         }
     }
 
@@ -333,7 +331,6 @@ class PurchaseOrderService(
         return executeIdempotent(
             "PURCHASE_ORDER_CANCEL", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
         ) {
-            dsl.transactionResult(TransactionalCallable {
                 val order = purchaseRepository.findOrderById(id)
                     ?: throw NotFoundException("purchase_order", id)
                 val cancelled = purchaseRepository.updateOrderStatus(
@@ -353,7 +350,6 @@ class PurchaseOrderService(
                     mapOf("number" to order.number, "reason" to request.reason.trim())
                 )
                 id to json.encodeToString(PurchaseOrderDto.serializer(), build(cancelled))
-            })
         }
     }
 
@@ -401,7 +397,6 @@ class PurchaseOrderService(
         return executeIdempotent(
             "PURCHASE_DELIVERY_CREATE", request.idempotencyKey, payload, HttpStatusCode.Created, currentUser
         ) {
-            dsl.transactionResult(TransactionalCallable {
                 val order = purchaseRepository.lockOrderById(orderId)
                     ?: throw NotFoundException("purchase_order", orderId)
                 if (order.status !in setOf("SENT", "PARTIALLY_DELIVERED")) {
@@ -495,7 +490,6 @@ class PurchaseOrderService(
                         }
                     )
                 )
-            })
         }
     }
 
@@ -512,7 +506,6 @@ class PurchaseOrderService(
         return executeIdempotent(
             "PURCHASE_DELIVERY_CANCEL", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
         ) {
-            dsl.transactionResult(TransactionalCallable {
                 val delivery = purchaseRepository.lockDeliveryById(id)
                     ?: throw NotFoundException("purchase_delivery", id)
                 if (delivery.status != "REGISTERED") {
@@ -561,7 +554,6 @@ class PurchaseOrderService(
                         line.toDto(nomenclature?.id, nomenclature?.name)
                     })
                 )
-            })
         }
     }
 
@@ -695,7 +687,6 @@ class PurchaseOrderService(
         return executeIdempotent(
             "PURCHASE_ORDER_$action", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
         ) {
-            dsl.transactionResult(TransactionalCallable {
                 val order = purchaseRepository.findOrderById(id)
                     ?: throw NotFoundException("purchase_order", id)
                 extraCheck(order)
@@ -725,7 +716,6 @@ class PurchaseOrderService(
                     mapOf("number" to order.number, "toStatus" to newStatus, "note" to request.note)
                 )
                 id to json.encodeToString(PurchaseOrderDto.serializer(), build(updated))
-            })
         }
     }
 

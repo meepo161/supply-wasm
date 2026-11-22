@@ -221,6 +221,45 @@ class ApprovalRepository(private val dsl: DSLContext) {
         ).map { mapRoute(it) }
     }
 
+    fun listMyQueueRoutes(userId: Long): List<RouteRow> {
+        return dsl.fetch(
+            """
+            $ROUTE_SELECT
+            WHERE status = 'ACTIVE'
+              AND EXISTS (
+                  SELECT 1
+                  FROM approval_route_stages rs
+                  JOIN approval_route_assignees a ON a.route_stage_id = rs.id
+                  WHERE rs.route_id = approval_routes.id
+                    AND rs.stage_no = approval_routes.current_stage_no
+                    AND rs.status = 'ACTIVE'
+                    AND (
+                        (a.assignee_type = 'USER' AND (
+                            a.user_id = ?
+                            OR EXISTS (
+                                SELECT 1 FROM delegations del
+                                WHERE del.delegator_id = a.user_id
+                                  AND del.delegate_id = ?
+                                  AND del.active = TRUE
+                                  AND del.starts_at <= NOW()
+                                  AND del.ends_at >= NOW()
+                            )
+                        ))
+                        OR (a.assignee_type = 'ROLE' AND EXISTS (
+                            SELECT 1 FROM user_roles ur WHERE ur.user_id = ? AND ur.role_id = a.role_id
+                        ))
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM approval_decisions d
+                        WHERE d.route_stage_id = rs.id AND d.decided_by = ?
+                    )
+              )
+            ORDER BY id DESC
+            """.trimIndent(),
+            userId, userId, userId, userId
+        ).map { mapRoute(it) }
+    }
+
     fun updateRouteState(
         id: Long,
         expectedVersion: Long,

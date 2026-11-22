@@ -6,7 +6,15 @@ import kotlinx.serialization.Serializable
 enum class SearchResultType {
     PROJECT,
     TASK,
-    USER
+    USER,
+    DOCUMENT,
+    NOMENCLATURE,
+    MESSAGE,
+    PURCHASE_ORDER,
+    DEMAND,
+    SUPPLIER,
+    RECEIPT,
+    PRODUCTION_ORDER
 }
 
 @Serializable
@@ -16,7 +24,8 @@ data class SearchResultItemDto(
     val number: String? = null,
     val title: String,
     val subtitle: String? = null,
-    val status: String? = null
+    val status: String? = null,
+    val parentId: Long? = null
 )
 
 @Serializable

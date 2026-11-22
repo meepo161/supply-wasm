@@ -82,6 +82,7 @@ fun HomeScreen(
         it.reviewerId == viewModel.currentUser.id && it.status == TaskStatus.ON_REVIEW
     }
     val unreadNotifications = state.notifications.filter { !it.isRead }
+    var reverseBlockOrder by remember { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val twoColumns = maxWidth >= 1180.dp
@@ -128,8 +129,36 @@ fun HomeScreen(
                 loading = state.isLoadingTasks
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                SoftButton(
+                    text = if (reverseBlockOrder) "Стандартный порядок блоков" else "Поменять порядок блоков",
+                    onClick = { reverseBlockOrder = !reverseBlockOrder }
+                )
+            }
+
             if (twoColumns) {
                 Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    if (reverseBlockOrder) {
+                        Column(
+                            modifier = Modifier.weight(0.88f),
+                            verticalArrangement = Arrangement.spacedBy(18.dp)
+                        ) {
+                            TaskSection(
+                                title = "Задачи на приёмке",
+                                subtitle = "Ожидают вашего решения",
+                                tasks = onReview,
+                                accent = Brand.Teal,
+                                glyph = ErpIconGlyph.CheckCircle,
+                                gradient = Gradients.Aurora,
+                                loading = state.isLoadingTasks,
+                                onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
+                                emptyText = "Нет задач, ожидающих вашей приёмки"
+                            )
+                        }
+                    }
                     Column(
                         modifier = Modifier.weight(1.12f),
                         verticalArrangement = Arrangement.spacedBy(18.dp)

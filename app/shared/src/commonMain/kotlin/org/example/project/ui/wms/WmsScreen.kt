@@ -1,34 +1,56 @@
 package org.example.project.ui.wms
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReceiptDto
@@ -36,9 +58,13 @@ import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.WarehouseDto
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
+import org.example.project.dto.StorageLocationPurpose
 import org.example.project.ui.components.SearchableDropdown
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpIcon
 import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GlassCard
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.PageHeader
 
@@ -57,36 +83,60 @@ fun WmsScreen(
             subtitle = "Склады, ячейки, остатки, приёмка, резервы, перемещения, выдача, возвраты, списания и инвентаризация"
         )
         Spacer(Modifier.height(10.dp))
-        ScrollableTabRow(
-            selectedTabIndex = WmsTab.entries.indexOf(state.selectedTab)
-        ) {
-            WmsTab.entries.forEach { tab ->
-                Tab(
-                    selected = state.selectedTab == tab,
-                    onClick = { viewModel.selectTab(tab) },
-                    text = { Text(tab.title) }
-                )
-            }
-        }
-
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 24.dp, vertical = 12.dp)
         ) {
-            when (state.selectedTab) {
-                WmsTab.WAREHOUSES -> WarehousesTab(state, viewModel)
-                WmsTab.LOCATIONS -> LocationsTab(state, viewModel)
-                WmsTab.NOMENCLATURE -> NomenclatureTab(state, viewModel)
-                WmsTab.STOCK -> StockTab(state, viewModel)
-                WmsTab.RECEIPTS -> ReceiptsTab(state, viewModel)
-                WmsTab.RESERVATIONS -> ReservationsTab(state, viewModel)
-                WmsTab.TRANSFERS -> TransfersTab(state, viewModel)
-                WmsTab.ISSUES -> IssuesTab(state, viewModel)
-                WmsTab.RETURNS -> ReturnsTab(state, viewModel)
-                WmsTab.WRITE_OFFS -> WriteOffsTab(state, viewModel)
-                WmsTab.INVENTORIES -> InventoriesTab(state, viewModel)
+            val isWide = maxWidth >= 780.dp
+            if (isWide) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    WmsVerticalNav(
+                        state = state,
+                        onSelectTab = viewModel::selectTab,
+                        modifier = Modifier
+                            .width(256.dp)
+                            .fillMaxHeight()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    ) {
+                        WmsTabContent(state, viewModel)
+                    }
+                }
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    ScrollableTabRow(
+                        selectedTabIndex = WmsTab.entries.indexOf(state.selectedTab),
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                        edgePadding = 12.dp
+                    ) {
+                        WmsTab.entries.forEach { tab ->
+                            val count = wmsTabCount(tab, state)
+                            val label = if (count > 0) "${tab.title} ($count)" else tab.title
+                            Tab(
+                                selected = state.selectedTab == tab,
+                                onClick = { viewModel.selectTab(tab) },
+                                text = { Text(label) }
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ) {
+                        WmsTabContent(state, viewModel)
+                    }
+                }
             }
         }
     }
@@ -223,11 +273,14 @@ internal fun TabHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = title, style = MaterialTheme.typography.headlineSmall)
-        Row {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onCreate) { Text(createLabel) }
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = onRefresh) { Text("Обновить") }
+            OutlinedButton(onClick = onRefresh) { Text("Обновить") }
         }
     }
 }
@@ -265,7 +318,10 @@ private fun WarehousesTab(
         } else {
             WarehousesGrid(
                 warehouses = state.warehouses,
-                onClick = { },
+                onClick = { warehouse ->
+                    viewModel.updateLocationFilterWarehouse(warehouse.id)
+                    viewModel.selectTab(WmsTab.LOCATIONS)
+                },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
@@ -306,7 +362,11 @@ private fun LocationsTab(
         } else {
             LocationsGrid(
                 locations = state.locations,
-                onClick = { },
+                onClick = { loc ->
+                    viewModel.updateStockFilters(state.stockFilters.copy(warehouseId = loc.warehouseId))
+                    viewModel.selectTab(WmsTab.STOCK)
+                    viewModel.loadStock()
+                },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
@@ -376,6 +436,14 @@ private fun NomenclatureDetailDialog(
     onRetry: () -> Unit,
     onClose: () -> Unit
 ) {
+    val wmsRepo: org.example.project.data.WmsRepository = koinInject()
+    val scope = rememberCoroutineScope()
+    var minStock by remember(item.id) { mutableStateOf(item.minStock) }
+    var safetyStock by remember(item.id) { mutableStateOf(item.safetyStock) }
+    var leadTimeDays by remember(item.id) { mutableStateOf(item.leadTimeDays.toString()) }
+    var newBarcode by remember(item.id) { mutableStateOf("") }
+    var localStatus by remember(item.id) { mutableStateOf<String?>(null) }
+
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("${item.code} — ${item.name}") },
@@ -388,6 +456,80 @@ private fun NomenclatureDetailDialog(
                 Text(text = "Единица измерения: ${item.unit}", style = MaterialTheme.typography.bodyMedium)
                 Text(text = "Статус: ${if (item.archived) "Архив" else "Активна"}")
                 item.description?.takeIf { it.isNotBlank() }?.let { Text(it) }
+                localStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                HorizontalDivider()
+                Text("Пороги запаса и срок поставки", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = minStock,
+                        onValueChange = { minStock = it },
+                        label = { Text("Мин. запас") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = safetyStock,
+                        onValueChange = { safetyStock = it },
+                        label = { Text("Страх. запас") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = leadTimeDays,
+                        onValueChange = { leadTimeDays = it },
+                        label = { Text("Срок (дн)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Button(onClick = {
+                    scope.launch {
+                        val res = wmsRepo.updateNomenclatureThresholds(
+                            item.id,
+                            org.example.project.dto.UpdateNomenclatureThresholdsRequest(
+                                minStock = minStock.trim().ifEmpty { "0" },
+                                safetyStock = safetyStock.trim().ifEmpty { "0" },
+                                leadTimeDays = leadTimeDays.trim().toIntOrNull() ?: 0,
+                                version = item.version
+                            )
+                        )
+                        localStatus = when (res) {
+                            is org.example.project.data.ApiResult.Success -> "Пороги обновлены"
+                            is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.message}"
+                        }
+                    }
+                }) { Text("Сохранить пороги") }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newBarcode,
+                        onValueChange = { newBarcode = it },
+                        label = { Text("Новый штрихкод") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(onClick = {
+                        val code = newBarcode.trim()
+                        if (code.isNotEmpty()) {
+                            scope.launch {
+                                val res = wmsRepo.addBarcode(
+                                    item.id,
+                                    org.example.project.dto.CreateNomenclatureBarcodeRequest(barcode = code)
+                                )
+                                localStatus = when (res) {
+                                    is org.example.project.data.ApiResult.Success -> {
+                                        newBarcode = ""
+                                        "Штрихкод $code добавлен"
+                                    }
+                                    is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.message}"
+                                }
+                            }
+                        }
+                    }) { Text("Добавить") }
+                }
                 if (item.barcodes.isNotEmpty()) {
                     Text("Штрихкоды", style = MaterialTheme.typography.titleSmall)
                     item.barcodes.forEach { barcode ->
@@ -396,6 +538,56 @@ private fun NomenclatureDetailDialog(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
+                }
+                var analogs by remember(item.id) {
+                    mutableStateOf<List<org.example.project.dto.NomenclatureAnalogDto>>(emptyList())
+                }
+                var analogIdInput by remember(item.id) { mutableStateOf("") }
+                androidx.compose.runtime.LaunchedEffect(item.id) {
+                    val res = wmsRepo.listAnalogs(item.id)
+                    if (res is org.example.project.data.ApiResult.Success<*>) {
+                        analogs = (res as org.example.project.data.ApiResult.Success<List<org.example.project.dto.NomenclatureAnalogDto>>).data
+                    }
+                }
+                HorizontalDivider()
+                Text("Аналоги (${analogs.size})", style = MaterialTheme.typography.titleSmall)
+                analogs.forEach { a ->
+                    Text(
+                        text = "${a.analogCode} — ${a.analogName} (коэф. ${a.conversionFactor})",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = analogIdInput,
+                        onValueChange = { analogIdInput = it },
+                        label = { Text("ID аналога") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(onClick = {
+                        val aId = analogIdInput.trim().toLongOrNull()
+                        if (aId != null) {
+                            scope.launch {
+                                val res = wmsRepo.createAnalog(
+                                    item.id,
+                                    org.example.project.dto.CreateNomenclatureAnalogRequest(analogNomenclatureId = aId)
+                                )
+                                when (res) {
+                                    is org.example.project.data.ApiResult.Success<*> -> {
+                                        analogs = (res as org.example.project.data.ApiResult.Success<List<org.example.project.dto.NomenclatureAnalogDto>>).data
+                                        analogIdInput = ""
+                                        localStatus = "Аналог #$aId добавлен"
+                                    }
+                                    is org.example.project.data.ApiResult.Error -> localStatus = "Ошибка: ${res.error.message}"
+                                }
+                            }
+                        }
+                    }) { Text("Аналог") }
                 }
                 if (loading) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -501,11 +693,64 @@ private fun StockTab(
     state: WmsUiState,
     viewModel: WmsViewModel
 ) {
+    var filterOnlyAvailable by remember { mutableStateOf(false) }
+    var filterQuarantineOnly by remember { mutableStateOf(false) }
+    val filteredStock = remember(state.stock, filterOnlyAvailable, filterQuarantineOnly) {
+        state.stock.filter { item ->
+            val availOk = !filterOnlyAvailable || (item.availableQty.toDoubleOrNull() ?: 0.0) > 0.0
+            val quarantineOk = !filterQuarantineOnly || item.locationPurpose in setOf(
+                StorageLocationPurpose.QUARANTINE,
+                StorageLocationPurpose.DEFECT,
+                StorageLocationPurpose.TEMPORARY
+            )
+            availOk && quarantineOk
+        }
+    }
+    val totalPhysical = remember(filteredStock) { filteredStock.sumOf { it.physicalQty.toDoubleOrNull() ?: 0.0 } }
+    val totalReserved = remember(filteredStock) { filteredStock.sumOf { it.reservedQty.toDoubleOrNull() ?: 0.0 } }
+    val totalAvailable = remember(filteredStock) { filteredStock.sumOf { it.availableQty.toDoubleOrNull() ?: 0.0 } }
+    val quarantineCount = remember(state.stock) {
+        state.stock.count { it.locationPurpose == StorageLocationPurpose.QUARANTINE || it.locationPurpose == StorageLocationPurpose.DEFECT }
+    }
+
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(text = "Остатки", style = MaterialTheme.typography.headlineSmall)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Остатки на складе", style = MaterialTheme.typography.headlineSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    viewModel.selectTab(WmsTab.RESERVATIONS)
+                    viewModel.showDialog(WmsDialog.CreateReservation)
+                }) { Text("Резерв") }
+                OutlinedButton(onClick = {
+                    viewModel.selectTab(WmsTab.TRANSFERS)
+                    viewModel.showDialog(WmsDialog.CreateTransfer)
+                }) { Text("Перемещение") }
+                OutlinedButton(onClick = {
+                    viewModel.selectTab(WmsTab.ISSUES)
+                    viewModel.showDialog(WmsDialog.CreateIssue)
+                }) { Text("Выдача") }
+            }
+        }
+
+        // Сводка по остаткам (KPI)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            StockKpiCard("Позиций", "${filteredStock.size}", Brand.Blue, Modifier.weight(1f))
+            StockKpiCard("Физически", formatQtyShort(totalPhysical), Brand.Indigo, Modifier.weight(1f))
+            StockKpiCard("В резерве", formatQtyShort(totalReserved), Brand.Amber, Modifier.weight(1f))
+            StockKpiCard("Доступно", formatQtyShort(totalAvailable), Brand.Teal, Modifier.weight(1f))
+            StockKpiCard("Карантин / брак", "$quarantineCount", if (quarantineCount > 0) Brand.Rose else Brand.Graphite, Modifier.weight(1f))
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -514,31 +759,91 @@ private fun StockTab(
             WarehouseDropdown(
                 warehouses = state.warehouses,
                 selected = state.warehouses.find { it.id == state.stockFilters.warehouseId },
-                onSelect = { viewModel.updateStockFilters(state.stockFilters.copy(warehouseId = it.id)) },
+                onSelect = {
+                    viewModel.updateStockFilters(state.stockFilters.copy(warehouseId = it.id))
+                    viewModel.loadStock()
+                },
                 label = "Склад",
                 modifier = Modifier.weight(1f)
             )
             NomenclatureDropdown(
                 items = state.nomenclature,
                 selected = state.nomenclature.find { it.id == state.stockFilters.nomenclatureId },
-                onSelect = { viewModel.updateStockFilters(state.stockFilters.copy(nomenclatureId = it.id)) },
+                onSelect = {
+                    viewModel.updateStockFilters(state.stockFilters.copy(nomenclatureId = it.id))
+                    viewModel.loadStock()
+                },
                 label = "Номенклатура",
                 modifier = Modifier.weight(1f)
             )
-            Button(onClick = viewModel::loadStock) { Text("Применить") }
+            Button(onClick = viewModel::loadStock) { Text("Обновить") }
+            OutlinedButton(onClick = {
+                filterOnlyAvailable = false
+                filterQuarantineOnly = false
+                viewModel.updateStockFilters(StockFilters())
+                viewModel.loadStock()
+            }) { Text("Сбросить") }
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = filterOnlyAvailable,
+                onClick = { filterOnlyAvailable = !filterOnlyAvailable },
+                label = { Text("Только доступные к резерву") }
+            )
+            FilterChip(
+                selected = filterQuarantineOnly,
+                onClick = { filterQuarantineOnly = !filterQuarantineOnly },
+                label = { Text("Карантин / брак ($quarantineCount)") }
+            )
+            if (state.lowStock.isNotEmpty()) {
+                TextButton(onClick = { viewModel.selectTab(WmsTab.MOVEMENTS) }) {
+                    Text("Ниже минимума: ${state.lowStock.size}", color = Brand.Rose)
+                }
+            }
+        }
+
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.stock.isEmpty()) {
             LoadingOverlay()
-        } else if (state.stock.isEmpty()) {
-            EmptyState("Остатки не найдены. Выберите фильтры и нажмите «Применить».")
+        } else if (filteredStock.isEmpty()) {
+            EmptyState("Остатки не найдены. Выберите фильтры или сбросьте ограничения.")
         } else {
             StockGrid(
-                stock = state.stock,
+                stock = filteredStock,
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
     }
+}
+
+@Composable
+private fun StockKpiCard(
+    title: String,
+    value: String,
+    accent: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium,
+        color = accent.copy(alpha = 0.08f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = value, style = MaterialTheme.typography.titleMedium, color = accent)
+        }
+    }
+}
+
+private fun formatQtyShort(value: Double): String {
+    val rounded = kotlin.math.round(value * 100.0) / 100.0
+    val asLong = rounded.toLong()
+    return if (rounded == asLong.toDouble()) asLong.toString() else rounded.toString()
 }
 
 @Composable
@@ -810,11 +1115,79 @@ private fun ReceiptDetailCard(
                     )
                 }
             }
+            val wmsRepoForQc: org.example.project.data.WmsRepository = koinInject()
+            val qcScope = rememberCoroutineScope()
+            var showQcDialog by remember(receipt.id) { mutableStateOf(false) }
+            var qcInfo by remember(receipt.id) { mutableStateOf<org.example.project.dto.ReceiptQcDto?>(null) }
+            var qcStatusMsg by remember(receipt.id) { mutableStateOf<String?>(null) }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
                     Button(onClick = onPost) { Text("Провести") }
                 }
+                if (receipt.status == ReceiptStatus.POSTED) {
+                    Button(onClick = {
+                        showQcDialog = true
+                        qcScope.launch {
+                            when (val res = wmsRepoForQc.getReceiptQc(receipt.id)) {
+                                is org.example.project.data.ApiResult.Success -> qcInfo = res.data
+                                is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.message
+                            }
+                        }
+                    }) { Text("Контроль ОТК") }
+                }
                 TextButton(onClick = onClose) { Text("К списку") }
+            }
+            if (showQcDialog) {
+                var qcComment by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { showQcDialog = false },
+                    title = { Text("Входной контроль ОТК (${receipt.number})") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            qcInfo?.let { qc ->
+                                Text("Статус ОТК: ${qc.status.name}")
+                            }
+                            qcStatusMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            OutlinedTextField(
+                                value = qcComment,
+                                onValueChange = { qcComment = it },
+                                label = { Text("Комментарий ОТК") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            qcScope.launch {
+                                val lines = receipt.lines.map { line ->
+                                    org.example.project.dto.ReceiptQcLineInput(
+                                        receiptLineId = line.id,
+                                        acceptedQty = line.receivedQuantity
+                                    )
+                                }
+                                val res = wmsRepoForQc.inspectReceiptQc(
+                                    receipt.id,
+                                    org.example.project.dto.InspectReceiptQcRequest(
+                                        comment = qcComment.ifBlank { null },
+                                        lines = lines
+                                    )
+                                )
+                                when (res) {
+                                    is org.example.project.data.ApiResult.Success -> {
+                                        qcInfo = res.data
+                                        qcStatusMsg = "ОТК проведён: ${res.data.status.name}"
+                                    }
+                                    is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.message
+                                }
+                            }
+                        }) { Text("Принять всё (ОТК)") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showQcDialog = false }) { Text("Закрыть") }
+                    }
+                )
             }
             // Поздняя связь: заказ и накладная могут появиться после приёмки.
             // К заказу поставщику привязываются только приёмки по заказу, счёту
@@ -968,10 +1341,286 @@ internal fun EmptyState(text: String, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
+        GlassCard(modifier = Modifier.padding(24.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                org.example.project.ui.theme.ErpIcon(
+                    glyph = ErpIconGlyph.Warehouse,
+                    tint = Brand.Teal
+                )
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        state.operationError?.let { ErrorMessageCard(it) }
+        GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 12.dp) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = state.barcodeQuery,
+                    onValueChange = viewModel::updateBarcodeQuery,
+                    label = { Text("Поиск по штрихкоду / артикулу") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = viewModel::lookupBarcode) { Text("Найти") }
+                TextButton(onClick = viewModel::loadMovementsAndLowStock) { Text("Обновить") }
+            }
+            state.barcodeResult?.let { nom ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Найдено: ${nom.code} — ${nom.name} (${nom.unit})",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+        Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight(), contentPadding = 12.dp) {
+                Text("Журнал движений (${state.movements.size})", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                if (state.movements.isEmpty()) {
+                    Text("Движений пока нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(state.movements.size) { i ->
+                            val m = state.movements[i]
+                            Text(
+                                text = "${m.type.name} • ном. #${m.nomenclatureId} • кол-во ${m.quantity} (${m.documentType} #${m.documentId})",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight(), contentPadding = 12.dp) {
+                Text("Ниже минимума / дефицит (${state.lowStock.size})", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                if (state.lowStock.isEmpty()) {
+                    Text("Дефицита не выявлено.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(state.lowStock.size) { i ->
+                            val l = state.lowStock[i]
+                            Text(
+                                text = "${l.code} ${l.name}: остаток ${l.availableQty} ${l.unit}, мин. ${l.minStock}, дефицит ${l.deficitQty}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WmsTabContent(state: WmsUiState, viewModel: WmsViewModel) {
+    when (state.selectedTab) {
+        WmsTab.WAREHOUSES -> WarehousesTab(state, viewModel)
+        WmsTab.LOCATIONS -> LocationsTab(state, viewModel)
+        WmsTab.NOMENCLATURE -> NomenclatureTab(state, viewModel)
+        WmsTab.STOCK -> StockTab(state, viewModel)
+        WmsTab.RECEIPTS -> ReceiptsTab(state, viewModel)
+        WmsTab.RESERVATIONS -> ReservationsTab(state, viewModel)
+        WmsTab.TRANSFERS -> TransfersTab(state, viewModel)
+        WmsTab.ISSUES -> IssuesTab(state, viewModel)
+        WmsTab.RETURNS -> ReturnsTab(state, viewModel)
+        WmsTab.WRITE_OFFS -> WriteOffsTab(state, viewModel)
+        WmsTab.INVENTORIES -> InventoriesTab(state, viewModel)
+        WmsTab.MOVEMENTS -> MovementsAndReportsTab(state, viewModel)
+    }
+}
+
+private fun wmsTabCount(tab: WmsTab, state: WmsUiState): Int = when (tab) {
+    WmsTab.WAREHOUSES -> state.warehouses.size
+    WmsTab.LOCATIONS -> state.locations.size
+    WmsTab.NOMENCLATURE -> state.nomenclature.size
+    WmsTab.STOCK -> state.stock.size
+    WmsTab.RECEIPTS -> state.receipts.size
+    WmsTab.RESERVATIONS -> state.reservations.size
+    WmsTab.TRANSFERS -> state.transfers.size
+    WmsTab.ISSUES -> state.issues.size
+    WmsTab.RETURNS -> state.returns.size
+    WmsTab.WRITE_OFFS -> state.writeOffs.size
+    WmsTab.INVENTORIES -> state.inventories.size
+    WmsTab.MOVEMENTS -> state.lowStock.size
+}
+
+private data class WmsNavEntry(
+    val tab: WmsTab,
+    val glyph: ErpIconGlyph,
+    val accent: Color
+)
+
+@Composable
+private fun WmsVerticalNav(
+    state: WmsUiState,
+    onSelectTab: (WmsTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    GlassCard(modifier = modifier, contentPadding = 12.dp) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            WmsNavSection(
+                title = "Учёт и остатки",
+                items = listOf(
+                    WmsNavEntry(WmsTab.STOCK, ErpIconGlyph.CheckCircle, Brand.Teal),
+                    WmsNavEntry(WmsTab.RESERVATIONS, ErpIconGlyph.Clock, Brand.Amber),
+                    WmsNavEntry(WmsTab.MOVEMENTS, ErpIconGlyph.TrendUp, Brand.Indigo)
+                ),
+                selectedTab = state.selectedTab,
+                state = state,
+                onSelect = onSelectTab
+            )
+            WmsNavSection(
+                title = "Операции",
+                items = listOf(
+                    WmsNavEntry(WmsTab.RECEIPTS, ErpIconGlyph.Plus, Brand.Blue),
+                    WmsNavEntry(WmsTab.TRANSFERS, ErpIconGlyph.Send, Brand.Indigo),
+                    WmsNavEntry(WmsTab.ISSUES, ErpIconGlyph.ChevronRight, Brand.Teal),
+                    WmsNavEntry(WmsTab.RETURNS, ErpIconGlyph.Refresh, Brand.Violet),
+                    WmsNavEntry(WmsTab.WRITE_OFFS, ErpIconGlyph.Alert, Brand.Rose),
+                    WmsNavEntry(WmsTab.INVENTORIES, ErpIconGlyph.Documents, Brand.Blue)
+                ),
+                selectedTab = state.selectedTab,
+                state = state,
+                onSelect = onSelectTab
+            )
+            WmsNavSection(
+                title = "Справочники",
+                items = listOf(
+                    WmsNavEntry(WmsTab.WAREHOUSES, ErpIconGlyph.Warehouse, Brand.Teal),
+                    WmsNavEntry(WmsTab.LOCATIONS, ErpIconGlyph.Grid, Brand.Blue),
+                    WmsNavEntry(WmsTab.NOMENCLATURE, ErpIconGlyph.Layers, Brand.Amber)
+                ),
+                selectedTab = state.selectedTab,
+                state = state,
+                onSelect = onSelectTab
+            )
+        }
+    }
+}
+
+@Composable
+private fun WmsNavSection(
+    title: String,
+    items: List<WmsNavEntry>,
+    selectedTab: WmsTab,
+    state: WmsUiState,
+    onSelect: (WmsTab) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
         )
+        items.forEach { entry ->
+            WmsNavItemRow(
+                entry = entry,
+                selected = selectedTab == entry.tab,
+                count = wmsTabCount(entry.tab, state),
+                alertCount = entry.tab == WmsTab.MOVEMENTS && state.lowStock.isNotEmpty(),
+                onClick = { onSelect(entry.tab) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun WmsNavItemRow(
+    entry: WmsNavEntry,
+    selected: Boolean,
+    count: Int,
+    alertCount: Boolean,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(12.dp)
+
+    val bgModifier = when {
+        selected -> Modifier.background(
+            Brush.linearGradient(
+                listOf(
+                    entry.accent.copy(alpha = 0.16f),
+                    entry.accent.copy(alpha = 0.08f)
+                )
+            )
+        ).border(1.dp, entry.accent.copy(alpha = 0.35f), shape)
+        hovered -> Modifier.background(scheme.onSurface.copy(alpha = 0.06f))
+        else -> Modifier
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .then(bgModifier)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    if (selected) entry.accent.copy(alpha = 0.22f)
+                    else scheme.onSurface.copy(alpha = 0.06f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            ErpIcon(
+                glyph = entry.glyph,
+                tint = if (selected) entry.accent else scheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Text(
+            text = entry.tab.title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (selected) entry.accent else scheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        if (count > 0) {
+            val badgeColor = if (alertCount) Brand.Rose else if (selected) entry.accent else scheme.onSurfaceVariant
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = badgeColor.copy(alpha = if (selected || alertCount) 0.16f else 0.10f)
+            ) {
+                Text(
+                    text = "$count",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = badgeColor,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+        }
     }
 }

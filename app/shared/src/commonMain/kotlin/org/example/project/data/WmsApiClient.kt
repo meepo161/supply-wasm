@@ -85,6 +85,35 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
     override suspend fun archiveNomenclature(id: Long): ApiResult<NomenclatureDto> =
         post("/api/wms/nomenclature/$id/archive")
 
+    override suspend fun updateNomenclatureThresholds(
+        id: Long,
+        request: org.example.project.dto.UpdateNomenclatureThresholdsRequest
+    ): ApiResult<NomenclatureDto> =
+        execute {
+            client.put("/api/wms/nomenclature/$id/thresholds") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+        }
+
+    override suspend fun findByBarcode(code: String): ApiResult<NomenclatureDto> =
+        get("/api/wms/nomenclature/by-barcode/$code")
+
+    override suspend fun addBarcode(
+        id: Long,
+        request: org.example.project.dto.CreateNomenclatureBarcodeRequest
+    ): ApiResult<NomenclatureDto> =
+        post("/api/wms/nomenclature/$id/barcodes", request)
+
+    override suspend fun listAnalogs(id: Long): ApiResult<List<org.example.project.dto.NomenclatureAnalogDto>> =
+        get("/api/wms/nomenclature/$id/analogs")
+
+    override suspend fun createAnalog(
+        id: Long,
+        request: org.example.project.dto.CreateNomenclatureAnalogRequest
+    ): ApiResult<List<org.example.project.dto.NomenclatureAnalogDto>> =
+        post("/api/wms/nomenclature/$id/analogs", request)
+
     override suspend fun getStock(warehouseId: Long?, nomenclatureId: Long?): ApiResult<List<StockBalanceDto>> =
         getWithParams(
             path = "/api/wms/stock",
@@ -114,6 +143,41 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
 
     override suspend fun postReceipt(id: Long, request: PostReceiptRequest): ApiResult<ReceiptDto> =
         post("/api/wms/receipts/$id/post", request)
+
+    override suspend fun getReceiptQc(receiptId: Long): ApiResult<org.example.project.dto.ReceiptQcDto> =
+        get("/api/wms/receipts/$receiptId/qc")
+
+    override suspend fun inspectReceiptQc(
+        receiptId: Long,
+        request: org.example.project.dto.InspectReceiptQcRequest
+    ): ApiResult<org.example.project.dto.ReceiptQcDto> =
+        post("/api/wms/receipts/$receiptId/qc", request)
+
+    override suspend fun listMovements(
+        warehouseId: Long?,
+        nomenclatureId: Long?,
+        type: String?,
+        limit: Int
+    ): ApiResult<List<org.example.project.dto.StockMovementDto>> {
+        val params = buildMap {
+            warehouseId?.let { put("warehouseId", it.toString()) }
+            nomenclatureId?.let { put("nomenclatureId", it.toString()) }
+            type?.takeIf { it.isNotBlank() }?.let { put("type", it) }
+            put("limit", limit.toString())
+        }
+        return getWithParams("/api/wms/movements", params)
+    }
+
+    override suspend fun listLowStock(): ApiResult<List<org.example.project.dto.LowStockItemDto>> =
+        get("/api/wms/reports/low-stock")
+
+    override suspend fun listLots(nomenclatureId: Long?): ApiResult<List<org.example.project.dto.LotDto>> =
+        if (nomenclatureId != null) getWithParams("/api/wms/lots", mapOf("nomenclatureId" to nomenclatureId.toString()))
+        else get("/api/wms/lots")
+
+    override suspend fun listSerials(nomenclatureId: Long?): ApiResult<List<org.example.project.dto.SerialItemDto>> =
+        if (nomenclatureId != null) getWithParams("/api/wms/serials", mapOf("nomenclatureId" to nomenclatureId.toString()))
+        else get("/api/wms/serials")
 
     override suspend fun linkReceipt(id: Long, request: LinkReceiptRequest): ApiResult<ReceiptDto> =
         post("/api/wms/receipts/$id/links", request)

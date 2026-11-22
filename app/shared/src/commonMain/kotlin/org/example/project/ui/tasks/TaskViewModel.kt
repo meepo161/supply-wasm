@@ -888,7 +888,7 @@ class TaskViewModel(
             val cursor = chatEventCursors.getOrPut(taskId) { TaskChatEventCursor() }
             while (isActive && isChatGenerationCurrent(taskId, generation)) {
                 try {
-                    catchUpChat(taskId, generation)
+                    if (!isChatGenerationCurrent(taskId, generation)) break
                     val parameters = cursor.parameters()
                     chatRepository.observeEvents(
                         taskId,
@@ -923,8 +923,19 @@ class TaskViewModel(
                 } catch (e: Exception) {
                     // сетевой разрыв: переподключение с backoff, догон истории по курсору
                 }
+                if (!isChatGenerationCurrent(taskId, generation)) break
                 attempt++
                 reconnectDelay(reconnectDelayMs(attempt))
+                if (!isChatGenerationCurrent(taskId, generation)) break
+                try {
+                    catchUpChat(taskId, generation)
+                } catch (e: ChatAccessRevokedException) {
+                    if (isChatGenerationCurrent(taskId, generation)) revokeTaskChatAccess(taskId)
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
             }
         }
     }
@@ -1408,14 +1419,16 @@ class TaskViewModel(
         return (CHAT_RECONNECT_BASE_MS shl shift).coerceAtMost(CHAT_RECONNECT_MAX_MS)
     }
 
-    private suspend fun refreshTaskQuiet(taskId: Long) {
-        when (val result = taskRepository.get(taskId)) {
-            is ApiResult.Success -> {
-                if (_uiState.value.selectedTask?.id == taskId) {
-                    _uiState.value = _uiState.value.copy(selectedTask = result.data)
+    private fun refreshTaskQuiet(taskId: Long) {
+        coroutineScope.launch {
+            when (val result = taskRepository.get(taskId)) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.selectedTask?.id == taskId) {
+                        _uiState.value = _uiState.value.copy(selectedTask = result.data)
+                    }
                 }
-            }
-            is ApiResult.Error -> { /* фоновое обновление не показывает ошибку */
+                is ApiResult.Error -> { /* фоновое обновление не показывает ошибку */
+                }
             }
         }
     }

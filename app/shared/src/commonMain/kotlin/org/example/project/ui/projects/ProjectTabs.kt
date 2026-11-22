@@ -209,7 +209,7 @@ private fun TabErrorCard(
 }
 
 @Composable
-private fun OverviewTab(
+internal fun OverviewTab(
     summary: ProjectSummaryDto?,
     planSummary: org.example.project.dto.ProjectPlanSummaryDto?,
     modifier: Modifier = Modifier

@@ -329,10 +329,10 @@ class ConversationExperienceRoutesTest {
         environment {
             config = HoconApplicationConfig(ConfigFactory.parseString(
                 """
-                ktor { deployment { port = 0 } application { modules = [org.example.project.ApplicationKt.module] } }
-                database { url = "jdbc:postgresql://localhost:5433/erp_test" user = "erp" password = "erp" }
-                session { ttlMinutes = 60 cookieName = "erp_session" }
-                security { allowedOrigins = "http://localhost:8080,http://localhost:8081" cookieSecure = false }
+                ktor { deployment { port = 0 }, application { modules = [org.example.project.ApplicationKt.module] } }
+                database { url = "${TestDatabase.TEST_URL}", user = "erp", password = "erp" }
+                session { ttlMinutes = 60, cookieName = "erp_session" }
+                security { allowedOrigins = "http://localhost:8080,http://localhost:8081", cookieSecure = false }
                 storage { path = "./.local/test-storage" }
                 """.trimIndent()
             ))

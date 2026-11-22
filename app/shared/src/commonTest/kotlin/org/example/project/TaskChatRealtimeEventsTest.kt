@@ -1,5 +1,7 @@
 package org.example.project
 
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.json.Json
 import org.example.project.data.AttachmentFileData
 import org.example.project.data.TaskChatRealtimeEvent
@@ -221,8 +223,20 @@ private class RevokingChatRepository(
         return if (connections == 1) {
             kotlinx.coroutines.flow.flow {
                 if (emitRealtimeMessage) emit(TaskChatRealtimeEvent.Message(message, eventId = 41))
-                realtimeExtra.collect { emit(it) }
-                networkRelease.await()
+                val buffer = kotlinx.coroutines.channels.Channel<TaskChatRealtimeEvent>(
+                    kotlinx.coroutines.channels.Channel.UNLIMITED
+                )
+                val forwarder = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
+                val sub = realtimeExtra.onEach { buffer.trySend(it) }.launchIn(forwarder)
+                val releaseSub = networkRelease.invokeOnCompletion { buffer.close() }
+                try {
+                    for (event in buffer) {
+                        emit(event)
+                    }
+                } finally {
+                    releaseSub.dispose()
+                    sub.cancel()
+                }
                 throw IllegalStateException("network")
             }
         } else if (connections == 2) {
@@ -280,7 +294,7 @@ class TaskViewModelRevocationTest {
         val task = revokeTask()
         val taskRepository = object : org.example.project.data.TaskRepository {
             override suspend fun list() = org.example.project.data.ApiResult.Success(emptyList<org.example.project.dto.TaskDto>())
-            override suspend fun get(id: Long) = org.example.project.data.ApiResult.Success(task)
+            override suspend fun get(id: Long) = org.example.project.data.ApiResult.Success(task.copy(id = id, number = "T-$id"))
             override suspend fun create(request: org.example.project.dto.CreateTaskRequest) = error("unused")
             override suspend fun assign(id: Long, request: org.example.project.dto.AssignTaskRequest) = error("unused")
             override suspend fun accept(id: Long, request: org.example.project.dto.TaskCommandRequest) = error("unused")
@@ -369,6 +383,7 @@ class TaskViewModelRevocationTest {
         chat.deferHistory = true
         viewModel.refreshChat(manual = true)
         viewModel.loadMoreNewer()
+        chat.deferHistory = false
         release.complete(Unit)
 
         assertEquals(2, chat.observed.size)

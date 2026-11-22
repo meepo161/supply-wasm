@@ -78,7 +78,23 @@ class TaskService(
                 )
             )
             task.toDto(loadParticipants(task.id))
-        })
+        }).also { created ->
+            val targetAssignee = created.assigneeId
+            if (targetAssignee != null && targetAssignee != currentUser.userId) {
+                notifyUser(targetAssignee, "TASK_ASSIGNED", "TASK", created.id, "Назначена задача ${created.number}: ${created.title}")
+            }
+        }
+    }
+
+    private fun notifyUser(userId: Long, type: String, entityType: String, entityId: Long, title: String) {
+        val n = org.example.project.generated.jooq.tables.Notifications.NOTIFICATIONS
+        dsl.insertInto(n)
+            .set(n.USER_ID, userId)
+            .set(n.TYPE, type)
+            .set(n.ENTITY_TYPE, entityType)
+            .set(n.ENTITY_ID, entityId)
+            .set(n.TITLE, title.take(250))
+            .execute()
     }
 
     fun get(id: Long, currentUser: CurrentUser): TaskDto {
@@ -136,7 +152,11 @@ class TaskService(
                 mapOf("assigneeId" to request.assigneeId)
             )
             updated.toDto(loadParticipants(id))
-        })
+        }).also { dto ->
+            if (request.assigneeId != currentUser.userId) {
+                notifyUser(request.assigneeId, "TASK_ASSIGNED", "TASK", id, "Назначена задача ${dto.number}: ${dto.title}")
+            }
+        }
     }
 
     fun accept(id: Long, request: TaskCommandRequest, currentUser: CurrentUser): TaskDto {
@@ -219,7 +239,12 @@ class TaskService(
             taskRepository.addStatusHistory(id, "ON_REVIEW", currentUser.userId, "SENT_TO_REVIEW")
             auditService.log(currentUser.userId, "SEND_TO_REVIEW", "TASK", id, emptyMap())
             updated.toDto(loadParticipants(id))
-        })
+        }).also { dto ->
+            val revId = task.reviewerId
+            if (revId != null && revId != currentUser.userId) {
+                notifyUser(revId, "TASK_REVIEW_REQUESTED", "TASK", id, "Задача ${dto.number} отправлена на проверку")
+            }
+        }
     }
 
     fun review(id: Long, request: ReviewTaskRequest, currentUser: CurrentUser): TaskDto {
@@ -247,7 +272,17 @@ class TaskService(
                 mapOf("reason" to request.reason)
             )
             updated.toDto(loadParticipants(id))
-        })
+        }).also { dto ->
+            val assId = task.assigneeId
+            if (assId != null && assId != currentUser.userId) {
+                val msg = if (request.decision == ReviewDecision.RETURN) {
+                    "Задача ${dto.number} возвращена на доработку"
+                } else {
+                    "Задача ${dto.number} принята"
+                }
+                notifyUser(assId, "TASK_REVIEWED", "TASK", id, msg)
+            }
+        }
     }
 
     fun closeWithoutReview(id: Long, request: TaskCommandRequest, currentUser: CurrentUser): TaskDto {

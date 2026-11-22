@@ -6,6 +6,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.example.project.dto.*
+import org.example.project.exception.ValidationException
 import org.example.project.plugins.RequireAuthPlugin
 import org.example.project.plugins.currentUser
 import org.example.project.plugins.requirePermission
@@ -29,7 +30,7 @@ fun Route.roleRoutes(roleService: RoleService) {
 
         get("/{id}") {
             call.requirePermission("roles", "read")
-            val id = call.parameters["id"]?.toLongOrNull() ?: throw IllegalArgumentException("Invalid role id")
+            val id = call.parameters["id"]?.toLongOrNull() ?: throw ValidationException("Invalid role id")
             call.respond(HttpStatusCode.OK, ApiResponse.success(roleService.get(id)))
         }
     }

@@ -176,6 +176,9 @@ data class NomenclatureDto(
     val unit: String,
     val lotTracked: Boolean = false,
     val serialTracked: Boolean = false,
+    val minStock: String = "0",
+    val safetyStock: String = "0",
+    val leadTimeDays: Int = 0,
     val archived: Boolean = false,
     val createdAt: String? = null,
     val createdBy: Long,
@@ -252,7 +255,55 @@ data class CreateNomenclatureRequest(
     val unit: String,
     val lotTracked: Boolean = false,
     val serialTracked: Boolean = false,
+    val minStock: String = "0",
+    val safetyStock: String = "0",
+    val leadTimeDays: Int = 0,
     val barcodes: List<CreateNomenclatureBarcodeRequest> = emptyList()
+)
+
+@Serializable
+data class UpdateNomenclatureThresholdsRequest(
+    val minStock: String = "0",
+    val safetyStock: String = "0",
+    val leadTimeDays: Int = 0,
+    val version: Long
+)
+
+@Serializable
+data class NomenclatureUnitConversionDto(
+    val id: Long,
+    val nomenclatureId: Long,
+    val fromUnit: String,
+    val toUnit: String,
+    val factor: String
+)
+
+@Serializable
+data class CreateUnitConversionRequest(
+    val fromUnit: String,
+    val toUnit: String,
+    val factor: String
+)
+
+@Serializable
+data class NomenclatureAnalogDto(
+    val id: Long,
+    val nomenclatureId: Long,
+    val analogNomenclatureId: Long,
+    val analogCode: String = "",
+    val analogName: String = "",
+    val conversionFactor: String = "1",
+    val applicabilityCondition: String? = null,
+    val priority: Int = 1,
+    val active: Boolean = true
+)
+
+@Serializable
+data class CreateNomenclatureAnalogRequest(
+    val analogNomenclatureId: Long,
+    val conversionFactor: String = "1",
+    val applicabilityCondition: String? = null,
+    val priority: Int = 1
 )
 
 @Serializable
@@ -270,7 +321,69 @@ data class StockBalanceDto(
     val physicalQty: String,
     val reservedQty: String,
     val availableQty: String,
+    val inTransitQty: String = "0",
     val version: Long = 0
+)
+
+@Serializable
+enum class ReceiptQcStatus {
+    PENDING,
+    PASSED,
+    PARTIAL,
+    FAILED
+}
+
+@Serializable
+data class ReceiptQcLineInput(
+    val receiptLineId: Long,
+    val acceptedQty: String,
+    val quarantineQty: String = "0",
+    val defectQty: String = "0",
+    val defectReason: String? = null
+)
+
+@Serializable
+data class InspectReceiptQcRequest(
+    val comment: String? = null,
+    val lines: List<ReceiptQcLineInput>
+)
+
+@Serializable
+data class ReceiptQcLineDto(
+    val id: Long,
+    val receiptLineId: Long,
+    val nomenclatureId: Long,
+    val nomenclatureCode: String,
+    val nomenclatureName: String,
+    val receivedQty: String,
+    val acceptedQty: String,
+    val quarantineQty: String,
+    val defectQty: String,
+    val defectReason: String? = null
+)
+
+@Serializable
+data class ReceiptQcDto(
+    val id: Long,
+    val receiptId: Long,
+    val status: ReceiptQcStatus,
+    val inspectorId: Long? = null,
+    val inspectedAt: String? = null,
+    val comment: String? = null,
+    val version: Long = 0,
+    val lines: List<ReceiptQcLineDto> = emptyList()
+)
+
+@Serializable
+data class LowStockItemDto(
+    val nomenclatureId: Long,
+    val code: String,
+    val name: String,
+    val unit: String,
+    val minStock: String,
+    val safetyStock: String,
+    val availableQty: String,
+    val deficitQty: String
 )
 
 @Serializable

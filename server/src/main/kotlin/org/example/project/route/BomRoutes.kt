@@ -139,5 +139,21 @@ fun Route.bomRoutes(bomService: BomService) {
             val report = bomService.explodeRevision(id, request, call.currentUser())
             call.respond(HttpStatusCode.OK, ApiResponse.success(report))
         }
+
+        // Diff
+        get("/revisions/{id}/diff") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid revision id")
+            val otherId = call.request.queryParameters["otherId"]?.toLongOrNull()
+                ?: throw ValidationException("otherId query parameter is required")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(bomService.diffRevisions(id, otherId, call.currentUser())))
+        }
+
+        // Where-used
+        get("/nomenclature/{id}/where-used") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(bomService.whereUsed(id, call.currentUser())))
+        }
     }
 }

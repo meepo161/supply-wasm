@@ -484,8 +484,8 @@ class AttachmentMessageRoutesTest {
         setBody(MultiPartFormDataContent(formData {
             append("content", content)
             append("idempotencyKey", idempotencyKey)
-            files.forEach { (name, _) ->
-                append("files", bytes(name to ""), fileHeaders(name, "text/plain"))
+            files.forEach { file ->
+                append("files", bytes(file), fileHeaders(file.first, "text/plain"))
             }
         }))
     }
@@ -635,7 +635,7 @@ class AttachmentMessageRoutesTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

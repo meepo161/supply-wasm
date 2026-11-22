@@ -133,7 +133,7 @@ class PushRoutesTest {
         createUser(admin, "member")
         val taskId = createTask(adminId)
         addParticipant(taskId, adminId, "INITIATOR")
-        addParticipant(taskId, currentUserId(login("member")), "OBSERVER")
+        addParticipant(taskId, currentUserId(login("member")), "ASSIGNEE")
         subscribe(admin)
 
         val member = login("member")
@@ -153,7 +153,7 @@ class PushRoutesTest {
         createUser(admin, "member")
         val taskId = createTask(adminId)
         addParticipant(taskId, adminId, "INITIATOR")
-        addParticipant(taskId, currentUserId(login("member")), "OBSERVER")
+        addParticipant(taskId, currentUserId(login("member")), "ASSIGNEE")
         subscribe(admin)
 
         val member = login("member")
@@ -189,7 +189,7 @@ class PushRoutesTest {
                     """
                     ktor { deployment { port = 0 } }
                     database {
-                      url = "jdbc:postgresql://localhost:5433/erp_test"
+                      url = "${TestDatabase.TEST_URL}"
                       user = "erp"
                       password = "erp"
                     }

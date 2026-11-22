@@ -12,9 +12,11 @@ import io.ktor.http.contentType
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
 import org.example.project.dto.BootstrapRequest
+import org.example.project.dto.ChangePasswordRequest
 import org.example.project.dto.LoginRequest
 import org.example.project.dto.LoginResponse
 import org.example.project.dto.MeResponse
+import org.example.project.dto.UserDto
 
 class AuthApiClient(private val client: HttpClient) : AuthRepository {
 
@@ -29,6 +31,9 @@ class AuthApiClient(private val client: HttpClient) : AuthRepository {
 
     override suspend fun bootstrap(request: BootstrapRequest): ApiResult<LoginResponse> =
         post("/api/admin/bootstrap", request)
+
+    override suspend fun changePassword(request: ChangePasswordRequest): ApiResult<UserDto> =
+        post("/api/auth/password", request)
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         try {

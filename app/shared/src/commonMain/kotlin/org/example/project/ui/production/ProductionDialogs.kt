@@ -12,15 +12,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.DetailRow
 import org.example.project.ui.theme.ErpDialog
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.ErpTextField
+import org.example.project.ui.theme.GradientButton
+import org.example.project.ui.theme.GradientSpinner
 import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.PillBadge
+import org.example.project.ui.theme.SectionHeader
 import org.example.project.ui.theme.SoftButton
 
 @Composable
@@ -35,6 +43,9 @@ fun ProductionDialogs(
         ProductionDialog.CompleteOrder -> CompleteOrderDialog(state, viewModel)
         ProductionDialog.HoldOrder -> HoldOrderDialog(state, viewModel)
         is ProductionDialog.SkipStage -> SkipStageDialog(dialog, state, viewModel)
+        is ProductionDialog.InstanceDetail -> InstanceDetailDialog(dialog, state, viewModel)
+        ProductionDialog.CreateEngineeringChange,
+        ProductionDialog.CreateNonconformity -> { }
     }
 }
 
@@ -287,6 +298,271 @@ private fun SkipStageDialog(
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+@Composable
+private fun InstanceDetailDialog(
+    dialog: ProductionDialog.InstanceDetail,
+    state: ProductionUiState,
+    viewModel: ProductionViewModel
+) {
+    val detail = state.selectedInstanceDetail
+    ErpDialog(
+        title = detail?.let { "Паспорт изделия ${it.serialNumber}" } ?: "Паспорт изделия #${dialog.instanceId}",
+        subtitle = detail?.let { listOfNotNull(it.productModelCode, it.productModelName).joinToString(" — ").ifBlank { null } },
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Ocean,
+        onDismiss = viewModel::dismissDialog,
+        confirmText = "Закрыть",
+        onConfirm = viewModel::dismissDialog,
+        confirmGradient = Gradients.Ocean,
+        width = 700.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 540.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+            if (state.isInstanceDetailLoading) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    GradientSpinner()
+                }
+            } else if (detail != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PillBadge(text = detail.status, accent = Brand.Teal)
+                    detail.orderNumber?.let { PillBadge(text = "Заказ $it", accent = Brand.Indigo) }
+                    if (detail.status != "ACCEPTED" && detail.status != "SHIPPED") {
+                        GradientButton(
+                            text = "Принять ОТК",
+                            onClick = { viewModel.acceptInstance(detail.id) },
+                            enabled = !state.isActionRunning,
+                            gradient = Gradients.Aurora,
+                            compact = true
+                        )
+                    }
+                    if (detail.status == "ACCEPTED") {
+                        GradientButton(
+                            text = "Отгрузить",
+                            onClick = { viewModel.shipInstance(detail.id) },
+                            enabled = !state.isActionRunning,
+                            gradient = Gradients.Ocean,
+                            compact = true
+                        )
+                    }
+                }
+                DetailRow("Серийный номер", detail.serialNumber)
+                DetailRow("Модель", listOfNotNull(detail.productModelCode, detail.productModelName).joinToString(" — ").ifBlank { "#${detail.productModelId}" })
+                DetailRow("Изготовлен", detail.manufacturedAt.toDisplayDateTime())
+                detail.acceptedAt?.let { DetailRow("Принят ОТК", it.toDisplayDateTime()) }
+                detail.shippedAt?.let { DetailRow("Отгружен", it.toDisplayDateTime()) }
+
+                SectionHeader(title = "Комплектующие", count = detail.components.size)
+                if (detail.components.isEmpty()) {
+                    Text("Состав комплектующих не зафиксирован.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    detail.components.forEach { comp ->
+                        val title = listOfNotNull(comp.nomenclatureCode, comp.nomenclatureName).joinToString(" — ").ifBlank { "#${comp.nomenclatureId}" }
+                        DetailRow(title, "${comp.quantity} шт. (${comp.installedAt.toDisplayDateTime()})")
+                    }
+                }
+
+                SectionHeader(title = "Документация", count = detail.documents.size)
+                val extrasRepo: org.example.project.data.ErpExtrasRepository = org.koin.compose.koinInject()
+                val docScope = androidx.compose.runtime.rememberCoroutineScope()
+                var attachedDocs by androidx.compose.runtime.remember(detail.id) {
+                    androidx.compose.runtime.mutableStateOf<List<org.example.project.dto.InstanceDocumentDto>>(emptyList())
+                }
+                var docVerInput by androidx.compose.runtime.remember(detail.id) { androidx.compose.runtime.mutableStateOf("") }
+                var docAttachMsg by androidx.compose.runtime.remember(detail.id) { androidx.compose.runtime.mutableStateOf<String?>(null) }
+                androidx.compose.runtime.LaunchedEffect(detail.id) {
+                    val res = extrasRepo.listInstanceDocuments(detail.id)
+                    if (res is org.example.project.data.ApiResult.Success) attachedDocs = res.data
+                }
+                if (detail.documents.isEmpty() && attachedDocs.isEmpty()) {
+                    Text("Привязанные документы отсутствуют.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    detail.documents.forEach { doc ->
+                        val ver = doc.documentVersionNumber?.let { "v$it" } ?: "#${doc.documentVersionId}"
+                        DetailRow("${doc.docKind}: ${doc.documentTitle ?: "Документ"}", ver)
+                    }
+                    attachedDocs.forEach { doc ->
+                        DetailRow("${doc.docKind}: ${doc.documentTitle}", "v${doc.versionNumber}")
+                    }
+                }
+                docAttachMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    org.example.project.ui.theme.ErpTextField(
+                        value = docVerInput,
+                        onValueChange = { docVerInput = it },
+                        label = "ID версии документа",
+                        modifier = Modifier.weight(1f)
+                    )
+                    SoftButton(text = "Привязать", onClick = {
+                        val verId = docVerInput.trim().toLongOrNull()
+                        if (verId != null) {
+                            docScope.launch {
+                                when (val res = extrasRepo.attachInstanceDocument(
+                                    detail.id,
+                                    org.example.project.dto.AttachInstanceDocumentRequest(documentVersionId = verId)
+                                )) {
+                                    is org.example.project.data.ApiResult.Success -> {
+                                        attachedDocs = listOf(res.data) + attachedDocs
+                                        docVerInput = ""
+                                        docAttachMsg = "Версия документа #$verId привязана"
+                                    }
+                                    is org.example.project.data.ApiResult.Error -> docAttachMsg = res.error.message
+                                }
+                            }
+                        }
+                    })
+                }
+
+                SectionHeader(title = "Программное обеспечение", count = detail.software.size)
+                if (detail.software.isEmpty()) {
+                    Text("Сведения о прошивках и ПО отсутствуют.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    detail.software.forEach { sw ->
+                        val buildText = sw.build?.let { " (build $it)" } ?: ""
+                        DetailRow(sw.name, "${sw.version}$buildText")
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ErpTextField(
+                        value = state.instanceSoftwareName,
+                        onValueChange = viewModel::updateInstanceSoftwareName,
+                        label = "ПО / прошивка",
+                        modifier = Modifier.weight(1.2f)
+                    )
+                    ErpTextField(
+                        value = state.instanceSoftwareVersion,
+                        onValueChange = viewModel::updateInstanceSoftwareVersion,
+                        label = "Версия",
+                        modifier = Modifier.weight(0.8f)
+                    )
+                    ErpTextField(
+                        value = state.instanceSoftwareBuild,
+                        onValueChange = viewModel::updateInstanceSoftwareBuild,
+                        label = "Сборка",
+                        modifier = Modifier.weight(0.7f)
+                    )
+                    GradientButton(
+                        text = "+ ПО",
+                        onClick = { viewModel.submitInstanceSoftware(detail.id) },
+                        enabled = !state.isActionRunning && state.instanceSoftwareName.isNotBlank() && state.instanceSoftwareVersion.isNotBlank(),
+                        gradient = Gradients.Ocean,
+                        compact = true
+                    )
+                }
+
+                SectionHeader(title = "Испытания", count = detail.tests.size)
+                if (detail.tests.isEmpty()) {
+                    Text("Протоколы испытаний отсутствуют.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    detail.tests.forEach { t ->
+                        DetailRow(
+                            "Испытание #${t.id} (${t.performedAt.toDisplayDateTime()})",
+                            "${t.result} / Тех. решение: ${t.technicalDecision}" + (t.notes?.let { " — $it" } ?: "")
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf("GOOD" to "Годно", "NOT_GOOD" to "Не годно").forEach { (code, label) ->
+                        SoftButton(
+                            text = label,
+                            onClick = { viewModel.updateInstanceTestResult(code) },
+                            tint = if (state.instanceTestResult == code) Brand.Blue else Brand.BlueDeep
+                        )
+                    }
+                    ErpTextField(
+                        value = state.instanceTestNotes,
+                        onValueChange = viewModel::updateInstanceTestNotes,
+                        label = "Примечание к испытанию",
+                        modifier = Modifier.weight(1f)
+                    )
+                    GradientButton(
+                        text = "Зафиксировать",
+                        onClick = { viewModel.submitInstanceTest(detail.id) },
+                        enabled = !state.isActionRunning,
+                        gradient = Gradients.Aurora,
+                        compact = true
+                    )
+                }
+
+                SectionHeader(title = "Замечания", count = detail.remarks.size)
+                if (detail.remarks.isEmpty()) {
+                    Text("Замечания отсутствуют.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    detail.remarks.forEach { r ->
+                        val blockBadge = if (r.blocksShipment) " [Блок отгрузки]" else ""
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                DetailRow("${r.severity} · ${r.status}$blockBadge", r.description)
+                            }
+                            if (r.status == "OPEN") {
+                                SoftButton(
+                                    text = "Снять",
+                                    onClick = { viewModel.resolveInstanceRemark(detail.id, r.id) },
+                                    tint = Brand.Teal
+                                )
+                            }
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf("MINOR" to "Незнач.", "CRITICAL" to "Крит.").forEach { (code, label) ->
+                        SoftButton(
+                            text = label,
+                            onClick = { viewModel.updateInstanceRemarkSeverity(code) },
+                            tint = if (state.instanceRemarkSeverity == code) Brand.Rose else Brand.BlueDeep
+                        )
+                    }
+                    ErpTextField(
+                        value = state.instanceRemarkDescription,
+                        onValueChange = viewModel::updateInstanceRemarkDescription,
+                        label = "Описание замечания",
+                        modifier = Modifier.weight(1f)
+                    )
+                    GradientButton(
+                        text = "+ Замечание",
+                        onClick = { viewModel.submitInstanceRemark(detail.id) },
+                        enabled = !state.isActionRunning && state.instanceRemarkDescription.isNotBlank(),
+                        gradient = Gradients.AmberGlow,
+                        compact = true
+                    )
+                }
+            }
         }
     }
 }

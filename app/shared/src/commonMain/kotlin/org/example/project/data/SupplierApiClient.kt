@@ -16,12 +16,15 @@ import org.example.project.dto.AddSupplierDocumentRequest
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
 import org.example.project.dto.CreateSupplierCategoryRequest
+import org.example.project.dto.CreateSupplierClaimRequest
 import org.example.project.dto.CreateSupplierOfferRequest
 import org.example.project.dto.CreateSupplierRequest
 import org.example.project.dto.SelectSupplierOfferRequest
 import org.example.project.dto.SetSupplierCategoriesRequest
 import org.example.project.dto.SupplierCardDto
 import org.example.project.dto.SupplierCategoryDto
+import org.example.project.dto.SupplierClaimDto
+import org.example.project.dto.SupplierClaimStatus
 import org.example.project.dto.SupplierDto
 import org.example.project.dto.SupplierOfferComparisonDto
 import org.example.project.dto.SupplierOfferDto
@@ -30,6 +33,7 @@ import org.example.project.dto.SupplierOfferStatus
 import org.example.project.dto.SupplierOfferStatusRequest
 import org.example.project.dto.SupplierVerificationRequest
 import org.example.project.dto.SupplierVerificationStatus
+import org.example.project.dto.TransitionSupplierClaimRequest
 import org.example.project.dto.UpdateSupplierOfferRequest
 import org.example.project.dto.UpdateSupplierRequest
 
@@ -176,6 +180,34 @@ class SupplierApiClient(private val client: HttpClient) : SupplierRepository {
                 setBody(body)
             }
         }
+
+    override suspend fun listClaims(
+        supplierId: Long?,
+        purchaseOrderId: Long?,
+        status: SupplierClaimStatus?
+    ): ApiResult<List<SupplierClaimDto>> {
+        val params = buildMap {
+            supplierId?.let { put("supplierId", it.toString()) }
+            purchaseOrderId?.let { put("purchaseOrderId", it.toString()) }
+            status?.let { put("status", it.name) }
+        }
+        return execute {
+            client.get("/api/supplier-claims") {
+                url {
+                    params.forEach { (k, v) -> parameters.append(k, v) }
+                }
+            }
+        }
+    }
+
+    override suspend fun createClaim(request: CreateSupplierClaimRequest): ApiResult<SupplierClaimDto> =
+        post("/api/supplier-claims", request)
+
+    override suspend fun transitionClaim(
+        id: Long,
+        request: TransitionSupplierClaimRequest
+    ): ApiResult<SupplierClaimDto> =
+        post("/api/supplier-claims/$id/transition", request)
 
     private suspend inline fun <reified T> execute(
         block: () -> io.ktor.client.statement.HttpResponse

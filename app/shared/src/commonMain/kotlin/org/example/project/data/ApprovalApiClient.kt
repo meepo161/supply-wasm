@@ -53,6 +53,9 @@ class ApprovalApiClient(private val client: HttpClient) : ApprovalRepository {
     ): ApiResult<ApprovalRouteDto> =
         post("/api/approvals/routes/$routeId/cancel", request)
 
+    override suspend fun myQueue(): ApiResult<List<ApprovalRouteDto>> =
+        execute { client.get("/api/approvals/my-queue") }
+
     private suspend inline fun <reified T> post(path: String, body: Any): ApiResult<T> =
         execute {
             client.post(path) {

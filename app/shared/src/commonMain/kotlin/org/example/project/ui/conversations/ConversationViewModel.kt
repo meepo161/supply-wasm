@@ -264,7 +264,7 @@ class ConversationViewModel(
             if (navigationGate.isCurrent(navigation) &&
                 isSameConversation(_uiState.value.selectedConversation, conversation.id, conversation.kind)
             ) {
-                startRealtime(conversation.id, conversation.kind)
+                startRealtime(conversation.id, conversation.kind, navigation)
             }
         }
     }
@@ -1090,16 +1090,25 @@ class ConversationViewModel(
         }
     }
 
-    private fun startRealtime(conversationId: Long, kind: ConversationKind) {
+    private fun startRealtime(conversationId: Long, kind: ConversationKind, navigation: Long) {
         realtimeJob?.cancel()
         realtimeJob = coroutineScope.launch {
             var attempt = 0
+            var initialSync = true
             val key = conversationKey(kind, conversationId)
             val cursor = reconnectCursors.getOrPut(key) { ConversationReconnectCursor() }
-            while (isActive && isSameConversation(_uiState.value.selectedConversation, conversationId, kind)) {
+            while (
+                isActive &&
+                navigationGate.isCurrent(navigation) &&
+                isSameConversation(_uiState.value.selectedConversation, conversationId, kind)
+            ) {
                 var disconnect = ConversationDisconnect.CLOSED
                 try {
-                    catchUp(conversationId, kind, reportErrors = false)
+                    if (!initialSync) {
+                        catchUp(conversationId, kind, reportErrors = false, navigation = navigation)
+                    }
+                    initialSync = false
+                    if (!navigationGate.isCurrent(navigation)) break
                     cursor.recordHistory(_uiState.value.messages.messages)
                     val parameters = cursor.parameters()
                     conversationRepository.observeEvents(
@@ -1107,11 +1116,15 @@ class ConversationViewModel(
                         parameters["after"]?.toLong(),
                         parameters["afterEvent"]?.toLong()
                     ).collect { event ->
+                        if (!navigationGate.isCurrent(navigation)) return@collect
                         cursor.record(event)
                         applyRealtimeEvent(conversationId, kind, event)
                     }
                 } catch (e: ConversationAccessRevokedException) {
-                    if (isSameConversation(_uiState.value.selectedConversation, conversationId, kind)) {
+                    if (
+                        navigationGate.isCurrent(navigation) &&
+                        isSameConversation(_uiState.value.selectedConversation, conversationId, kind)
+                    ) {
                         revokeConversationAccess(conversationId, kind)
                     }
                     break
@@ -1122,7 +1135,7 @@ class ConversationViewModel(
                 } catch (e: Exception) {
                     disconnect = ConversationDisconnect.NETWORK
                 }
-                if (!cursor.shouldReconnect(disconnect)) break
+                if (!navigationGate.isCurrent(navigation) || !cursor.shouldReconnect(disconnect)) break
                 attempt++
                 reconnectDelay(reconnectDelayMs(attempt))
             }
@@ -1152,17 +1165,25 @@ class ConversationViewModel(
         ).withMergedEntries(currentUser)
     }
 
-    private suspend fun catchUp(conversationId: Long, kind: ConversationKind, reportErrors: Boolean) {
+    private suspend fun catchUp(
+        conversationId: Long,
+        kind: ConversationKind,
+        reportErrors: Boolean,
+        navigation: Long? = null
+    ) {
         var after = _uiState.value.messages.messages.lastOrNull()?.id
         var iterations = 0
         while (iterations < MAX_MESSAGE_PAGES) {
+            if (navigation != null && !navigationGate.isCurrent(navigation)) return
             when (val result = conversationRepository.listMessages(conversationId, after = after)) {
                 is ApiResult.Success -> {
+                    if (navigation != null && !navigationGate.isCurrent(navigation)) return
                     result.data.messages.forEach { appendMessages(conversationId, kind, listOf(it)) }
                     if (!result.data.hasMore || result.data.messages.isEmpty()) break
                     after = result.data.messages.last().id
                 }
                 is ApiResult.Error -> {
+                    if (navigation != null && !navigationGate.isCurrent(navigation)) return
                     if (isConversationAccessTerminated(result.statusCode)) {
                         throw ConversationAccessRevokedException()
                     }

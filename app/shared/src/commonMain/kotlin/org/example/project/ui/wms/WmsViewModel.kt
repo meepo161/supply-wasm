@@ -106,6 +106,7 @@ class WmsViewModel(
             WmsTab.RETURNS -> loadReturns()
             WmsTab.WRITE_OFFS -> loadWriteOffs()
             WmsTab.INVENTORIES -> loadInventories()
+            WmsTab.MOVEMENTS -> loadMovementsAndLowStock()
         }
     }
 
@@ -2005,6 +2006,38 @@ class WmsViewModel(
     fun updateReleaseReason(value: String) {
         _uiState.value = _uiState.value.copy(releaseReason = value)
     }
+
+    fun loadMovementsAndLowStock() {
+        _uiState.value = _uiState.value.copy(movementsLoading = true, operationError = null)
+        viewModelScope.launch {
+            val movRes = repository.listMovements(limit = 100)
+            val lowRes = repository.listLowStock()
+            _uiState.value = _uiState.value.copy(
+                movements = if (movRes is ApiResult.Success<*>) (movRes as ApiResult.Success<List<org.example.project.dto.StockMovementDto>>).data else _uiState.value.movements,
+                lowStock = if (lowRes is ApiResult.Success<*>) (lowRes as ApiResult.Success<List<org.example.project.dto.LowStockItemDto>>).data else _uiState.value.lowStock,
+                movementsLoading = false,
+                operationError = (movRes as? ApiResult.Error)?.error ?: (lowRes as? ApiResult.Error)?.error
+            )
+        }
+    }
+
+    fun updateBarcodeQuery(value: String) {
+        _uiState.value = _uiState.value.copy(barcodeQuery = value)
+    }
+
+    fun lookupBarcode() {
+        val code = _uiState.value.barcodeQuery.trim()
+        if (code.isEmpty()) return
+        _uiState.value = _uiState.value.copy(operationError = null, barcodeResult = null)
+        viewModelScope.launch {
+            when (val res = repository.findByBarcode(code)) {
+                is ApiResult.Success<*> -> _uiState.value = _uiState.value.copy(
+                    barcodeResult = (res as ApiResult.Success<org.example.project.dto.NomenclatureDto>).data
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = res.error)
+            }
+        }
+    }
 }
 
 data class WmsUiState(
@@ -2093,7 +2126,14 @@ data class WmsUiState(
     val inventoryLocations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
     val selectedInventory: InventoryDto? = null,
     val inventoryCountInputs: Map<Long, String> = emptyMap(),
-    val inventoryCancelReason: String = ""
+    val inventoryCancelReason: String = "",
+
+    // Движения, дефицит и поиск по штрихкоду
+    val movements: List<org.example.project.dto.StockMovementDto> = emptyList(),
+    val lowStock: List<org.example.project.dto.LowStockItemDto> = emptyList(),
+    val movementsLoading: Boolean = false,
+    val barcodeQuery: String = "",
+    val barcodeResult: org.example.project.dto.NomenclatureDto? = null
 )
 
 enum class WmsTab(val title: String) {
@@ -2107,7 +2147,8 @@ enum class WmsTab(val title: String) {
     ISSUES("Выдача"),
     RETURNS("Возвраты"),
     WRITE_OFFS("Списания"),
-    INVENTORIES("Инвентаризация")
+    INVENTORIES("Инвентаризация"),
+    MOVEMENTS("Движения")
 }
 
 sealed class WmsDialog {

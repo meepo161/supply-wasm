@@ -165,4 +165,65 @@ fun Route.productionRoutes(productionService: ProductionService) {
             )
         }
     }
+
+    route("/api/production/instances") {
+        get("/{id}") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid product instance id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(productionService.getInstance(id, call.currentUser())))
+        }
+        post("/{id}/tests") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid product instance id")
+            val request = call.receive<RecordInstanceTestRequest>()
+            call.respond(
+                HttpStatusCode.Created,
+                ApiResponse.success(productionService.recordInstanceTest(id, request, call.currentUser()))
+            )
+        }
+        post("/{id}/remarks") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid product instance id")
+            val request = call.receive<RecordInstanceRemarkRequest>()
+            call.respond(
+                HttpStatusCode.Created,
+                ApiResponse.success(productionService.recordInstanceRemark(id, request, call.currentUser()))
+            )
+        }
+        post("/{id}/software") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid product instance id")
+            val request = call.receive<AddInstanceSoftwareRequest>()
+            call.respond(
+                HttpStatusCode.Created,
+                ApiResponse.success(productionService.addInstanceSoftware(id, request, call.currentUser()))
+            )
+        }
+        post("/{id}/remarks/{remarkId}/resolve") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid product instance id")
+            val remarkId = call.parameters["remarkId"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid remark id")
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(productionService.resolveInstanceRemark(id, remarkId, call.currentUser()))
+            )
+        }
+        post("/{id}/accept") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid product instance id")
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(productionService.acceptInstance(id, call.currentUser()))
+            )
+        }
+        post("/{id}/ship") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid product instance id")
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(productionService.shipInstance(id, call.currentUser()))
+            )
+        }
+    }
 }

@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -21,14 +23,23 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.BomRevisionStatus
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.GradientButton
+import org.example.project.ui.theme.GradientSpinner
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.PageHeader
+import org.example.project.ui.theme.PillBadge
+import org.example.project.ui.theme.SoftButton
 
 @Composable
 fun BomScreen(
@@ -118,6 +129,20 @@ fun BomScreen(
             onRun = viewModel::explodeRevision,
             onDismiss = viewModel::dismissDialog
         )
+        BomDialog.Diff -> BomRevisionDiffDialog(
+            state = state,
+            onSelectTarget = viewModel::loadDiff,
+            onDismiss = viewModel::dismissDialog
+        )
+        BomDialog.WhereUsed -> BomWhereUsedDialog(
+            state = state,
+            onSelectNomenclature = viewModel::loadWhereUsed,
+            onOpenRevision = { revisionId ->
+                viewModel.dismissDialog()
+                viewModel.selectRevision(revisionId)
+            },
+            onDismiss = viewModel::dismissDialog
+        )
         null -> { }
     }
 }
@@ -195,12 +220,11 @@ private fun ModelInfoCard(
     model: org.example.project.dto.ProductModelDto,
     viewModel: BomViewModel
 ) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
+        contentPadding = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = "${model.code} — ${model.name}", style = MaterialTheme.typography.titleMedium)
@@ -258,19 +282,32 @@ private fun RevisionInfoCard(
     viewModel: BomViewModel
 ) {
     val isDraft = revision.status == BomRevisionStatus.DRAFT
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
+        contentPadding = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "Ревизия ${revision.revisionNumber}",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(text = "Статус: ${revision.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Ревизия ${revision.revisionNumber}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                PillBadge(
+                    text = revision.status.localizedName(),
+                    accent = when (revision.status) {
+                        BomRevisionStatus.ACTIVE -> Brand.Teal
+                        BomRevisionStatus.APPROVED -> Brand.Blue
+                        BomRevisionStatus.DRAFT -> Brand.Indigo
+                        else -> Brand.BlueDeep
+                    }
+                )
+            }
             Text(text = "Версия: ${revision.version}", style = MaterialTheme.typography.bodyMedium)
             if (!revision.changeReason.isNullOrBlank()) {
                 Text(text = "Причина: ${revision.changeReason}", style = MaterialTheme.typography.bodyMedium)
@@ -281,25 +318,77 @@ private fun RevisionInfoCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (isDraft && viewModel.hasPermission("bom", "update")) {
-                    Button(onClick = { viewModel.showDialog(BomDialog.CreateLine) }) {
-                        Text("Добавить строку")
-                    }
+                    GradientButton(
+                        text = "Добавить строку",
+                        onClick = { viewModel.showDialog(BomDialog.CreateLine) },
+                        gradient = Gradients.Aurora,
+                        compact = true
+                    )
                 }
                 if (isDraft && viewModel.hasPermission("bom", "approve")) {
-                    Button(onClick = viewModel::approveRevision) { Text("Утвердить") }
+                    GradientButton(
+                        text = "Утвердить",
+                        onClick = viewModel::approveRevision,
+                        gradient = Gradients.Ocean,
+                        compact = true
+                    )
                 }
+                var confirmRevisionAction by remember(revision.id) { mutableStateOf<String?>(null) }
                 if (revision.status == BomRevisionStatus.APPROVED && viewModel.hasPermission("bom", "approve")) {
-                    Button(onClick = viewModel::activateRevision) { Text("Активировать") }
+                    GradientButton(
+                        text = "Активировать",
+                        onClick = { confirmRevisionAction = "ACTIVATE" },
+                        gradient = Gradients.Emerald,
+                        compact = true
+                    )
                 }
                 if (revision.status == BomRevisionStatus.ACTIVE && viewModel.hasPermission("bom", "approve")) {
-                    Button(onClick = viewModel::replaceRevision) { Text("Заменить") }
+                    GradientButton(
+                        text = "Заменить",
+                        onClick = { confirmRevisionAction = "REPLACE" },
+                        gradient = Gradients.Ocean,
+                        compact = true
+                    )
                 }
                 if (isDraft && viewModel.hasPermission("bom", "delete_draft")) {
-                    OutlinedButton(onClick = viewModel::cancelRevision) { Text("Отменить") }
+                    SoftButton(text = "Отменить ревизию", onClick = { confirmRevisionAction = "CANCEL" }, tint = Brand.Rose)
+                }
+                if (confirmRevisionAction != null) {
+                    val action = confirmRevisionAction!!
+                    val (title, body) = when (action) {
+                        "ACTIVATE" -> "Активировать ревизию?" to "Ревизия ${revision.revisionNumber} станет действующим составом изделия для производства и заменит предыдущую активную."
+                        "REPLACE" -> "Заменить действующую ревизию?" to "Ревизия ${revision.revisionNumber} будет переведена в статус заменённой."
+                        else -> "Отменить ревизию?" to "Черновик ревизии ${revision.revisionNumber} будет отменён без возможности редактирования."
+                    }
+                    AlertDialog(
+                        onDismissRequest = { confirmRevisionAction = null },
+                        title = { Text(title) },
+                        text = { Text(body) },
+                        confirmButton = {
+                            GradientButton(
+                                text = "Подтвердить",
+                                onClick = {
+                                    confirmRevisionAction = null
+                                    when (action) {
+                                        "ACTIVATE" -> viewModel.activateRevision()
+                                        "REPLACE" -> viewModel.replaceRevision()
+                                        else -> viewModel.cancelRevision()
+                                    }
+                                },
+                                gradient = Gradients.Ocean,
+                                compact = true
+                            )
+                        },
+                        dismissButton = {
+                            SoftButton(text = "Отмена", onClick = { confirmRevisionAction = null })
+                        }
+                    )
                 }
                 if (viewModel.hasPermission("bom", "explode")) {
-                    OutlinedButton(onClick = { viewModel.showDialog(BomDialog.Explode) }) { Text("Разузлование") }
+                    SoftButton(text = "Разузлование", onClick = { viewModel.showDialog(BomDialog.Explode) }, tint = Brand.Indigo)
                 }
+                SoftButton(text = "Сравнить", onClick = viewModel::openDiffDialog, tint = Brand.Blue)
+                SoftButton(text = "Применяемость", onClick = { viewModel.openWhereUsedDialog() }, tint = Brand.Teal)
             }
             if (!isDraft) {
                 Text(
@@ -368,12 +457,11 @@ private fun PageHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = title, style = MaterialTheme.typography.headlineSmall)
-        Row {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (canCreate) {
-                Button(onClick = onCreate) { Text(createLabel) }
-                Spacer(modifier = Modifier.width(8.dp))
+                GradientButton(text = createLabel, onClick = onCreate, gradient = Gradients.Aurora, compact = true)
             }
-            TextButton(onClick = onRefresh) { Text("Обновить") }
+            SoftButton(text = "Обновить", onClick = onRefresh)
         }
     }
 }
@@ -384,7 +472,7 @@ private fun LoadingOverlay(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator()
+        GradientSpinner()
     }
 }
 
@@ -400,5 +488,137 @@ private fun EmptyState(text: String, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+@Composable
+private fun BomRevisionDiffDialog(
+    state: BomUiState,
+    onSelectTarget: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val current = state.selectedRevision
+    val others = state.revisions.filter { it.id != current?.id }
+    var expanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Сравнение ревизии ${current?.revisionNumber ?: ""}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (others.isEmpty()) {
+                    Text("Нет других ревизий для сравнения.")
+                } else {
+                    Box {
+                        val selectedTarget = others.firstOrNull { it.id == state.diffTargetRevisionId } ?: others.first()
+                        OutlinedButton(onClick = { expanded = true }) {
+                            Text("Сравнить с: ${selectedTarget.revisionNumber} (${selectedTarget.status.localizedName()})")
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            others.forEach { rev ->
+                                DropdownMenuItem(
+                                    text = { Text("${rev.revisionNumber} (${rev.status.localizedName()})") },
+                                    onClick = {
+                                        expanded = false
+                                        onSelectTarget(rev.id)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    state.operationError?.let { ErrorMessageCard(error = it) }
+                    val diff = state.revisionDiff
+                    if (diff != null) {
+                        if (diff.items.isEmpty()) {
+                            Text("Различий между ревизиями не найдено.")
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(diff.items) { item ->
+                                    Text(
+                                        text = "[${item.kind.name}] ${item.code} — ${item.name} (${item.unit}): было ${item.leftQuantity ?: "—"}, стало ${item.rightQuantity ?: "—"}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Закрыть") }
+        }
+    )
+}
+
+@Composable
+private fun BomWhereUsedDialog(
+    state: BomUiState,
+    onSelectNomenclature: (Long) -> Unit,
+    onOpenRevision: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedNom = state.nomenclature.firstOrNull { it.id == state.whereUsedNomenclatureId }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Применяемость компонента (Where-Used)") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (state.nomenclature.isEmpty()) {
+                    Text("Справочник номенклатуры пуст.")
+                } else {
+                    Box {
+                        OutlinedButton(onClick = { expanded = true }) {
+                            Text(selectedNom?.let { "${it.code} — ${it.name}" } ?: "Выберите компонент")
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            state.nomenclature.take(40).forEach { nom ->
+                                DropdownMenuItem(
+                                    text = { Text("${nom.code} — ${nom.name}") },
+                                    onClick = {
+                                        expanded = false
+                                        onSelectNomenclature(nom.id)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    state.operationError?.let { ErrorMessageCard(error = it) }
+                    if (state.whereUsedItems.isEmpty()) {
+                        Text("Компонент не используется ни в одной ревизии BOM.")
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(state.whereUsedItems) { item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${item.modelCode} (${item.revisionNumber}) • кол-во ${item.quantity} ${item.unit}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = { onOpenRevision(item.revisionId) }) {
+                                        Text("Открыть")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Закрыть") }
+        }
+    )
 }
 

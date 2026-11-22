@@ -6,6 +6,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.example.project.dto.*
+import org.example.project.exception.ValidationException
 import org.example.project.plugins.RequireAuthPlugin
 import org.example.project.plugins.currentUser
 import org.example.project.plugins.requirePermission
@@ -33,7 +34,7 @@ fun Route.permissionRoutes(permissionService: PermissionService) {
 
         delete("/{id}") {
             call.requirePermission("permissions", "delete")
-            val id = call.parameters["id"]?.toLongOrNull() ?: throw IllegalArgumentException("Invalid permission id")
+            val id = call.parameters["id"]?.toLongOrNull() ?: throw ValidationException("Invalid permission id")
             permissionService.delete(id, call.currentUser())
             call.respond(HttpStatusCode.NoContent, ApiResponse.success(Unit))
         }

@@ -112,6 +112,60 @@ class ProductionRoutesTest {
         assertEquals(2, instanceList.size)
         assertEquals(setOf("SN-1", "SN-2"), instanceList.map { it.serialNumber }.toSet())
 
+        val firstInstance = instanceList.first { it.serialNumber == "SN-1" }
+        val detailResponse = client.get("/api/production/instances/${firstInstance.id}")
+        assertEquals(HttpStatusCode.OK, detailResponse.status, detailResponse.bodyAsText())
+        val detail = detailResponse.bodyAs<ApiResponse<org.example.project.dto.ProductInstanceDetailDto>>().data!!
+        assertEquals(firstInstance.id, detail.id)
+        assertEquals("SN-1", detail.serialNumber)
+        assertEquals(order.number, detail.orderNumber)
+        assertEquals(0, detail.components.size)
+        assertEquals(0, detail.tests.size)
+
+        val missingInstance = client.get("/api/production/instances/999999")
+        assertEquals(HttpStatusCode.NotFound, missingInstance.status)
+
+        val addSw = client.post("/api/production/instances/${firstInstance.id}/software") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(org.example.project.dto.AddInstanceSoftwareRequest("Firmware-A", "1.0.2", "b42")))
+        }
+        assertEquals(HttpStatusCode.Created, addSw.status, addSw.bodyAsText())
+        val afterSw = addSw.bodyAs<ApiResponse<org.example.project.dto.ProductInstanceDetailDto>>().data!!
+        assertEquals(1, afterSw.software.size)
+        assertEquals("Firmware-A", afterSw.software.first().name)
+
+        val addTest = client.post("/api/production/instances/${firstInstance.id}/tests") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(org.example.project.dto.RecordInstanceTestRequest("GOOD", "Стендовая проверка ОК")))
+        }
+        assertEquals(HttpStatusCode.Created, addTest.status, addTest.bodyAsText())
+        val afterTest = addTest.bodyAs<ApiResponse<org.example.project.dto.ProductInstanceDetailDto>>().data!!
+        assertEquals(1, afterTest.tests.size)
+        assertEquals("GOOD", afterTest.tests.first().result)
+
+        val addRemark = client.post("/api/production/instances/${firstInstance.id}/remarks") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(org.example.project.dto.RecordInstanceRemarkRequest("Критичный дефект", "CRITICAL", true)))
+        }
+        assertEquals(HttpStatusCode.Created, addRemark.status, addRemark.bodyAsText())
+        val afterRemark = addRemark.bodyAs<ApiResponse<org.example.project.dto.ProductInstanceDetailDto>>().data!!
+        assertEquals(1, afterRemark.remarks.size)
+        val remarkId = afterRemark.remarks.first().id
+
+        val blockedAccept = client.post("/api/production/instances/${firstInstance.id}/accept")
+        assertEquals(HttpStatusCode.Conflict, blockedAccept.status)
+
+        val resolved = client.post("/api/production/instances/${firstInstance.id}/remarks/$remarkId/resolve")
+        assertEquals(HttpStatusCode.OK, resolved.status, resolved.bodyAsText())
+
+        val accepted = client.post("/api/production/instances/${firstInstance.id}/accept")
+        assertEquals(HttpStatusCode.OK, accepted.status, accepted.bodyAsText())
+        assertEquals("ACCEPTED", accepted.bodyAs<ApiResponse<org.example.project.dto.ProductInstanceDetailDto>>().data!!.status)
+
+        val shipped = client.post("/api/production/instances/${firstInstance.id}/ship")
+        assertEquals(HttpStatusCode.OK, shipped.status, shipped.bodyAsText())
+        assertEquals("SHIPPED", shipped.bodyAs<ApiResponse<org.example.project.dto.ProductInstanceDetailDto>>().data!!.status)
+
         val closed = action(client, order.id, "close", completedDto.version)
         assertEquals(ProductionOrderStatus.CLOSED, closed.status)
     }
@@ -210,6 +264,8 @@ class ProductionRoutesTest {
         assertEquals(HttpStatusCode.Forbidden, denied.status)
         val readDenied = reader.get("/api/production/orders")
         assertEquals(HttpStatusCode.Forbidden, readDenied.status)
+        val instanceReadDenied = reader.get("/api/production/instances/1")
+        assertEquals(HttpStatusCode.Forbidden, instanceReadDenied.status)
     }
 
     // --- вспомогательные методы ---
@@ -403,7 +459,7 @@ class ProductionRoutesTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }
@@ -439,7 +495,7 @@ class ProductionRoutesTest {
     }
 
     companion object {
-        private const val TEST_URL = "jdbc:postgresql://localhost:5433/erp_test"
+        private val TEST_URL = TestDatabase.TEST_URL
         private const val USER = "erp"
         private const val PASSWORD = "erp"
 

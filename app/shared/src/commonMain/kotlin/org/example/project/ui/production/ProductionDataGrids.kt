@@ -2,7 +2,7 @@ package org.example.project.ui.production
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.unchil.un7datagrid.Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.ProductInstanceDto
 import org.example.project.dto.ProductionOrderDto
@@ -71,6 +71,7 @@ fun ProductionStagesGrid(
 @Composable
 fun ProductInstancesGrid(
     instances: List<ProductInstanceDto>,
+    onClick: (ProductInstanceDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
@@ -83,6 +84,9 @@ fun ProductInstancesGrid(
         data = data,
         modifier = modifier,
         config = gridConfig,
-        onClick = { }
+        onClick = { selected ->
+            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
+            instances.firstOrNull { it.id.toString() == id }?.let(onClick)
+        }
     )
 }

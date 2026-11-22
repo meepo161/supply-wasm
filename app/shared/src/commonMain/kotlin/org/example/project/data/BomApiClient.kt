@@ -17,8 +17,10 @@ import org.example.project.dto.ApproveBomRevisionRequest
 import org.example.project.dto.BomExplodeReportDto
 import org.example.project.dto.BomExplodeRequest
 import org.example.project.dto.BomLineDto
+import org.example.project.dto.BomRevisionDiffDto
 import org.example.project.dto.BomRevisionDto
 import org.example.project.dto.BomRevisionSummaryDto
+import org.example.project.dto.BomWhereUsedItemDto
 import org.example.project.dto.CopyBomRevisionRequest
 import org.example.project.dto.CreateBomLineRequest
 import org.example.project.dto.CreateBomRevisionRequest
@@ -80,6 +82,12 @@ class BomApiClient(private val client: HttpClient) : BomRepository {
 
     override suspend fun explodeRevision(id: Long, request: BomExplodeRequest): ApiResult<BomExplodeReportDto> =
         post("/api/bom/revisions/$id/explode", request)
+
+    override suspend fun diffRevisions(id: Long, otherId: Long): ApiResult<BomRevisionDiffDto> =
+        get("/api/bom/revisions/$id/diff?otherId=$otherId")
+
+    override suspend fun whereUsed(nomenclatureId: Long): ApiResult<List<BomWhereUsedItemDto>> =
+        get("/api/bom/nomenclature/$nomenclatureId/where-used")
 
     private suspend fun deleteNoContent(path: String): ApiResult<Unit> =
         executeUnit { client.delete(path) }

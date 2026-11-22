@@ -523,8 +523,10 @@ class ConversationRepository(private val dsl: DSLContext) {
             false -> conditions += "NOT base.archived"
             null -> Unit
         }
-        if (unreadOnly) conditions += "counters.unread_count > 0"
-        if (mentionsOnly) conditions += "counters.mention_count > 0"
+        if (requiredId == null) {
+            if (unreadOnly) conditions += "counters.unread_count > 0"
+            if (mentionsOnly) conditions += "counters.mention_count > 0"
+        }
         if (!query.isNullOrBlank()) {
             conditions += """(
                 base.title ILIKE ? ESCAPE '\' OR lm.search_content ILIKE ? ESCAPE '\' OR EXISTS (

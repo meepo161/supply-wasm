@@ -174,44 +174,42 @@ class BomRepository(private val dsl: DSLContext) {
         reason: String,
         createdBy: Long
     ): ProductRevisionsRecord {
-        return dsl.transactionResult { _ ->
-            val newRevision = createRevision(modelId, newRevisionNumber, reason, createdBy)
-            val lines = listBomLinesByRevision(sourceRevisionId)
-            val idMap = mutableMapOf<Long, Long>()
-            // First pass: create lines without hierarchy references to get stable ids.
-            for (line in lines) {
-                val newLine = dsl.newRecord(BOM_LINES)
-                newLine.revisionId = newRevision.id
-                newLine.parentLineId = null
-                newLine.parentNomenclatureId = line.parentNomenclatureId
-                newLine.childNomenclatureId = line.childNomenclatureId
-                newLine.quantity = line.quantity
-                newLine.unit = line.unit
-                newLine.position = line.position
-                newLine.level = line.level
-                newLine.mandatory = line.mandatory
-                newLine.substituteOfLineId = null
-                newLine.consumptionRate = line.consumptionRate
-                newLine.lossPct = line.lossPct
-                newLine.createdBy = createdBy
-                newLine.store()
-                idMap[line.id] = newLine.id
-            }
-            // Second pass: restore hierarchy and substitute links inside the new revision.
-            for (line in lines) {
-                val newLineId = idMap[line.id] ?: continue
-                val newParentLineId = line.parentLineId?.let { idMap[it] }
-                val newSubstituteOfLineId = line.substituteOfLineId?.let { idMap[it] }
-                if (newParentLineId != null || newSubstituteOfLineId != null) {
-                    dsl.update(BOM_LINES)
-                        .set(BOM_LINES.PARENT_LINE_ID, newParentLineId)
-                        .set(BOM_LINES.SUBSTITUTE_OF_LINE_ID, newSubstituteOfLineId)
-                        .where(BOM_LINES.ID.eq(newLineId))
-                        .execute()
-                }
-            }
-            newRevision
+        val newRevision = createRevision(modelId, newRevisionNumber, reason, createdBy)
+        val lines = listBomLinesByRevision(sourceRevisionId)
+        val idMap = mutableMapOf<Long, Long>()
+        // First pass: create lines without hierarchy references to get stable ids.
+        for (line in lines) {
+            val newLine = dsl.newRecord(BOM_LINES)
+            newLine.revisionId = newRevision.id
+            newLine.parentLineId = null
+            newLine.parentNomenclatureId = line.parentNomenclatureId
+            newLine.childNomenclatureId = line.childNomenclatureId
+            newLine.quantity = line.quantity
+            newLine.unit = line.unit
+            newLine.position = line.position
+            newLine.level = line.level
+            newLine.mandatory = line.mandatory
+            newLine.substituteOfLineId = null
+            newLine.consumptionRate = line.consumptionRate
+            newLine.lossPct = line.lossPct
+            newLine.createdBy = createdBy
+            newLine.store()
+            idMap[line.id] = newLine.id
         }
+        // Second pass: restore hierarchy and substitute links inside the new revision.
+        for (line in lines) {
+            val newLineId = idMap[line.id] ?: continue
+            val newParentLineId = line.parentLineId?.let { idMap[it] }
+            val newSubstituteOfLineId = line.substituteOfLineId?.let { idMap[it] }
+            if (newParentLineId != null || newSubstituteOfLineId != null) {
+                dsl.update(BOM_LINES)
+                    .set(BOM_LINES.PARENT_LINE_ID, newParentLineId)
+                    .set(BOM_LINES.SUBSTITUTE_OF_LINE_ID, newSubstituteOfLineId)
+                    .where(BOM_LINES.ID.eq(newLineId))
+                    .execute()
+            }
+        }
+        return newRevision
     }
 
     // --- BOM lines ---

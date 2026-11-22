@@ -183,6 +183,10 @@ class ApprovalService(
         return approvalRepository.listRoutesByTarget(normalized, targetId).map { toRouteDto(it) }
     }
 
+    fun myQueue(currentUser: CurrentUser): List<ApprovalRouteDto> {
+        return approvalRepository.listMyQueueRoutes(currentUser.userId).map { toRouteDto(it) }
+    }
+
     fun decide(routeId: Long, request: SubmitApprovalDecisionRequest, currentUser: CurrentUser): ApprovalRouteDto {
         if (request.decision != ApprovalDecision.APPROVE && request.comment.isNullOrBlank()) {
             throw ValidationException(
@@ -384,6 +388,7 @@ class ApprovalService(
             if (!approvalRepository.updateRouteState(route.id, route.version, "ACTIVE", next.stageNo, completed = false)) {
                 throw ConflictException("Approval route was modified concurrently")
             }
+            notifyStageAssignees(next.id, route.targetType, route.targetId, "Требуется согласование: ${route.targetType} #${route.targetId}")
         } else {
             if (!approvalRepository.updateRouteState(route.id, route.version, "COMPLETED", stage.stageNo, completed = true)) {
                 throw ConflictException("Approval route was modified concurrently")
@@ -393,6 +398,9 @@ class ApprovalService(
                 mapOf("targetType" to route.targetType, "targetId" to route.targetId)
             )
             port(route.targetType).completeApproval(route.targetId, route.targetVersion, actingUserId)
+            if (route.startedBy != actingUserId) {
+                notifyUser(route.startedBy, "APPROVAL_COMPLETED", route.targetType, route.targetId, "Согласование завершено: ${route.targetType} #${route.targetId}")
+            }
         }
     }
 
@@ -413,11 +421,44 @@ class ApprovalService(
             "APPROVAL_ROUTE", route.id,
             mapOf("stageNo" to stage.stageNo)
         )
+        if (route.startedBy != actingUserId) {
+            val label = if (status == "REJECTED") "отклонено" else "возвращено на доработку"
+            notifyUser(route.startedBy, "APPROVAL_$status", route.targetType, route.targetId, "Согласование $label: ${route.targetType} #${route.targetId}")
+        }
+    }
+
+    private fun notifyStageAssignees(stageId: Long, entityType: String, entityId: Long, title: String) {
+        approvalRepository.listStageAssignees(stageId)
+            .filter { it.assigneeType == "USER" && it.userId != null }
+            .forEach { notifyUser(it.userId!!, "APPROVAL_ASSIGNED", entityType, entityId, title) }
+    }
+
+    private fun notifyUser(userId: Long, type: String, entityType: String, entityId: Long, title: String) {
+        val n = org.example.project.generated.jooq.tables.Notifications.NOTIFICATIONS
+        dsl.insertInto(n)
+            .set(n.USER_ID, userId)
+            .set(n.TYPE, type)
+            .set(n.ENTITY_TYPE, entityType)
+            .set(n.ENTITY_ID, entityId)
+            .set(n.TITLE, title.take(250))
+            .execute()
     }
 
     private fun findAssignableRecord(stageId: Long, userId: Long): ApprovalRepository.AssigneeRow? {
         val assignees = approvalRepository.listStageAssignees(stageId)
         assignees.firstOrNull { it.assigneeType == "USER" && it.userId == userId }?.let { return it }
+        // AUDIT-05: учитываем активные делегирования полномочий (delegator -> delegate).
+        val delegatorIds = dsl.select(org.example.project.generated.jooq.tables.Delegations.DELEGATIONS.DELEGATOR_ID)
+            .from(org.example.project.generated.jooq.tables.Delegations.DELEGATIONS)
+            .where(org.example.project.generated.jooq.tables.Delegations.DELEGATIONS.DELEGATE_ID.eq(userId))
+            .and(org.example.project.generated.jooq.tables.Delegations.DELEGATIONS.ACTIVE.isTrue)
+            .and(org.example.project.generated.jooq.tables.Delegations.DELEGATIONS.STARTS_AT.le(java.time.OffsetDateTime.now()))
+            .and(org.example.project.generated.jooq.tables.Delegations.DELEGATIONS.ENDS_AT.ge(java.time.OffsetDateTime.now()))
+            .fetch(org.example.project.generated.jooq.tables.Delegations.DELEGATIONS.DELEGATOR_ID)
+            .toSet()
+        if (delegatorIds.isNotEmpty()) {
+            assignees.firstOrNull { it.assigneeType == "USER" && it.userId in delegatorIds }?.let { return it }
+        }
         return assignees.firstOrNull { assignee ->
             assignee.assigneeType == "ROLE" &&
                 assignee.roleId != null &&

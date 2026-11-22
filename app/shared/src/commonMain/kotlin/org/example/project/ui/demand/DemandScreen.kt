@@ -15,24 +15,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.example.project.dto.DemandStatus
 import org.example.project.dto.UserDto
 import org.example.project.ui.approvals.ApprovalsSection
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.GradientButton
+import org.example.project.ui.theme.GradientSpinner
+import org.example.project.ui.theme.PillBadge
+import org.example.project.ui.theme.SoftButton
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.Gradients
@@ -114,6 +117,80 @@ private fun DemandListPage(
             createLabel = "Новая потребность",
             canCreate = viewModel.hasPermission("create")
         )
+        val extrasRepo: org.example.project.data.ErpExtrasRepository = org.koin.compose.koinInject()
+        val mergeScope = androidx.compose.runtime.rememberCoroutineScope()
+        var showMergeDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        var selectedToMerge by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Set<Long>>(emptySet()) }
+        var mergeTitle by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        var mergeError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+
+        if (viewModel.hasPermission("create") && state.demands.size >= 2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SoftButton(text = "Объединить потребности", onClick = {
+                    selectedToMerge = emptySet()
+                    mergeTitle = ""
+                    mergeError = null
+                    showMergeDialog = true
+                })
+            }
+        }
+        if (showMergeDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showMergeDialog = false },
+                title = { Text("Объединение потребностей") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        mergeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        org.example.project.ui.theme.ErpTextField(
+                            value = mergeTitle,
+                            onValueChange = { mergeTitle = it },
+                            label = "Название объединённой потребности"
+                        )
+                        state.demands.filter {
+                            it.status == org.example.project.dto.DemandStatus.DRAFT ||
+                                it.status == org.example.project.dto.DemandStatus.PENDING_APPROVAL ||
+                                it.status == org.example.project.dto.DemandStatus.APPROVED
+                        }.take(15).forEach { d ->
+                            val checked = d.id in selectedToMerge
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                androidx.compose.material3.Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { isChecked ->
+                                        selectedToMerge = if (isChecked) selectedToMerge + d.id else selectedToMerge - d.id
+                                    }
+                                )
+                                Text("${d.number} (${d.status.name})", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    SoftButton(text = "Объединить", onClick = {
+                        if (selectedToMerge.size < 2) {
+                            mergeError = "Выберите минимум 2 потребности"
+                        } else {
+                            mergeScope.launch {
+                                when (val res = extrasRepo.mergeDemands(
+                                    org.example.project.dto.MergeDemandsRequest(
+                                        sourceDemandIds = selectedToMerge.toList(),
+                                        targetTitle = mergeTitle.ifBlank { null }
+                                    )
+                                )) {
+                                    is org.example.project.data.ApiResult.Success -> {
+                                        showMergeDialog = false
+                                        viewModel.loadDemands()
+                                    }
+                                    is org.example.project.data.ApiResult.Error -> mergeError = res.error.message
+                                }
+                            }
+                        }
+                    })
+                },
+                dismissButton = {
+                    TextButton(onClick = { showMergeDialog = false }) { Text("Отмена") }
+                }
+            )
+        }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.demands.isEmpty()) {
             LoadingOverlay()
@@ -171,19 +248,31 @@ private fun DemandHeaderCard(
     viewModel: DemandViewModel
 ) {
     val header = demand.header
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest)
+        contentPadding = 16.dp
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = "${header.number} — ${header.sourceType.localizedName()}",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(text = "Статус: ${header.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${header.number} — ${header.sourceType.localizedName()}",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                PillBadge(
+                    text = header.status.localizedName(),
+                    accent = when (header.status) {
+                        DemandStatus.APPROVED -> Brand.Teal
+                        DemandStatus.CANCELLED -> Brand.Rose
+                        else -> Brand.Indigo
+                    }
+                )
+            }
             Text(text = "Приоритет: ${header.priority.localizedName()}", style = MaterialTheme.typography.bodyMedium)
             Text(text = "Версия: ${header.version}", style = MaterialTheme.typography.bodyMedium)
             header.requiredDate?.let {
@@ -204,15 +293,15 @@ private fun DemandHeaderCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (header.status.canSubmit() && viewModel.hasPermission("update")) {
-                    Button(onClick = viewModel::submitDemand) { Text("Отправить") }
+                    GradientButton(text = "Отправить", onClick = viewModel::submitDemand, gradient = Gradients.Ocean, compact = true)
                 }
                 if (header.status.canApprove() && viewModel.hasPermission("approve")) {
-                    Button(onClick = viewModel::approveDemand) { Text("Согласовать") }
+                    GradientButton(text = "Согласовать", onClick = viewModel::approveDemand, gradient = Gradients.Emerald, compact = true)
                 }
                 if (header.status.canCancel() && viewModel.hasPermission("update")) {
-                    OutlinedButton(onClick = { viewModel.showDialog(DemandDialog.CancelDemand) }) { Text("Отменить") }
+                    SoftButton(text = "Отменить", onClick = { viewModel.showDialog(DemandDialog.CancelDemand) }, tint = Brand.Rose)
                 }
-                OutlinedButton(onClick = viewModel::showCoverage) { Text("Покрытие") }
+                SoftButton(text = "Покрытие", onClick = viewModel::showCoverage, tint = Brand.Indigo)
             }
         }
     }
@@ -267,12 +356,11 @@ private fun PageHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text = title, style = MaterialTheme.typography.headlineSmall)
-        Row {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (canCreate) {
-                Button(onClick = onCreate) { Text(createLabel) }
-                Spacer(modifier = Modifier.width(8.dp))
+                GradientButton(text = createLabel, onClick = onCreate, gradient = Gradients.Aurora, compact = true)
             }
-            TextButton(onClick = onRefresh) { Text("Обновить") }
+            SoftButton(text = "Обновить", onClick = onRefresh)
         }
     }
 }
@@ -283,7 +371,7 @@ private fun LoadingOverlay(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator()
+        GradientSpinner()
     }
 }
 

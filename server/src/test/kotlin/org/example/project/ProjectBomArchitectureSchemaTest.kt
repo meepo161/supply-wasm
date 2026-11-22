@@ -13,7 +13,7 @@ class ProjectBomArchitectureSchemaTest {
 
     companion object {
         private val ds = PGSimpleDataSource().apply {
-            setUrl("jdbc:postgresql://localhost:5433/erp_test")
+            setUrl("${TestDatabase.TEST_URL}")
             user = "erp"
             password = "erp"
         }

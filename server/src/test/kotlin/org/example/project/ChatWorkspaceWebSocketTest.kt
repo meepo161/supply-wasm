@@ -238,6 +238,7 @@ class ChatWorkspaceWebSocketTest {
         val admin = newClient()
         val adminUser = ensureAdmin(admin)
         val taskId = createTask("T-CW-TYPING-RO", "CLOSED", adminUser.id, adminUser.id, adminUser.id)
+        addTaskParticipant(taskId, adminUser.id, "INITIATOR")
         val adminCtx = CurrentUser(adminUser.id, "admin", "Admin User", emptySet())
         val messageId = dslSendMessage(taskId, adminUser.id, "Closed history", "cw-typing-ro")
         ctx.markRead(taskId, MarkChatReadRequest(messageId), adminCtx)
@@ -358,7 +359,7 @@ class ChatWorkspaceWebSocketTest {
                           }
                         }
                         database {
-                          url = "jdbc:postgresql://localhost:5433/erp_test"
+                          url = "${TestDatabase.TEST_URL}"
                           user = "erp"
                           password = "erp"
                         }

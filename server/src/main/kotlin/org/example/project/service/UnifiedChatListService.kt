@@ -203,7 +203,7 @@ class UnifiedChatListService(
                 lastMessageAuthor = candidate.lastMessageAuthorId?.let {
                     ChatAuthorDto(it, candidate.lastMessageAuthor.orEmpty())
                 },
-                lastMessageAt = candidate.lastMessageAt?.toString(),
+                lastMessageAt = candidate.lastMessageAt?.toInstant()?.toString(),
                 unreadCount = candidate.unreadCount,
                 mentionCount = candidate.mentionCount,
                 isPinned = candidate.isPinned,

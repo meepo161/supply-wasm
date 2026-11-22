@@ -5,6 +5,8 @@ import org.example.project.dto.DemandHeaderDto
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.SupplierCardDto
 import org.example.project.dto.SupplierCategoryDto
+import org.example.project.dto.SupplierClaimDto
+import org.example.project.dto.SupplierClaimType
 import org.example.project.dto.SupplierDto
 import org.example.project.dto.SupplierKind
 import org.example.project.dto.SupplierOfferComparisonDto
@@ -21,6 +23,7 @@ data class SupplierUiState(
     val demands: List<DemandHeaderDto> = emptyList(),
     val nomenclature: List<NomenclatureDto> = emptyList(),
     val offers: List<SupplierOfferDto> = emptyList(),
+    val claims: List<SupplierClaimDto> = emptyList(),
     val comparison: SupplierOfferComparisonDto? = null,
     val search: String = "",
     val statusFilter: SupplierVerificationStatus? = null,
@@ -29,6 +32,7 @@ data class SupplierUiState(
     val isSuppliersLoading: Boolean = false,
     val isCardLoading: Boolean = false,
     val isOffersLoading: Boolean = false,
+    val isClaimsLoading: Boolean = false,
     val isActionRunning: Boolean = false,
     val operationError: ApiError? = null,
     val successMessage: String? = null,
@@ -40,6 +44,7 @@ data class SupplierUiState(
     val documentForm: DocumentForm = DocumentForm(),
     val categorySelection: Set<Long> = emptySet(),
     val offerForm: CreateOfferForm = CreateOfferForm(),
+    val claimForm: CreateClaimForm = CreateClaimForm(),
     val selectionReason: String = "",
     val verificationNote: String = "",
     val pendingSelectionOfferId: Long? = null,
@@ -48,8 +53,16 @@ data class SupplierUiState(
 
 enum class SupplierTab(val title: String) {
     SUPPLIERS("Поставщики"),
-    OFFERS("Предложения")
+    OFFERS("Предложения"),
+    CLAIMS("Рекламации")
 }
+
+data class CreateClaimForm(
+    val supplierId: Long? = null,
+    val claimType: SupplierClaimType = SupplierClaimType.DEFECT,
+    val description: String = "",
+    val claimAmount: String = "0"
+)
 
 sealed class SupplierDialog {
     data object CreateSupplier : SupplierDialog()
@@ -61,6 +74,7 @@ sealed class SupplierDialog {
     data object Verify : SupplierDialog()
     data object CreateOffer : SupplierDialog()
     data class SelectOffer(val offerId: Long, val offerNumber: String) : SupplierDialog()
+    data object CreateClaim : SupplierDialog()
 }
 
 data class CreateSupplierForm(
