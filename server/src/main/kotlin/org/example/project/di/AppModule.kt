@@ -121,6 +121,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { SupplierRepository(get()) }
     single { SupplierService(get(), get(), get(), get()) }
     single { SupplierClaimService(get(), get()) }
+    single { org.example.project.service.SupplierInvoiceService(get(), get(), get(), get(), get()) }
     single { AnalyticsService(get(), get()) }
     single { PurchaseOrderRepository(get()) }
     single { PurchaseOrderService(get(), get(), get(), get()) }

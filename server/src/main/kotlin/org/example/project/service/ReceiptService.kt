@@ -13,6 +13,8 @@ import org.example.project.generated.jooq.tables.records.ReceiptsRecord
 import org.example.project.model.CurrentUser
 import org.example.project.repository.PurchaseOrderRepository
 import org.example.project.repository.WmsRepository
+import org.example.project.generated.jooq.tables.ReceiptLines.RECEIPT_LINES
+import org.example.project.generated.jooq.tables.Receipts.RECEIPTS
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.TransactionalCallable
@@ -109,6 +111,14 @@ class ReceiptService(
             throw ValidationException(
                 "Source document number is required for ${request.sourceType.name}",
                 mapOf("sourceDocumentNo" to "required")
+            )
+        }
+        // D-61: приёмку по счёту оформляет снабжение из карточки счёта поставщика;
+        // склад не создаёт её вручную и не вводит номер счёта текстом.
+        if (request.sourceType == ReceiptSourceType.INVOICE) {
+            throw ValidationException(
+                "Receipt by invoice is created by procurement from the supplier invoice",
+                mapOf("sourceType" to "invoice_requires_supplier_invoice")
             )
         }
         if ((request.purchaseOrderId != null || request.purchaseDeliveryId != null) &&
@@ -377,6 +387,212 @@ class ReceiptService(
     }
 
     // -----------------------------------------------------------------------
+    // Поступление по счёту поставщика (D-61)
+    // -----------------------------------------------------------------------
+
+    data class InvoiceReceiptLine(
+        val lineNo: Int,
+        val nomenclatureId: Long,
+        val quantity: BigDecimal,
+        val purchaseOrderLineId: Long?
+    )
+
+    data class InvoiceReceiptDraft(
+        val invoiceId: Long,
+        val invoiceNumber: String,
+        val invoiceDate: LocalDate,
+        val purchaseOrderId: Long?,
+        val warehouseId: Long,
+        val expectedAt: String?,
+        val note: String?,
+        val lines: List<InvoiceReceiptLine>
+    )
+
+    /**
+     * Черновик поступления по сверенному счёту. Вызывается только внутри транзакции
+     * SupplierInvoiceService.createReceipt (право `invoices:manage` проверено там): ячейки и
+     * фактическое количество вносит склад ([acceptLines]) перед проведением.
+     * Ожидаемое количество — из счёта; превышение остатка заказа отклоняется.
+     */
+    fun createDraftForSupplierInvoice(draft: InvoiceReceiptDraft, currentUser: CurrentUser): ReceiptDto {
+        val warehouse = wmsRepository.findWarehouseById(draft.warehouseId)
+            ?: throw NotFoundException("warehouse", draft.warehouseId)
+        if (warehouse.active != true) {
+            throw ValidationException("Warehouse is inactive", mapOf("warehouseId" to "inactive"))
+        }
+        val expectedAt = parseDateTime(draft.expectedAt)
+        if (draft.expectedAt != null && expectedAt == null) {
+            throw ValidationException("Invalid expected date", mapOf("expectedAt" to "invalid"))
+        }
+        // Без собственной транзакции: вызывается внутри транзакции счёта, которая
+        // блокирует счёт; вложенная транзакция закрыла бы её соединение.
+        return run {
+            val order = draft.purchaseOrderId?.let { orderId ->
+                val found = purchaseRepository.lockOrderById(orderId)
+                    ?: throw NotFoundException("purchase_order", orderId)
+                validateOrderAcceptsReceipt(found)
+                found
+            }
+            val orderLines = order?.let { wmsRepository.listPurchaseOrderLines(it.id) } ?: emptyList()
+            draft.lines.forEach { line ->
+                val nomenclature = wmsRepository.findNomenclatureById(line.nomenclatureId)
+                    ?: throw NotFoundException("nomenclature", line.nomenclatureId)
+                if (nomenclature.archived == true) {
+                    throw ConflictException("Nomenclature is archived: ${nomenclature.code}")
+                }
+                line.purchaseOrderLineId?.let { orderLineId ->
+                    val orderLine = orderLines.firstOrNull { it.id == orderLineId }
+                        ?: throw ConflictException("Invoice line ${line.lineNo} refers to a line of another order")
+                    val remaining = (orderLine.quantity - wmsRepository.acceptedQuantityForOrderLine(orderLineId))
+                        .max(BigDecimal.ZERO)
+                    if (line.quantity > remaining) {
+                        throw ConflictException(
+                            "Invoice line ${line.lineNo}: quantity ${line.quantity.toPlainString()} exceeds " +
+                                "the order line remainder ${remaining.toPlainString()}"
+                        )
+                    }
+                }
+            }
+            val receipt = wmsRepository.createReceipt(
+                number = wmsRepository.generateReceiptNumber(),
+                sourceType = ReceiptSourceType.INVOICE.name,
+                sourceRef = null,
+                sourceDocumentNo = draft.invoiceNumber,
+                sourceDocumentDate = draft.invoiceDate,
+                purchaseOrderId = order?.id,
+                purchaseDeliveryId = null,
+                warehouseId = draft.warehouseId,
+                expectedAt = expectedAt,
+                note = draft.note,
+                createdBy = currentUser.userId
+            )
+            try {
+                dsl.update(RECEIPTS)
+                    .set(RECEIPTS.SUPPLIER_INVOICE_ID, draft.invoiceId)
+                    .where(RECEIPTS.ID.eq(receipt.id))
+                    .execute()
+            } catch (e: org.jooq.exception.DataAccessException) {
+                if (e.sqlState() == "23505") throw ConflictException("Receipt for this invoice already exists")
+                throw e
+            }
+            draft.lines.sortedBy { it.lineNo }.forEach { line ->
+                // Ячейку выбирает склад; по умолчанию «принято = ожидалось».
+                wmsRepository.insertReceiptLine(
+                    receiptId = receipt.id,
+                    lineNo = line.lineNo,
+                    nomenclatureId = line.nomenclatureId,
+                    expectedQuantity = line.quantity,
+                    receivedQuantity = line.quantity,
+                    lotId = null,
+                    locationId = null,
+                    note = null,
+                    purchaseOrderLineId = line.purchaseOrderLineId
+                )
+            }
+            auditService.log(
+                currentUser.userId, "CREATE", "RECEIPT", receipt.id,
+                mapOf(
+                    "number" to receipt.number,
+                    "sourceType" to ReceiptSourceType.INVOICE.name,
+                    "supplierInvoiceId" to draft.invoiceId,
+                    "purchaseOrderId" to order?.id,
+                    "lines" to draft.lines.size
+                )
+            )
+            build(wmsRepository.findReceiptById(receipt.id)!!)
+        }
+    }
+
+    /**
+     * Склад вносит фактическое количество, ячейки, партии и причины расхождений
+     * в черновик приёмки. Остаток не меняется до проведения.
+     */
+    fun acceptLines(id: Long, request: AcceptReceiptLinesRequest, currentUser: CurrentUser): ReceiptDto {
+        currentUser.requirePermission("wms", "post")
+        if (request.lines.isEmpty()) {
+            throw ValidationException("No lines to accept", mapOf("lines" to "required"))
+        }
+        return dsl.transactionResult(TransactionalCallable {
+            val receipt = wmsRepository.lockReceiptById(id) ?: throw NotFoundException("receipt", id)
+            if (receipt.version != request.version) {
+                throw ConflictException("Receipt was modified concurrently")
+            }
+            if (receipt.status != "DRAFT" && receipt.status != "IN_PROGRESS") {
+                throw ConflictException("Receipt cannot be changed in status ${receipt.status}")
+            }
+            val lines = wmsRepository.listReceiptLines(id).associateBy { it.id }
+            val orderLines = receipt.purchaseOrderId?.let { wmsRepository.listPurchaseOrderLines(it) } ?: emptyList()
+            request.lines.forEachIndexed { index, input ->
+                val line = lines[input.lineId]
+                    ?: throw ValidationException("Line does not belong to the receipt", mapOf("lines[$index].lineId" to "not_in_receipt"))
+                val received = parseQuantity(input.receivedQuantity, "lines[$index].receivedQuantity", allowZero = true)
+                val location = wmsRepository.findLocationById(input.locationId)
+                    ?: throw NotFoundException("storage_location", input.locationId)
+                if (location.warehouseId != receipt.warehouseId) {
+                    throw ValidationException("Location does not belong to the receipt warehouse", mapOf("lines[$index].locationId" to "other_warehouse"))
+                }
+                if (location.active != true) {
+                    throw ValidationException("Location is inactive", mapOf("lines[$index].locationId" to "inactive"))
+                }
+                line.purchaseOrderLineId?.let { orderLineId ->
+                    val orderLine = orderLines.firstOrNull { it.id == orderLineId }
+                    if (orderLine != null) {
+                        val remaining = (orderLine.quantity - wmsRepository.acceptedQuantityForOrderLine(orderLineId))
+                            .max(BigDecimal.ZERO)
+                        if (received > remaining) {
+                            throw ConflictException(
+                                "Received quantity ${received.toPlainString()} exceeds the order line remainder ${remaining.toPlainString()}"
+                            )
+                        }
+                    }
+                }
+                val expected = line.expectedQuantity
+                val kind: String?
+                val diff: BigDecimal?
+                when {
+                    received > expected -> { kind = ReceiptDiscrepancyKind.SURPLUS.name; diff = received - expected }
+                    received < expected -> { kind = ReceiptDiscrepancyKind.SHORTAGE.name; diff = expected - received }
+                    else -> { kind = null; diff = null }
+                }
+                val reason = input.discrepancyReason?.trim()?.takeIf { it.isNotEmpty() }
+                if (kind != null && reason == null) {
+                    throw ValidationException("Discrepancy requires a reason", mapOf("lines[$index].discrepancyReason" to "required"))
+                }
+                val nomenclature = wmsRepository.findNomenclatureById(line.nomenclatureId)
+                    ?: throw NotFoundException("nomenclature", line.nomenclatureId)
+                val lotNumber = input.lotNumber?.trim()?.takeIf { it.isNotEmpty() }
+                if (nomenclature.lotTracked == true && received.signum() > 0 && lotNumber == null) {
+                    throw ValidationException("Lot number is required for lot-tracked nomenclature", mapOf("lines[$index].lotNumber" to "required"))
+                }
+                val lotId = lotNumber?.let {
+                    (wmsRepository.findLot(nomenclature.id, it) ?: wmsRepository.createLot(nomenclature.id, it, currentUser.userId)).id
+                }
+                dsl.update(RECEIPT_LINES)
+                    .set(RECEIPT_LINES.RECEIVED_QUANTITY, received)
+                    .set(RECEIPT_LINES.LOCATION_ID, location.id)
+                    .set(RECEIPT_LINES.LOT_ID, lotId)
+                    .set(RECEIPT_LINES.DISCREPANCY_KIND, kind)
+                    .set(RECEIPT_LINES.DISCREPANCY_QUANTITY, diff?.setScale(4, RoundingMode.HALF_UP))
+                    .set(RECEIPT_LINES.DISCREPANCY_REASON, if (kind != null) reason else null)
+                    .where(RECEIPT_LINES.ID.eq(line.id))
+                    .execute()
+            }
+            val updated = dsl.update(RECEIPTS)
+                .set(RECEIPTS.VERSION, RECEIPTS.VERSION.plus(1))
+                .set(RECEIPTS.STATUS, "IN_PROGRESS")
+                .where(RECEIPTS.ID.eq(id))
+                .and(RECEIPTS.VERSION.eq(request.version))
+                .execute()
+            if (updated == 0) throw ConflictException("Receipt was modified concurrently")
+            auditService.log(
+                currentUser.userId, "ACCEPT_LINES", "RECEIPT", id,
+                mapOf("lines" to request.lines.size)
+            )
+            build(wmsRepository.findReceiptById(id)!!)
+        })
+    }
+
+    // -----------------------------------------------------------------------
     // Проведение
     // -----------------------------------------------------------------------
 
@@ -405,6 +621,14 @@ class ReceiptService(
                 throw ValidationException(
                     "Receipt has nothing received; zero posting would create a false document",
                     mapOf("lines" to "nothing_received")
+                )
+            }
+            // Поступление от снабжения приходит без ячеек: проводить его можно
+            // только после того, как склад разместил каждую принятую строку.
+            lines.firstOrNull { it.receivedQuantity.signum() > 0 && it.locationId == null }?.let { line ->
+                throw ValidationException(
+                    "Storage location is required for line ${line.lineNo} before posting",
+                    mapOf("lines" to "location_required")
                 )
             }
 
@@ -679,7 +903,9 @@ class ReceiptService(
             version = receipt.version ?: 0,
             lines = lines.map { it.toDto() },
             links = links.map { it.toDto() },
-            hasDiscrepancies = lines.any { it.discrepancyKind != null }
+            hasDiscrepancies = lines.any { it.discrepancyKind != null },
+            supplierInvoiceId = receipt.supplierInvoiceId,
+            supplierInvoiceNumber = receipt.supplierInvoiceId?.let { receipt.sourceDocumentNo }
         )
     }
 
