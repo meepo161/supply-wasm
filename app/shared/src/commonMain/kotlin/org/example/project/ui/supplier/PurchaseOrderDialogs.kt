@@ -66,10 +66,10 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ErpTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.expectedAt,
                     onValueChange = { viewModel.updateCreateForm(form.copy(expectedAt = it)) },
-                    label = "Ожидаемая поставка (ГГГГ-ММ-ДД)",
+                    label = "Ожидаемая поставка",
                     modifier = Modifier.weight(1f)
                 )
                 OrderResponsibleDropdown(
@@ -168,10 +168,10 @@ private fun EditOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOrde
         ) {
             state.operationError?.let { ErrorMessageCard(error = it) }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ErpTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.expectedAt,
                     onValueChange = { viewModel.updateEditForm(form.copy(expectedAt = it)) },
-                    label = "Ожидаемая поставка (ГГГГ-ММ-ДД)",
+                    label = "Ожидаемая поставка",
                     modifier = Modifier.weight(1f)
                 )
                 ErpTextField(
@@ -268,10 +268,10 @@ private fun RegisterDeliveryDialog(state: PurchaseOrderUiState, viewModel: Purch
         ) {
             state.operationError?.let { ErrorMessageCard(error = it) }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ErpTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.deliveredAt,
                     onValueChange = { viewModel.updateDeliveryForm(form.copy(deliveredAt = it)) },
-                    label = "Дата поставки (ГГГГ-ММ-ДД)",
+                    label = "Дата поставки",
                     modifier = Modifier.weight(1f)
                 )
                 ErpTextField(

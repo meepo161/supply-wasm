@@ -1,5 +1,6 @@
 package org.example.project.ui.wms
 
+import org.example.project.ui.userText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,7 +74,7 @@ fun ReceiptAcceptance(
     LaunchedEffect(receipt.warehouseId) {
         when (val r = wmsRepository.listLocations(receipt.warehouseId)) {
             is ApiResult.Success -> locations = r.data.filter { it.active }
-            is ApiResult.Error -> message = r.error.message
+            is ApiResult.Error -> message = r.error.userText()
         }
     }
 
@@ -95,7 +96,7 @@ fun ReceiptAcceptance(
                                 r.data.mimeType,
                                 r.data.bytes
                             )
-                            is ApiResult.Error -> message = r.error.message
+                            is ApiResult.Error -> message = r.error.userText()
                         }
                     }
                 }) { Text("Открыть счёт") }

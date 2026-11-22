@@ -93,22 +93,20 @@ fun ProjectCreateDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.plannedStartAt,
                     onValueChange = { onFormChange(form.copy(plannedStartAt = it)) },
-                    label = { Text("Плановое начало (ISO-8601)") },
-                    placeholder = { Text("2026-01-01T00:00:00Z") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    label = "Плановое начало",
+                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.plannedEndAt,
                     onValueChange = { onFormChange(form.copy(plannedEndAt = it)) },
-                    label = { Text("Плановое окончание (ISO-8601)") },
-                    placeholder = { Text("2026-12-31T00:00:00Z") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    label = "Плановое окончание",
+                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },

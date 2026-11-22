@@ -76,6 +76,22 @@ class ApplicationTest {
     }
 
     @Test
+    fun `bootstrap status is public and turns off after the first administrator`() = testApp {
+        val client = jsonClient()
+        val before = client.get("/api/admin/bootstrap-status")
+        assertEquals(HttpStatusCode.OK, before.status)
+        assertTrue(before.bodyAs<ApiResponse<BootstrapStatusDto>>().data!!.required)
+
+        client.post("/api/admin/bootstrap") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(BootstrapRequest("admin", "admin123", "Admin User")))
+        }
+        val after = jsonClient().get("/api/admin/bootstrap-status")
+        assertEquals(HttpStatusCode.OK, after.status)
+        assertFalse(after.bodyAs<ApiResponse<BootstrapStatusDto>>().data!!.required)
+    }
+
+    @Test
     fun `login error returns 401`() = testApp {
         val client = jsonClient()
         client.post("/api/admin/bootstrap") {

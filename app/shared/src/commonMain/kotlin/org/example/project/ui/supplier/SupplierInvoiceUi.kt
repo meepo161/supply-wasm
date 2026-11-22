@@ -461,8 +461,8 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ErpTextField(form.number, { v -> viewModel.updateForm { it.copy(number = v) } }, "Номер счёта", Modifier.weight(1f))
-                ErpTextField(form.invoiceDate, { v -> viewModel.updateForm { it.copy(invoiceDate = v) } }, "Дата счёта (ГГГГ-ММ-ДД)", Modifier.weight(1f))
-                ErpTextField(form.validUntil, { v -> viewModel.updateForm { it.copy(validUntil = v) } }, "Действует до (ГГГГ-ММ-ДД)", Modifier.weight(1f))
+                org.example.project.ui.theme.ErpDateField(form.invoiceDate, { v -> viewModel.updateForm { it.copy(invoiceDate = v) } }, "Дата счёта", Modifier.weight(1f))
+                org.example.project.ui.theme.ErpDateField(form.validUntil, { v -> viewModel.updateForm { it.copy(validUntil = v) } }, "Действует до", Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ErpTextField(form.supplierInn, { v -> viewModel.updateForm { it.copy(supplierInn = v) } }, "ИНН поставщика из счёта", Modifier.weight(1f))

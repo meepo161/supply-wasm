@@ -148,10 +148,10 @@ fun TaskCreateDialog(
             )
         }
 
-        OutlinedTextField(
+        org.example.project.ui.theme.ErpDateField(
             value = form.dueDate,
             onValueChange = { onFormChange(form.copy(dueDate = it)) },
-            label = { Text("Срок выполнения (ГГГГ-ММ-ДД)") },
+            label = "Срок выполнения",
             modifier = Modifier.fillMaxWidth()
         )
 

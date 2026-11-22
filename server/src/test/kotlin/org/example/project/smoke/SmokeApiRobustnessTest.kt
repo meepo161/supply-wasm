@@ -158,6 +158,7 @@ class SmokeApiRobustnessTest {
             "/api/openapi.json",
             "/api/auth/login",
             "/api/admin/bootstrap",
+            "/api/admin/bootstrap-status",
             "/api/push/public-key",
             "/api/auth/logout" // идемпотентный выход без сессии допустим
         )

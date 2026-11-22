@@ -69,12 +69,11 @@ fun CreateDemandDialog(
                     onSelect = { onFormChange(form.copy(priority = it)) },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.requiredDate,
                     onValueChange = { onFormChange(form.copy(requiredDate = it)) },
-                    label = { Text("Требуемая дата (YYYY-MM-DD)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    label = "Требуемая дата",
+                    modifier = Modifier.fillMaxWidth()
                 )
                 when (form.sourceType) {
                     DemandSourceType.PROJECT -> ProjectDemandFields(

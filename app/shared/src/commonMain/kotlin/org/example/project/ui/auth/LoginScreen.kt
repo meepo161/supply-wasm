@@ -1,5 +1,7 @@
 package org.example.project.ui.auth
 
+import org.example.project.ui.userText
+import org.example.project.ui.userTitle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -188,14 +190,16 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(18.dp))
+                    if (state.bootstrapRequired || showBootstrap) {
+                        Spacer(Modifier.height(18.dp))
 
-                    SoftButton(
-                        text = if (showBootstrap) "Вернуться ко входу" else "Создать первого администратора",
-                        onClick = { showBootstrap = !showBootstrap },
-                        enabled = !state.isLoading,
-                        leadingIcon = if (showBootstrap) ErpIconGlyph.ChevronLeft else ErpIconGlyph.Plus
-                    )
+                        SoftButton(
+                            text = if (showBootstrap) "Вернуться ко входу" else "Создать первого администратора",
+                            onClick = { showBootstrap = !showBootstrap },
+                            enabled = !state.isLoading,
+                            leadingIcon = if (showBootstrap) ErpIconGlyph.ChevronLeft else ErpIconGlyph.Plus
+                        )
+                    }
 
                     if (showBootstrap) {
                         Spacer(Modifier.height(18.dp))
@@ -388,13 +392,13 @@ private fun ErrorBanner(error: ApiError) {
         Spacer(Modifier.width(10.dp))
         Column {
             Text(
-                text = error.code,
+                text = error.userTitle(),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.error
             )
             Text(
-                text = error.message,
+                text = error.userText(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )

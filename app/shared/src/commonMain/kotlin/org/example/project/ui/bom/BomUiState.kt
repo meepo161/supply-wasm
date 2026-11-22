@@ -58,6 +58,7 @@ sealed class BomDialog {
     data object Explode : BomDialog()
     data object Diff : BomDialog()
     data object WhereUsed : BomDialog()
+
 }
 
 data class CreateProductModelForm(

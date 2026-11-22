@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import org.example.project.ui.userText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -495,7 +496,7 @@ private fun NomenclatureDetailDialog(
                         )
                         localStatus = when (res) {
                             is org.example.project.data.ApiResult.Success -> "Пороги обновлены"
-                            is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.message}"
+                            is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.userText()}"
                         }
                     }
                 }) { Text("Сохранить пороги") }
@@ -524,7 +525,7 @@ private fun NomenclatureDetailDialog(
                                         newBarcode = ""
                                         "Штрихкод $code добавлен"
                                     }
-                                    is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.message}"
+                                    is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.userText()}"
                                 }
                             }
                         }
@@ -583,7 +584,7 @@ private fun NomenclatureDetailDialog(
                                         analogIdInput = ""
                                         localStatus = "Аналог #$aId добавлен"
                                     }
-                                    is org.example.project.data.ApiResult.Error -> localStatus = "Ошибка: ${res.error.message}"
+                                    is org.example.project.data.ApiResult.Error -> localStatus = "Ошибка: ${res.error.userText()}"
                                 }
                             }
                         }
@@ -1151,7 +1152,7 @@ private fun ReceiptDetailCard(
                         qcScope.launch {
                             when (val res = wmsRepoForQc.getReceiptQc(receipt.id)) {
                                 is org.example.project.data.ApiResult.Success -> qcInfo = res.data
-                                is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.message
+                                is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.userText()
                             }
                         }
                     }) { Text("Контроль ОТК") }
@@ -1199,7 +1200,7 @@ private fun ReceiptDetailCard(
                                         qcInfo = res.data
                                         qcStatusMsg = "ОТК проведён: ${res.data.status.name}"
                                     }
-                                    is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.message
+                                    is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.userText()
                                 }
                             }
                         }) { Text("Принять всё (ОТК)") }

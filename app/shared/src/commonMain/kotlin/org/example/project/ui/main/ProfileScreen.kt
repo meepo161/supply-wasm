@@ -1,5 +1,6 @@
 package org.example.project.ui.main
 
+import org.example.project.ui.userText
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -324,7 +325,7 @@ fun ProfileScreen(
                                         delegateIdInput = ""
                                         delMsg = "Делегирование создано"
                                     }
-                                    is ApiResult.Error -> delMsg = res.error.message
+                                    is ApiResult.Error -> delMsg = res.error.userText()
                                 }
                             }
                         }

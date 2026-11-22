@@ -11,4 +11,6 @@ data class AuthUiState(
     val passwordChangeLoading: Boolean = false,
     val passwordChangeError: ApiError? = null,
     val passwordChangeSuccess: Boolean = false,
+    /** В базе нет пользователей — показать создание первого администратора (UX-07). */
+    val bootstrapRequired: Boolean = false,
 )
