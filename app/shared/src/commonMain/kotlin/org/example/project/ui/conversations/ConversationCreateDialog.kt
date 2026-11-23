@@ -107,21 +107,6 @@ fun ConversationCreateDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (selectedUsers.isNotEmpty()) {
-                    Text("Выбранные участники", style = MaterialTheme.typography.labelLarge)
-                    selectedUsers.forEach { user ->
-                        FilterChip(
-                            selected = true,
-                            onClick = { selectedMembers = selectedMembers - user.id },
-                            enabled = !isCreating,
-                            label = { Text("${user.fullName} · убрать") },
-                            modifier = Modifier.semantics {
-                                contentDescription = "Убрать участника ${user.fullName}"
-                            }
-                        )
-                    }
-                }
-
                 error?.let { ErrorMessageCard(error = it) }
                 directoryError?.let {
                     ErrorMessageCard(error = it)
@@ -139,7 +124,7 @@ fun ConversationCreateDialog(
                         Text("Загрузка справочника сотрудников…")
                     }
                     candidates.isEmpty() && directoryError == null -> Text(
-                        text = "В справочнике нет доступных сотрудников — собеседника выбрать нельзя.",
+                        text = "В справочнике нет доступных сотрудников, собеседника выбрать нельзя.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -148,7 +133,12 @@ fun ConversationCreateDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    else -> Column(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
+                    else -> Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp)
+                            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    ) {
                         Text(
                             text = if (kind == ConversationKind.DIRECT) "Собеседник" else "Участники",
                             style = MaterialTheme.typography.labelLarge,
@@ -172,14 +162,37 @@ fun ConversationCreateDialog(
                                     .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Checkbox(
-                                    checked = checked,
-                                    onCheckedChange = { toggle() },
-                                    enabled = !isCreating
-                                )
+                                // Собеседник личного чата один, поэтому переключатель, а не флажок.
+                                if (kind == ConversationKind.DIRECT) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = checked,
+                                        onClick = { toggle() },
+                                        enabled = !isCreating
+                                    )
+                                } else {
+                                    Checkbox(
+                                        checked = checked,
+                                        onCheckedChange = { toggle() },
+                                        enabled = !isCreating
+                                    )
+                                }
                                 Text(user.fullName, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
+                    }
+                }
+                if (kind != ConversationKind.DIRECT && selectedUsers.isNotEmpty()) {
+                    Text("Выбранные участники (${selectedUsers.size})", style = MaterialTheme.typography.labelLarge)
+                    selectedUsers.forEach { user ->
+                        FilterChip(
+                            selected = true,
+                            onClick = { selectedMembers = selectedMembers - user.id },
+                            enabled = !isCreating,
+                            label = { Text("${user.fullName} · убрать") },
+                            modifier = Modifier.semantics {
+                                contentDescription = "Убрать участника ${user.fullName}"
+                            }
+                        )
                     }
                 }
             }

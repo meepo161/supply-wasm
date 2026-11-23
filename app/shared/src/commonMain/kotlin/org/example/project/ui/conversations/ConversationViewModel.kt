@@ -583,8 +583,10 @@ class ConversationViewModel(
         coroutineScope.launch {
             when (val result = conversationRepository.markRead(selected.id, messageId)) {
                 is ApiResult.Success -> {
+                    // В списке задачный чат хранится с ID задачи, а выбранный разговор с отрицательным ID.
+                    val listId = if (selected.kind == ConversationKind.TASK) -selected.id else selected.id
                     val items = _uiState.value.items.map {
-                        if (it.kind == selected.kind && it.id == selected.id) {
+                        if (it.kind == selected.kind && it.id == listId) {
                             it.copy(unreadCount = 0, mentionCount = 0)
                         } else {
                             it

@@ -412,9 +412,10 @@ fun Avatar(
 ) {
     val colors = gradient ?: gradientFor(name)
     val initials = remember(name) {
-        name.trim().split(" ", ".").filter { it.isNotBlank() }
+        // Слова без букв («—», «·», номер вида «T-2026-00001» оставляет свою букву) пропускаются.
+        name.trim().split(" ", ".").filter { word -> word.any { it.isLetter() } }
             .take(2)
-            .map { it.first().uppercaseChar().toString() }
+            .map { word -> word.first { it.isLetter() }.uppercaseChar().toString() }
             .joinToString("")
             .ifBlank { "?" }
     }

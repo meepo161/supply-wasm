@@ -334,7 +334,7 @@ private fun ConversationMessageSearch(state: ConversationMessagesUiState, viewMo
             Column(Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState())) {
                 state.searchResults.forEach { result ->
                     Text(
-                        "${result.author?.fullName ?: "—"} · ${chatSnippet(result.content, 100)}",
+                        "${result.author?.fullName ?: "Неизвестный автор"} · ${chatSnippet(result.content, 100)}",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().clickable {
@@ -386,7 +386,7 @@ private fun ConversationComposer(
         Surface(Modifier.fillMaxWidth().padding(8.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Ответ: ${reply.author?.fullName ?: "—"} · ${chatSnippet(reply.content)}",
+                    "Ответ: ${reply.author?.fullName ?: "Неизвестный автор"} · ${chatSnippet(reply.content)}",
                     Modifier.weight(1f).padding(8.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -416,7 +416,7 @@ private fun ConversationComposer(
             value = state.draft,
             onValueChange = onDraftChange,
             label = {
-                Text(if (editingMessage != null) "Изменить сообщение (Ctrl+Enter — сохранить)" else "Сообщение (Ctrl+Enter — отправить)")
+                Text(if (editingMessage != null) "Изменить сообщение (Ctrl+Enter: сохранить)" else "Сообщение (Ctrl+Enter: отправить)")
             },
             minLines = 1,
             maxLines = 4,
@@ -510,13 +510,13 @@ private fun ConversationMessageItem(
         verticalAlignment = Alignment.Top
     ) {
         if (!own) {
-            Avatar(message.author?.fullName ?: "—", size = 32.dp)
+            Avatar(message.author?.fullName ?: "Неизвестный автор", size = 32.dp)
             Spacer(Modifier.width(8.dp))
         }
         Column(Modifier.widthIn(max = 560.dp)) {
             if (!own) {
                 Text(
-                    text = message.author?.fullName ?: "—",
+                    text = message.author?.fullName ?: "Неизвестный автор",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, bottom = 3.dp)
@@ -536,7 +536,7 @@ private fun ConversationMessageItem(
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     message.source?.let { source ->
                         Text(
-                            text = "Переслано от ${source.author?.fullName ?: "—"}",
+                            text = "Переслано от ${source.author?.fullName ?: "Неизвестный автор"}",
                             style = MaterialTheme.typography.labelSmall,
                             color = contentColor.copy(alpha = 0.65f),
                             modifier = Modifier.padding(bottom = 4.dp)
@@ -549,7 +549,7 @@ private fun ConversationMessageItem(
                             color = contentColor.copy(alpha = 0.06f)
                         ) {
                             Text(
-                                text = "${reply.author?.fullName ?: "—"}: ${reply.contentPreview}",
+                                text = "${reply.author?.fullName ?: "Неизвестный автор"}: ${reply.contentPreview}",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                 color = contentColor,
                                 style = MaterialTheme.typography.bodySmall,
@@ -886,7 +886,11 @@ private fun ConversationSystemEvent(message: ConversationMessageDto) {
 private fun MessageDateSeparator(date: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         HorizontalDivider(Modifier.weight(1f))
-        Text(date, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp))
+        Text(
+            org.example.project.ui.theme.ErpFormat.dateRu(date),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
         HorizontalDivider(Modifier.weight(1f))
     }
 }

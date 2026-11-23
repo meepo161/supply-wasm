@@ -735,7 +735,7 @@ class ChatRepository(private val dsl: DSLContext) {
         parameters += limit + 1
         val sql = """
             WITH base AS (
-                SELECT t.id, 'TASK' AS kind, t.number || ' — ' || t.title AS title, t.project_id,
+                SELECT t.id, 'TASK' AS kind, t.number || ' · ' || t.title AS title, t.project_id,
                     NOT (t.status IN ('CLOSED', 'CANCELLED')) AND (
                         ? OR EXISTS (
                             SELECT 1 FROM task_participants write_tp

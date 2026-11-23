@@ -298,7 +298,11 @@ private fun TaskChatCenterColumn(
                 messages = conversationState.messages,
                 canWrite = conversation.canWrite && !task.isClosedLike(),
                 currentUserId = currentUser.id,
-                readOnlyHint = "Задача закрыта. Обсуждение доступно только для чтения.",
+                readOnlyHint = if (task.isClosedLike()) {
+                    "Задача закрыта. Обсуждение доступно только для чтения."
+                } else {
+                    "Писать в обсуждение могут исполнитель, соисполнители, инициатор и проверяющий задачи. Вам оно доступно для чтения."
+                },
                 onDraftChange = {
                     conversationViewModel.updateDraft(it)
                     if (it.isNotBlank()) viewModel.notifyTyping()
@@ -372,7 +376,7 @@ private fun TaskChatContextPanel(
         ContextRow("Название", task.title)
         ContextRow("Статус", task.status.localizedName())
         ContextRow("Приоритет", task.priority.localizedName())
-        ContextRow("Исполнитель", task.assigneeId?.let { userName(state.users, it) } ?: "—")
+        ContextRow("Исполнитель", task.assigneeId?.let { userName(state.users, it) } ?: "не назначен")
         ContextRow("Инициатор", userName(state.users, task.initiatorId))
         if (task.coexecutorIds.isNotEmpty()) {
             ContextRow("Соисполнители", task.coexecutorIds.joinToString(", ") { userName(state.users, it) })

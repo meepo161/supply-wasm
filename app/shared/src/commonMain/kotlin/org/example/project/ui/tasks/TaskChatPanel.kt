@@ -449,7 +449,7 @@ private fun ChatEmptyState(filter: ChatMessageFilter, modifier: Modifier = Modif
         )
         Text(
             text = when (filter) {
-                ChatMessageFilter.ALL -> "Напишите первое сообщение — его увидят участники задачи."
+                ChatMessageFilter.ALL -> "Напишите первое сообщение: его увидят участники задачи."
                 ChatMessageFilter.USER -> "Пока никто не писал в обсуждении."
                 ChatMessageFilter.SYSTEM -> "Системные события появятся при изменении задачи."
             },
