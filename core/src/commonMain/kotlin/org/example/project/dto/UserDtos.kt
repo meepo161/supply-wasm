@@ -12,7 +12,8 @@ data class UserDto(
     val active: Boolean = true,
     val createdAt: String? = null,
     val version: Long = 0,
-    val permissions: List<String> = emptyList()
+    val permissions: List<String> = emptyList(),
+    val roleIds: List<Long> = emptyList()
 )
 
 @Serializable

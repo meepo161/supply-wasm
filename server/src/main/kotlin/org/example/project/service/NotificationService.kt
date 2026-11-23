@@ -36,6 +36,10 @@ class NotificationService(private val notificationRepository: NotificationReposi
         return record.toDto()
     }
 
+    fun markAllRead(currentUser: CurrentUser): Int {
+        return notificationRepository.markAllRead(currentUser.userId)
+    }
+
     private fun toPage(
         rows: List<NotificationRepository.NotificationRow>,
         limit: Int,

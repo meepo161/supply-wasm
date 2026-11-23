@@ -61,6 +61,19 @@ private external fun byteAt(buffer: ArrayBuffer, index: Int): Int
 )
 private external fun saveFileJs(name: String, mime: String, base64: String)
 
+@JsFun(
+    "(mime, base64) => {" +
+        " const bin = atob(base64);" +
+        " const bytes = new Uint8Array(bin.length);" +
+        " for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);" +
+        " const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });" +
+        " const url = URL.createObjectURL(blob);" +
+        " window.open(url, '_blank', 'noopener,noreferrer');" +
+        " setTimeout(() => URL.revokeObjectURL(url), 60000);" +
+        "}"
+)
+private external fun previewFileJs(mime: String, base64: String)
+
 @OptIn(ExperimentalWasmJsInterop::class)
 actual fun pickAttachmentFile(
     onPicked: (AttachmentFileData) -> Unit,
@@ -80,4 +93,9 @@ actual fun pickAttachmentFile(
 @OptIn(ExperimentalEncodingApi::class, ExperimentalWasmJsInterop::class)
 actual fun saveAttachmentFile(fileName: String, mimeType: String?, bytes: ByteArray) {
     saveFileJs(fileName, mimeType ?: "application/octet-stream", Base64.encode(bytes))
+}
+
+@OptIn(ExperimentalEncodingApi::class, ExperimentalWasmJsInterop::class)
+actual fun previewAttachmentFile(fileName: String, mimeType: String?, bytes: ByteArray) {
+    previewFileJs(mimeType ?: "application/octet-stream", Base64.encode(bytes))
 }

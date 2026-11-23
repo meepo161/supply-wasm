@@ -270,9 +270,14 @@ internal fun CreateTransferDialog(
                     label = "Склад-получатель *",
                     modifier = Modifier.fillMaxWidth()
                 )
+                val availableTargetLocations = if (form.fromWarehouseId != null && form.fromWarehouseId == form.toWarehouseId) {
+                    locationsTo.filter { it.id != form.fromLocationId }
+                } else {
+                    locationsTo
+                }
                 LocationDropdown(
-                    locations = locationsTo,
-                    selected = locationsTo.find { it.id == form.toLocationId },
+                    locations = availableTargetLocations,
+                    selected = availableTargetLocations.find { it.id == form.toLocationId },
                     onSelect = { onFormChange(form.copy(toLocationId = it.id)) },
                     label = "Ячейка-получатель *",
                     modifier = Modifier.fillMaxWidth()

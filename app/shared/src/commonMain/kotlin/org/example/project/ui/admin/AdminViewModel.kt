@@ -107,7 +107,8 @@ class AdminViewModel(
                         version = user.version,
                         fullName = user.fullName,
                         email = user.email ?: "",
-                        departmentId = user.departmentId
+                        departmentId = user.departmentId,
+                        roleIds = user.roleIds.toSet()
                     )
                 )
             }

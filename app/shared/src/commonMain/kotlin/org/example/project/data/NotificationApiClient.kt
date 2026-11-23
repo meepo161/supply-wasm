@@ -59,6 +59,9 @@ class NotificationApiClient(private val client: HttpClient) : NotificationReposi
     override suspend fun markRead(id: Long): ApiResult<NotificationDto> =
         post("/api/notifications/$id/read")
 
+    override suspend fun markAllRead(): ApiResult<Map<String, Int>> =
+        post("/api/notifications/read-all")
+
     private suspend inline fun <reified T> getWithParams(
         path: String,
         params: Map<String, String>

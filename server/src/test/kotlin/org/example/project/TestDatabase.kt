@@ -6,7 +6,7 @@ import org.postgresql.ds.PGSimpleDataSource
 object TestDatabase {
 
     private val DB_NAME = System.getenv("ERP_TEST_DB_NAME") ?: System.getProperty("erp.test.db.name") ?: "erp_test"
-    private val PORT = System.getenv("ERP_TEST_DB_PORT") ?: System.getProperty("erp.test.db.port") ?: "5433"
+    private val PORT = System.getenv("ERP_TEST_DB_PORT") ?: System.getProperty("erp.test.db.port") ?: "5434"
     private val ADMIN_URL = "jdbc:postgresql://localhost:$PORT/erp"
     val TEST_URL = "jdbc:postgresql://localhost:$PORT/$DB_NAME"
     private const val USER = "erp"

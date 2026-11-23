@@ -16,6 +16,7 @@ fun Application.configureHTTP(config: AppConfig) {
                 prettyPrint = false
                 isLenient = true
                 ignoreUnknownKeys = true
+                encodeDefaults = true
             }
         )
     }

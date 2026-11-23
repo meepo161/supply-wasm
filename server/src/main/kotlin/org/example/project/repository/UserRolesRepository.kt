@@ -24,4 +24,12 @@ class UserRolesRepository(private val dsl: DSLContext) {
             .where(USER_ROLES.USER_ID.eq(userId))
             .fetch(USER_ROLES.ROLE_ID)
     }
+
+    fun listRoleIdsByUserIds(userIds: Collection<Long>): Map<Long, List<Long>> {
+        if (userIds.isEmpty()) return emptyMap()
+        return dsl.select(USER_ROLES.USER_ID, USER_ROLES.ROLE_ID)
+            .from(USER_ROLES)
+            .where(USER_ROLES.USER_ID.`in`(userIds))
+            .fetchGroups(USER_ROLES.USER_ID, USER_ROLES.ROLE_ID)
+    }
 }

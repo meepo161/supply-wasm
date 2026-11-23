@@ -377,7 +377,7 @@ class WmsService(
 
     // Остатки
 
-    fun getStock(warehouseId: Long?, nomenclatureId: Long?, currentUser: CurrentUser): List<StockBalanceDto> {
+    fun getStock(warehouseId: Long?, nomenclatureId: Long?, currentUser: CurrentUser, locationId: Long? = null): List<StockBalanceDto> {
         currentUser.requirePermission("wms", "read")
         val tr = org.example.project.generated.jooq.tables.Transfers.TRANSFERS
         val inTransitMap = dsl.select(tr.TO_WAREHOUSE_ID, tr.NOMENCLATURE_ID, org.jooq.impl.DSL.sum(tr.QUANTITY))
@@ -389,7 +389,7 @@ class WmsService(
                 (row.get(tr.TO_WAREHOUSE_ID)!! to row.get(tr.NOMENCLATURE_ID)!!) to
                     (row.get(2, java.math.BigDecimal::class.java) ?: java.math.BigDecimal.ZERO)
             }
-        return wmsRepository.selectStock(warehouseId, nomenclatureId).map { row ->
+        return wmsRepository.selectStock(warehouseId, nomenclatureId, locationId).map { row ->
             val inTransit = inTransitMap[row.balance.warehouseId to row.balance.nomenclatureId] ?: java.math.BigDecimal.ZERO
             row.toDto().copy(inTransitQty = inTransit.stripTrailingZeros().toPlainString())
         }

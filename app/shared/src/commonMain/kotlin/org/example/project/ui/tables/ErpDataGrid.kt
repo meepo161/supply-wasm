@@ -6,8 +6,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,17 +25,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -43,12 +52,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.ui.theme.Brand
@@ -71,7 +85,7 @@ private data class GridRow(
     val values: List<Any?>
 )
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ErpDataGrid(
     data: Map<String, List<Any?>>,
@@ -355,22 +369,34 @@ fun ErpDataGrid(
             HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.55f))
             }
 
-            // 2. Таблица (Sticky Header + LazyColumn строк + горизонтальный скролл)
+            // 2. Таблица (Sticky Header + LazyColumn строк + горизонтальный скролл при нехватке ширины)
             BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 val containerWidthDp = maxWidth
                 val rowNumColWidth = if (config.isVisibilityRowNumber) 48.dp else 0.dp
                 val rawColumnsTotalDp = visibleColumnIndices.sumOf {
                     (columnWidthsDp[columnKeys[it]] ?: 140f).toDouble()
                 }.toFloat().dp
+                val minColumnsTotalDp = visibleColumnIndices.sumOf {
+                    maxOf((columnWidthsDp[columnKeys[it]] ?: 140f).toDouble() * 0.65, 96.0)
+                }.toFloat().dp
                 val separatorWidth = if (config.isVisibilityRowNumber) 1.dp else 0.dp
                 val availableForColumns = (containerWidthDp - rowNumColWidth - separatorWidth).coerceAtLeast(0.dp)
-                // Таблица всегда вписывается в ширину контейнера: колонки пропорционально
-                // растягиваются или сжимаются, горизонтальной прокрутки нет. Длинные значения
-                // обрезаются с многоточием; лишние колонки скрываются через «Колонки».
-                val scaleFactor = if (rawColumnsTotalDp > 0.dp) availableForColumns / rawColumnsTotalDp else 1f
+                val targetColumnsTotalDp = maxOf(availableForColumns, minColumnsTotalDp)
+                val scaleFactor = if (rawColumnsTotalDp > 0.dp) targetColumnsTotalDp / rawColumnsTotalDp else 1f
+                val effectiveTableWidth = targetColumnsTotalDp + rowNumColWidth + separatorWidth
+                val hScrollState = rememberScrollState()
 
-                Column(modifier = Modifier.fillMaxSize()) {
-                    val effectiveTableWidth = containerWidthDp
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (effectiveTableWidth > containerWidthDp) {
+                                Modifier.horizontalScroll(hScrollState)
+                            } else {
+                                Modifier
+                            }
+                        )
+                ) {
 
                     // Заголовок таблицы
                     Row(
@@ -520,10 +546,49 @@ fun ErpDataGrid(
                             }
                         }
                     } else {
+                        val listState = rememberLazyListState()
+                        val nestedScrollConnection = remember(listState) {
+                            object : NestedScrollConnection {
+                                override fun onPostScroll(
+                                    consumed: Offset,
+                                    available: Offset,
+                                    source: NestedScrollSource
+                                ): Offset {
+                                    val canScroll = when {
+                                        available.y < 0f -> listState.canScrollForward
+                                        available.y > 0f -> listState.canScrollBackward
+                                        else -> false
+                                    }
+                                    return if (consumed.y != 0f || canScroll) {
+                                        Offset(0f, available.y)
+                                    } else {
+                                        Offset.Zero
+                                    }
+                                }
+
+                                override suspend fun onPostFling(
+                                    consumed: Velocity,
+                                    available: Velocity
+                                ): Velocity {
+                                    val canScroll = when {
+                                        available.y < 0f -> listState.canScrollForward
+                                        available.y > 0f -> listState.canScrollBackward
+                                        else -> false
+                                    }
+                                    return if (consumed.y != 0f || canScroll) {
+                                        Velocity(0f, available.y)
+                                    } else {
+                                        Velocity.Zero
+                                    }
+                                }
+                            }
+                        }
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier
                                 .width(effectiveTableWidth)
                                 .weight(1f)
+                                .nestedScroll(nestedScrollConnection)
                         ) {
                             itemsIndexed(
                                 items = pageRows,
@@ -591,50 +656,68 @@ fun ErpDataGrid(
                                         val colWidth = ((columnWidthsDp[key] ?: 140f) * scaleFactor).dp
                                         val cellVal = row.values.getOrNull(colIdx)?.toString()?.trim().orEmpty()
                                         val isEmpty = cellVal.isEmpty() || cellVal == "—" || cellVal == "null"
+                                        val cellWidth = if (isSelected && !config.isVisibilityRowNumber && visIdx == 0) colWidth - 3.dp else colWidth
 
-                                        Box(
-                                            modifier = Modifier
-                                                .width(if (isSelected && !config.isVisibilityRowNumber && visIdx == 0) colWidth - 3.dp else colWidth)
-                                                .fillMaxHeight()
-                                                .padding(horizontal = 10.dp, vertical = gridDensity.cellVerticalPadding),
-                                            contentAlignment = Alignment.CenterStart
-                                        ) {
-                                            val badgeColor = statusCellColorOrNull(key, cellVal)
-                                            val isOverdueText = (key.contains("срок", ignoreCase = true) ||
-                                                key.contains("действует до", ignoreCase = true) ||
-                                                key.contains("дата", ignoreCase = true)) &&
-                                                (cellVal.contains("просроч", ignoreCase = true) ||
-                                                    cellVal.contains("истёк", ignoreCase = true) ||
-                                                    cellVal.contains("истек", ignoreCase = true))
-                                            if (badgeColor != null) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(999.dp),
-                                                    color = badgeColor.copy(alpha = 0.14f)
-                                                ) {
+                                        val cellBox: @Composable () -> Unit = {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(cellWidth)
+                                                    .fillMaxHeight()
+                                                    .padding(horizontal = 10.dp, vertical = gridDensity.cellVerticalPadding),
+                                                contentAlignment = Alignment.CenterStart
+                                            ) {
+                                                val badgeColor = statusCellColorOrNull(key, cellVal)
+                                                val isOverdueText = (key.contains("срок", ignoreCase = true) ||
+                                                    key.contains("действует до", ignoreCase = true) ||
+                                                    key.contains("дата", ignoreCase = true)) &&
+                                                    (cellVal.contains("просроч", ignoreCase = true) ||
+                                                        cellVal.contains("истёк", ignoreCase = true) ||
+                                                        cellVal.contains("истек", ignoreCase = true))
+                                                if (badgeColor != null) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(999.dp),
+                                                        color = badgeColor.copy(alpha = 0.14f)
+                                                    ) {
+                                                        Text(
+                                                            text = cellVal,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = badgeColor,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                } else {
                                                     Text(
-                                                        text = cellVal,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = badgeColor,
+                                                        text = if (isEmpty) "—" else cellVal,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = if (isOverdueText || visIdx == 1 || key == "Код" || key == "Номер") FontWeight.Medium else FontWeight.Normal,
+                                                        color = when {
+                                                            isOverdueText -> Brand.Rose
+                                                            isEmpty -> scheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                                            else -> config.dataRowContentColor ?: scheme.onSurface
+                                                        },
                                                         maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                                        overflow = TextOverflow.Ellipsis
                                                     )
                                                 }
-                                            } else {
-                                                Text(
-                                                    text = if (isEmpty) "—" else cellVal,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = if (isOverdueText || visIdx == 1 || key == "Код" || key == "Номер") FontWeight.Medium else FontWeight.Normal,
-                                                    color = when {
-                                                        isOverdueText -> Brand.Rose
-                                                        isEmpty -> scheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                                        else -> config.dataRowContentColor ?: scheme.onSurface
-                                                    },
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
                                             }
+                                        }
+
+                                        if (isEmpty) {
+                                            cellBox()
+                                        } else {
+                                            TooltipBox(
+                                                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                                                tooltip = {
+                                                    PlainTooltip {
+                                                        Text(cellVal)
+                                                    }
+                                                },
+                                                state = rememberTooltipState(),
+                                                content = cellBox
+                                            )
                                         }
                                     }
                                 }

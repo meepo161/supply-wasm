@@ -172,13 +172,22 @@ class DocumentViewModel(
             )
             when (val result = documentRepository.create(request)) {
                 is ApiResult.Success -> {
+                    val createdId = result.data.id
+                    var uploadError: ApiError? = null
+                    if (form.initialFile != null) {
+                        when (val up = documentRepository.uploadVersion(createdId, form.initialFile, "Первая версия при создании")) {
+                            is ApiResult.Error -> uploadError = up.error
+                            is ApiResult.Success -> Unit
+                        }
+                    }
                     _uiState.value = _uiState.value.copy(
                         createForm = CreateDocumentForm(),
                         activeDialog = null,
-                        isLoading = false
+                        isLoading = false,
+                        operationError = uploadError
                     )
                     loadDocuments()
-                    selectDocument(result.data.id)
+                    selectDocument(createdId)
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -322,6 +331,28 @@ class DocumentViewModel(
             when (val result = documentRepository.downloadVersion(version.id)) {
                 is ApiResult.Success -> {
                     saveAttachmentFile(
+                        safeAttachmentFileName(version.fileName, version.id),
+                        result.data.mimeType ?: version.mimeType,
+                        result.data.bytes
+                    )
+                    _uiState.value = _uiState.value.copy(busyVersionId = null)
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    busyVersionId = null,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    fun previewVersion(version: DocumentVersionDto) {
+        val document = _uiState.value.selectedDocument ?: return
+        if (!canDownload(document)) return
+        _uiState.value = _uiState.value.copy(busyVersionId = version.id, operationError = null)
+        viewModelScope.launch {
+            when (val result = documentRepository.downloadVersion(version.id)) {
+                is ApiResult.Success -> {
+                    org.example.project.data.previewAttachmentFile(
                         safeAttachmentFileName(version.fileName, version.id),
                         result.data.mimeType ?: version.mimeType,
                         result.data.bytes

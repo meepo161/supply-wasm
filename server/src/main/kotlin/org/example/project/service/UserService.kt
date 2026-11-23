@@ -22,7 +22,9 @@ class UserService(
 ) {
 
     fun list(): List<UserDto> {
-        return userRepository.list().map { it.toDto() }
+        val users = userRepository.list()
+        val rolesByUser = userRolesRepository.listRoleIdsByUserIds(users.map { it.id })
+        return users.map { it.toDto().copy(roleIds = rolesByUser[it.id].orEmpty()) }
     }
 
     // Короткий справочник для комбобоксов: доступен любому авторизованному
@@ -57,7 +59,7 @@ class UserService(
             throw ForbiddenException("Cannot access another user's record")
         }
         val user = userRepository.findById(id) ?: throw NotFoundException("user", id)
-        return user.toDto()
+        return user.toDto().copy(roleIds = userRolesRepository.listRoleIdsByUserId(id))
     }
 
     fun update(id: Long, request: UpdateUserRequest, currentUser: CurrentUser): UserDto {

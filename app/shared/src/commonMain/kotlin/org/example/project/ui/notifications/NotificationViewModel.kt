@@ -113,6 +113,19 @@ class NotificationViewModel(
         }
     }
 
+    fun markAllRead() {
+        viewModelScope.launch {
+            when (val result = notificationRepository.markAllRead()) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        notifications = _uiState.value.notifications.map { it.copy(isRead = true) }
+                    )
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+            }
+        }
+    }
+
     fun openTask(taskId: Long, onAccessGranted: (Long) -> Unit) {
         _uiState.value = _uiState.value.copy(operationError = null)
         viewModelScope.launch {

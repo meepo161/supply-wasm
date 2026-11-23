@@ -57,6 +57,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 
@@ -1059,7 +1060,8 @@ fun ErpDialog(
     subtitle: String? = null,
     glyph: ErpIconGlyph = ErpIconGlyph.Sparkle,
     gradient: List<Color> = Gradients.Primary,
-    width: Dp = 520.dp,
+    width: Dp = 620.dp,
+    maxBodyHeight: Dp = 620.dp,
     confirmText: String? = null,
     onConfirm: (() -> Unit)? = null,
     confirmEnabled: Boolean = true,
@@ -1069,32 +1071,36 @@ fun ErpDialog(
 ) {
     val scheme = MaterialTheme.colorScheme
     val palette = LocalBrandPalette.current
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Box(
             modifier = modifier
+                .padding(horizontal = 24.dp, vertical = 18.dp)
                 .widthIn(max = width)
                 .fillMaxWidth()
-                .shadow(28.dp, RoundedCornerShape(26.dp))
-                .clip(RoundedCornerShape(26.dp))
+                .shadow(28.dp, RoundedCornerShape(22.dp))
+                .clip(RoundedCornerShape(22.dp))
                 .background(palette.glassOverlay)
-                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(26.dp))
+                .border(1.dp, scheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
         ) {
             Column {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Brush.linearGradient(gradient))
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(Color.White.copy(alpha = 0.18f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        ErpIcon(glyph, Color.White, Modifier.size(19.dp))
+                        ErpIcon(glyph, Color.White, Modifier.size(18.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -1107,7 +1113,7 @@ fun ErpDialog(
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.72f),
+                                color = Color.White.copy(alpha = 0.78f),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1128,17 +1134,18 @@ fun ErpDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 560.dp)
+                        .heightIn(max = maxBodyHeight)
                         .verticalScroll(rememberScrollState())
-                        .padding(20.dp),
+                        .padding(horizontal = 22.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     content = content
                 )
 
+                HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.35f))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 20.dp, end = 20.dp, bottom = 18.dp, top = 2.dp),
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {

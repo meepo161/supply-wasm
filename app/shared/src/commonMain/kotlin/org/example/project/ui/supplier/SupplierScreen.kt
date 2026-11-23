@@ -119,7 +119,7 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
         modifier = Modifier.fillMaxSize(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        GlassCard(modifier = Modifier.weight(0.4f).fillMaxHeight(), contentPadding = 14.dp) {
+        GlassCard(modifier = Modifier.weight(0.6f).fillMaxHeight(), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Список",
                 count = state.suppliers.size,
@@ -175,7 +175,7 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
                 )
             }
         }
-        SupplierCardPane(state, viewModel, Modifier.weight(0.6f).fillMaxHeight())
+        SupplierCardPane(state, viewModel, Modifier.weight(0.4f).fillMaxHeight())
     }
 }
 

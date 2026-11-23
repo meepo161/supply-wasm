@@ -18,9 +18,11 @@ private val gridConfig = Un7KCMPDataGridConfig(
 fun UsersGrid(
     users: List<UserDto>,
     departments: List<DepartmentDto>,
+    roles: List<RoleDto> = emptyList(),
     onClick: (UserDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val roleNamesById = roles.associate { it.id to it.name }
     val data = mapOf(
         "Логин" to users.map { it.login },
         "ФИО" to users.map { it.fullName },
@@ -28,7 +30,9 @@ fun UsersGrid(
         "Подразделение" to users.map { user ->
             departments.find { it.id == user.departmentId }?.name ?: "—"
         },
-        "Права" to users.map { if (it.permissions.isEmpty()) "По роли" else "${it.permissions.size}" },
+        "Роли" to users.map { user ->
+            user.roleIds.mapNotNull { roleNamesById[it] }.joinToString(", ").ifBlank { "—" }
+        },
         "Активен" to users.map { if (it.active) "Да" else "Нет" }
     )
     PersistentDataGrid(

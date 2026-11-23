@@ -1,5 +1,6 @@
 package org.example.project.ui.projects
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,16 +8,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.ApiError
 import org.example.project.dto.DemandHeaderDto
@@ -40,7 +45,9 @@ import org.example.project.ui.tasks.TaskStatusChip
 import org.example.project.ui.tasks.toShortDate
 import org.example.project.ui.tasks.toShortDateTime
 import org.example.project.ui.tasks.userName
+import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.EmptyState
+import org.example.project.ui.theme.PillBadge
 import org.example.project.ui.theme.SectionHeader
 import org.example.project.ui.theme.SoftButton
 
@@ -218,47 +225,136 @@ internal fun OverviewTab(
         EmptyState(title = "Сводка недоступна", text = "Проверьте права на проект и обновите вкладку.")
         return
     }
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Только реальные счётчики: процентов готовности здесь нет, потому
+        // что методика их расчёта не утверждена.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Только реальные счётчики: процентов готовности здесь нет, потому
-            // что методика их расчёта не утверждена.
-            DetailLine("Задач всего", summary.taskCount.toString())
-            DetailLine("В работе", summary.openTaskCount.toString())
-            DetailLine("Завершено или отменено", summary.completedTaskCount.toString())
-            DetailLine("Потребностей", summary.demandCount.toString())
-            DetailLine("Документов", summary.documentCount.toString())
-            DetailLine("Участников", summary.memberCount.toString())
-            // Показатели плана — реальные значения; процентов здесь нет.
-            planSummary?.let { plan ->
-                HorizontalDivider()
-                DetailLine(
-                    "Этапов завершено",
-                    "${plan.completedStageCount} из ${plan.stageCount}"
+            SummaryMetricTile(
+                title = "Задачи",
+                value = "${summary.openTaskCount} / ${summary.taskCount}",
+                subtitle = "в работе / всего",
+                accent = Brand.Indigo,
+                modifier = Modifier.weight(1f)
+            )
+            SummaryMetricTile(
+                title = "Завершено задач",
+                value = summary.completedTaskCount.toString(),
+                subtitle = "закрыто или отменено",
+                accent = Brand.Teal,
+                modifier = Modifier.weight(1f)
+            )
+            SummaryMetricTile(
+                title = "Потребности",
+                value = summary.demandCount.toString(),
+                subtitle = "заявок снабжения",
+                accent = Brand.Amber,
+                modifier = Modifier.weight(1f)
+            )
+            SummaryMetricTile(
+                title = "Документы",
+                value = summary.documentCount.toString(),
+                subtitle = "связано с проектом",
+                accent = Brand.Blue,
+                modifier = Modifier.weight(1f)
+            )
+            if (planSummary != null) {
+                SummaryMetricTile(
+                    title = "Открытые риски",
+                    value = planSummary.openRiskCount.toString(),
+                    subtitle = if (planSummary.criticalRiskCount > 0) "критичных: ${planSummary.criticalRiskCount}" else "по плану",
+                    accent = if (planSummary.criticalRiskCount > 0) Brand.Rose else Brand.Indigo,
+                    modifier = Modifier.weight(1f)
                 )
-                plan.currentStageName?.let { DetailLine("Текущий этап", it) }
-                DetailLine(
-                    "Контрольных точек достигнуто",
-                    "${plan.reachedMilestoneCount} из ${plan.milestoneCount}"
-                )
-                plan.nextMilestoneName?.let {
-                    DetailLine(
-                        "Ближайшая точка",
-                        "$it · ${plan.nextMilestonePlannedAt.toShortDate()}"
-                    )
-                }
-                DetailLine("Открытых рисков", plan.openRiskCount.toString())
-                if (plan.criticalRiskCount > 0) {
-                    DetailLine("Критичных рисков", plan.criticalRiskCount.toString())
+            }
+        }
+
+        planSummary?.let { plan ->
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Этапы плана",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = buildString {
+                                append("Завершено ${plan.completedStageCount} из ${plan.stageCount}")
+                                plan.currentStageName?.let { append(" · сейчас: $it") }
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Контрольные точки",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = buildString {
+                                append("Достигнуто ${plan.reachedMilestoneCount} из ${plan.milestoneCount}")
+                                plan.nextMilestoneName?.let {
+                                    append(" · далее: $it (${plan.nextMilestonePlannedAt.toShortDate()})")
+                                }
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SummaryMetricTile(
+    title: String,
+    value: String,
+    subtitle: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = accent
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -414,27 +510,38 @@ private fun DocumentsTab(documents: List<DocumentDto>, modifier: Modifier = Modi
         )
         return
     }
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             documents.forEachIndexed { index, document ->
-                if (index > 0) HorizontalDivider()
-                Column {
-                    Text(
-                        text = "${document.number} · ${document.name}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = "${document.docType.documentLocalizedName()} · ${document.status.documentLocalizedName()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "${document.number} · ${document.name}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = document.docType.documentLocalizedName(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    PillBadge(
+                        text = document.status.documentLocalizedName(),
+                        accent = Brand.Blue
                     )
                 }
             }
@@ -455,27 +562,40 @@ private fun HistoryTab(
         )
         return
     }
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionHeader(title = "События", count = history.size)
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-            )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 history.forEachIndexed { index, entry ->
-                    if (index > 0) HorizontalDivider()
-                    Column {
-                        Text(text = entry.title, style = MaterialTheme.typography.bodyMedium)
+                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = entry.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = entry.userName ?: entry.userId?.let { userName(users, it) } ?: "Система",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
-                            text = listOfNotNull(
-                                entry.userName ?: entry.userId?.let { userName(users, it) },
-                                entry.createdAt.toShortDateTime()
-                            ).joinToString(" · "),
-                            style = MaterialTheme.typography.bodySmall,
+                            text = entry.createdAt.toShortDateTime(),
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

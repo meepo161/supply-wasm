@@ -1,5 +1,7 @@
 package org.example.project.ui.projects
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,9 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -39,6 +45,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.AttachmentEntityType
@@ -56,6 +64,7 @@ import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.EmptyState
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.theme.PillBadge
 import org.example.project.ui.theme.SkeletonLine
 
 @Composable
@@ -98,7 +107,7 @@ fun ProjectDetailScreen(
     planActions: ProjectPlanActions = ProjectPlanActions()
 ) {
     val isOwner = project.ownerId == currentUser.id
-    val canManageMembers = isOwner
+    val canManageMembers = isOwner || currentUser.hasPermission("projects", "manage_members")
     val canClose = project.status in setOf(
         ProjectStatus.PLANNED,
         ProjectStatus.IN_PROGRESS,
@@ -120,39 +129,94 @@ fun ProjectDetailScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
-            TextButton(onClick = onBack) {
-                Text("← Назад к списку")
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = onBack,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("← К проектам")
+                        }
+                        PillBadge(
+                            text = project.number,
+                            accent = Brand.Indigo,
+                            filled = true
+                        )
+                        StatusChip(status = project.status)
+                    }
+                    if (canClose) {
+                        OutlinedButton(
+                            onClick = { closeRequested = true },
+                            enabled = !isClosing
+                        ) {
+                            Text(if (isClosing) "Завершение…" else "Завершить проект")
+                        }
+                    }
+                }
+                Text(
+                    text = project.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                project.fullName?.takeIf { it.isNotBlank() && it != project.name }?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
-            Text(
-                text = project.number,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
         }
 
         if (detailLoading) {
             Box(
-                modifier = Modifier.fillMaxWidth().height(120.dp),
+                modifier = Modifier.fillMaxWidth().height(96.dp),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator()
             }
         }
 
-        PrimaryTabRow(selectedTabIndex = activeTab.ordinal) {
+        PrimaryTabRow(
+            selectedTabIndex = activeTab.ordinal,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
             ProjectTab.entries.forEach { tab ->
                 Tab(
                     selected = activeTab == tab,
                     onClick = { onTabChange(tab) },
-                    text = { Text(tab.title) }
+                    text = {
+                        Text(
+                            text = tab.title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = if (activeTab == tab) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
                 )
             }
         }
@@ -234,41 +298,29 @@ fun ProjectDetailScreen(
     }
 
     if (closeRequested) {
-        AlertDialog(
-            onDismissRequest = { if (!isClosing) closeRequested = false },
-            title = { Text("Завершение проекта") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Связанные незавершённые процессы будут проверены сервером.")
-                    OutlinedTextField(
-                        value = closeReason,
-                        onValueChange = { closeReason = it },
-                        label = { Text("Комментарий") },
-                        enabled = !isClosing,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    closeError?.let {
-                        Text(it.message, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { onCloseProject(closeReason) },
-                    enabled = !isClosing
-                ) {
-                    Text("Подтвердить")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { closeRequested = false },
-                    enabled = !isClosing
-                ) {
-                    Text("Отмена")
-                }
+        org.example.project.ui.theme.ErpDialog(
+            title = "Завершение проекта",
+            glyph = ErpIconGlyph.Projects,
+            gradient = org.example.project.ui.theme.Gradients.Sunset,
+            width = 520.dp,
+            confirmText = if (isClosing) "Завершение…" else "Подтвердить",
+            onConfirm = { onCloseProject(closeReason) },
+            confirmEnabled = !isClosing,
+            onDismiss = { if (!isClosing) closeRequested = false }
+        ) {
+            Text("Связанные незавершённые процессы будут проверены сервером.")
+            OutlinedTextField(
+                value = closeReason,
+                onValueChange = { closeReason = it },
+                label = { Text("Комментарий") },
+                enabled = !isClosing,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+            closeError?.let {
+                Text(it.message, color = MaterialTheme.colorScheme.error)
             }
-        )
+        }
     }
 }
 
@@ -299,25 +351,6 @@ private fun ProjectOverviewTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ProjectHeader(project = project)
-
-        ProjectInfoSection(project = project)
-
-        if (summary != null) {
-            OverviewTab(summary = summary, planSummary = planSummary)
-        }
-
-        if (canClose) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                OutlinedButton(
-                    onClick = onCloseRequest,
-                    enabled = !isClosing
-                ) {
-                    Text(if (isClosing) "Завершение…" else "Завершить проект")
-                }
-            }
-        }
-
         if (project.status == ProjectStatus.DRAFT && isOwner) {
             OpenProjectSection(
                 openForm = openForm,
@@ -327,21 +360,43 @@ private fun ProjectOverviewTab(
             )
         }
 
-        MembersSection(
-            project = project,
-            users = users,
-            canManageMembers = canManageMembers,
-            error = memberError,
-            onAddMember = onAddMember,
-            onRemoveMember = onRemoveMember
-        )
+        if (summary != null) {
+            OverviewTab(summary = summary, planSummary = planSummary)
+        }
 
-        AttachmentsSection(
-            entityType = AttachmentEntityType.PROJECT,
-            entityId = project.id,
-            canWrite = canWriteAttachments,
-            readOnly = false
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier.weight(1.15f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                ProjectInfoSection(project = project)
+
+                AttachmentsSection(
+                    entityType = AttachmentEntityType.PROJECT,
+                    entityId = project.id,
+                    canWrite = canWriteAttachments,
+                    readOnly = false
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(0.85f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                MembersSection(
+                    project = project,
+                    users = users,
+                    canManageMembers = canManageMembers,
+                    error = memberError,
+                    onAddMember = onAddMember,
+                    onRemoveMember = onRemoveMember
+                )
+            }
+        }
     }
 }
 
@@ -454,26 +509,32 @@ private fun ProjectHeader(project: ProjectDto, modifier: Modifier = Modifier) {
 
 @Composable
 private fun ProjectInfoSection(project: ProjectDto, modifier: Modifier = Modifier) {
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Text(
+                text = "Паспорт проекта",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     DetailRow(label = "Статус", value = project.status.localizedName())
                     DetailRow(label = "Тип", value = project.projectType?.localizedName() ?: "—")
                     DetailRow(label = "Приоритет", value = project.priority.localizedName())
                 }
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     DetailRow(label = "Руководитель", value = ownerName(project))
                     DetailRow(label = "Заказчик", value = project.customer?.takeIf { it.isNotBlank() } ?: "—")
                     DetailRow(
@@ -494,15 +555,16 @@ private fun ProjectInfoSection(project: ProjectDto, modifier: Modifier = Modifie
 
 @Composable
 private fun DetailRow(label: String, value: String, modifier: Modifier = Modifier) {
-    Row(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-            text = "$label: ",
-            style = MaterialTheme.typography.bodyMedium,
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -565,20 +627,32 @@ private fun MembersSection(
     onRemoveMember: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Участники",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Команда проекта",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                PillBadge(
+                    text = project.members.size.toString(),
+                    accent = Brand.Indigo
+                )
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
 
             error?.let {
                 ErrorMessageCard(error = it)
@@ -606,7 +680,7 @@ private fun MembersSection(
                     project.members.none { it.userId == user.id }
                 }
                 if (candidates.isNotEmpty()) {
-                    HorizontalDivider()
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                     AddMemberSelector(
                         candidates = candidates,
                         onAdd = onAddMember
@@ -625,30 +699,46 @@ private fun MemberRow(
     onRemove: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val initials = fullName
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .joinToString("") { it.first().uppercaseChar().toString() }
+        .ifEmpty { "?" }
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(if (isOwner) Brand.Indigo.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = initials,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isOwner) Brand.Indigo else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
                 text = fullName,
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
             )
             if (isOwner) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Text(
-                        text = "Руководитель",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
+                PillBadge(text = "Руководитель", accent = Brand.Indigo)
             }
         }
         if (canRemove) {

@@ -534,10 +534,15 @@ class TaskService(
 
     private fun parseDateTime(value: String?): OffsetDateTime? {
         if (value.isNullOrBlank()) return null
+        val trimmed = value.trim()
         return try {
-            OffsetDateTime.parse(value)
+            OffsetDateTime.parse(trimmed)
         } catch (_: DateTimeParseException) {
-            null
+            try {
+                java.time.LocalDate.parse(trimmed).atStartOfDay().atOffset(java.time.ZoneOffset.UTC)
+            } catch (_: DateTimeParseException) {
+                null
+            }
         }
     }
 

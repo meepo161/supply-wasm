@@ -6,7 +6,12 @@ private const val DEFAULT_PORT = 8080
 private const val DEFAULT_SESSION_TTL_MINUTES = 480L
 private const val DEFAULT_COOKIE_NAME = "erp_session"
 private const val DEFAULT_STORAGE_PATH = "./.local/storage"
-private val DEFAULT_ALLOWED_ORIGINS = listOf("http://localhost:8080", "http://localhost:8081")
+private val DEFAULT_ALLOWED_ORIGINS = listOf(
+    "http://localhost:8080",
+    "http://localhost:8081",
+    "http://localhost:8090",
+    "http://localhost:8091"
+)
 private val DEFAULT_PUSH_ALLOWED_HOSTS = listOf(
     "fcm.googleapis.com",
     "updates.push.services.mozilla.com",
@@ -39,7 +44,7 @@ data class AppConfig(
         fun load(config: ApplicationConfig): AppConfig {
             return AppConfig(
                 port = config.propertyOrNull("ktor.deployment.port")?.getString()?.toIntOrNull() ?: DEFAULT_PORT,
-                dbUrl = config.propertyOrNull("database.url")?.getString() ?: "jdbc:postgresql://localhost:5433/erp",
+                dbUrl = config.propertyOrNull("database.url")?.getString() ?: "jdbc:postgresql://localhost:5434/erp",
                 dbUser = config.propertyOrNull("database.user")?.getString() ?: "erp",
                 dbPassword = config.propertyOrNull("database.password")?.getString() ?: "erp",
                 sessionTtlMinutes = config.propertyOrNull("session.ttlMinutes")?.getString()?.toLongOrNull()

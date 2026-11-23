@@ -41,7 +41,8 @@ data class CreateDocumentForm(
     val description: String = "",
     val ownerId: Long? = null,
     val confidentiality: DocumentConfidentiality = DocumentConfidentiality.INTERNAL,
-    val retentionUntil: String = ""
+    val retentionUntil: String = "",
+    val initialFile: org.example.project.data.AttachmentFileData? = null
 )
 
 data class EditDocumentForm(

@@ -81,7 +81,9 @@ class ReceiptService(
         if (orderId != null) {
             purchaseRepository.findOrderById(orderId) ?: throw NotFoundException("purchase_order", orderId)
         }
-        return wmsRepository.expectedReceiptLines(orderId).map { it.toExpectedDto() }
+        return wmsRepository.expectedReceiptLines(orderId)
+            .map { it.toExpectedDto() }
+            .filter { it.orderStatus in receiptAllowedOrderStatuses }
     }
 
     // -----------------------------------------------------------------------
@@ -984,6 +986,6 @@ internal fun Record.toExpectedDto(): ExpectedReceiptLineDto = ExpectedReceiptLin
     orderedQuantity = this.get("ordered_quantity", BigDecimal::class.java).toPlainString(),
     deliveredQuantity = this.get("delivered_quantity", BigDecimal::class.java).toPlainString(),
     acceptedQuantity = this.get("accepted_quantity", BigDecimal::class.java).toPlainString(),
-    expectedRemaining = this.get("expected_remaining", BigDecimal::class.java).toPlainString(),
-    notAcceptedQuantity = this.get("not_accepted_quantity", BigDecimal::class.java).toPlainString()
+    expectedRemaining = this.get("expected_remaining", BigDecimal::class.java).max(BigDecimal.ZERO).toPlainString(),
+    notAcceptedQuantity = this.get("not_accepted_quantity", BigDecimal::class.java).max(BigDecimal.ZERO).toPlainString()
 )

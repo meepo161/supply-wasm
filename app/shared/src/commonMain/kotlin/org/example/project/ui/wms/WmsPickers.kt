@@ -8,10 +8,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import org.example.project.data.ApiResult
+import org.example.project.data.DocumentRepository
 import org.example.project.data.ProjectRepository
+import org.example.project.data.SupplierInvoiceRepository
 import org.example.project.data.TaskRepository
 import org.example.project.data.UserRepository
+import org.example.project.dto.DocumentDto
 import org.example.project.dto.ProjectDto
+import org.example.project.dto.SupplierInvoiceDto
+import org.example.project.dto.SupplierInvoiceStatus
 import org.example.project.dto.TaskDto
 import org.example.project.dto.UserOptionDto
 import org.example.project.ui.components.SearchableDropdown
@@ -125,7 +130,8 @@ internal fun PurchaseOrderPicker(
     value: Long?,
     onChange: (Long?) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Заказ поставщику"
+    label: String = "Заказ поставщику",
+    onSelectOrder: ((org.example.project.dto.PurchaseOrderDto) -> Unit)? = null
 ) {
     val repository: org.example.project.data.PurchaseOrderRepository = koinInject()
     var orders by remember { mutableStateOf<List<org.example.project.dto.PurchaseOrderDto>>(emptyList()) }
@@ -139,13 +145,82 @@ internal fun PurchaseOrderPicker(
     SearchableDropdown(
         items = orders,
         selected = orders.find { it.id == value },
-        onSelect = { onChange(it.id) },
+        onSelect = {
+            onChange(it.id)
+            onSelectOrder?.invoke(it)
+        },
         label = label,
         itemText = { listOfNotNull(it.number, it.supplierName).joinToString(" · ") },
         modifier = modifier,
         emptyText = loadError ?: "Нет отправленных заказов поставщикам",
         onClear = { onChange(null) },
         clearText = "Без заказа"
+    )
+}
+
+@Composable
+internal fun SupplierInvoicePicker(
+    selectedNumber: String,
+    onSelect: (SupplierInvoiceDto) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Счёт поставщика *"
+) {
+    val repository: SupplierInvoiceRepository = koinInject()
+    var invoices by remember { mutableStateOf<List<SupplierInvoiceDto>>(emptyList()) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        when (val result = repository.list()) {
+            is ApiResult.Success -> invoices = result.data.filter { it.status != SupplierInvoiceStatus.CANCELLED }
+            is ApiResult.Error -> loadError = "Не удалось загрузить счета поставщиков"
+        }
+    }
+    SearchableDropdown(
+        items = invoices,
+        selected = invoices.find { it.number == selectedNumber.trim() },
+        onSelect = onSelect,
+        label = label,
+        itemText = {
+            listOfNotNull(
+                "Счёт № ${it.number}",
+                it.supplierName,
+                it.invoiceDate.takeIf { d -> d.isNotBlank() }
+            ).joinToString(" · ")
+        },
+        modifier = modifier,
+        emptyText = loadError ?: "Нет доступных счетов поставщиков",
+        onClear = onClear,
+        clearText = "Сбросить выбор"
+    )
+}
+
+@Composable
+internal fun BasisDocumentPicker(
+    selectedNumber: String,
+    onSelect: (DocumentDto) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Документ-основание"
+) {
+    val repository: DocumentRepository = koinInject()
+    var documents by remember { mutableStateOf<List<DocumentDto>>(emptyList()) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        when (val result = repository.list()) {
+            is ApiResult.Success -> documents = result.data
+            is ApiResult.Error -> loadError = "Не удалось загрузить документы"
+        }
+    }
+    SearchableDropdown(
+        items = documents,
+        selected = documents.find { it.number == selectedNumber.trim() },
+        onSelect = onSelect,
+        label = label,
+        itemText = { "${it.number} · ${it.name}" },
+        modifier = modifier,
+        emptyText = loadError ?: "Документов нет",
+        onClear = onClear,
+        clearText = "Сбросить выбор"
     )
 }
 

@@ -99,6 +99,12 @@ fun NotificationScreen(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (unread > 0) {
+                    SoftButton(
+                        text = "Прочитать все",
+                        onClick = { viewModel.markAllRead() }
+                    )
+                }
                 SoftButton(
                     text = if (unreadOnly) "Показать все (${state.notifications.size})" else "Только непрочитанные ($unread)",
                     onClick = { unreadOnly = !unreadOnly }

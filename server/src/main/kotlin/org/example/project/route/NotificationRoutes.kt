@@ -26,5 +26,10 @@ fun Route.notificationRoutes(notificationService: NotificationService) {
             val notification = notificationService.markRead(id, call.currentUser())
             call.respond(HttpStatusCode.OK, ApiResponse.success(notification))
         }
+
+        post("/read-all") {
+            val count = notificationService.markAllRead(call.currentUser())
+            call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("markedRead" to count)))
+        }
     }
 }

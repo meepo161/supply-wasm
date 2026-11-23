@@ -177,4 +177,12 @@ class NotificationRepository(private val dsl: DSLContext) {
             .execute()
         return updated > 0
     }
+
+    fun markAllRead(userId: Long): Int {
+        return dsl.update(NOTIFICATIONS)
+            .set(NOTIFICATIONS.IS_READ, true)
+            .where(NOTIFICATIONS.USER_ID.eq(userId))
+            .and(NOTIFICATIONS.IS_READ.eq(false).or(NOTIFICATIONS.IS_READ.isNull))
+            .execute()
+    }
 }

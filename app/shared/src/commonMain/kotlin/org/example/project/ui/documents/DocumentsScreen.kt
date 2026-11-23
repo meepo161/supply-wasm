@@ -390,6 +390,9 @@ private fun VersionRow(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (canDownload && version.fileId != null) {
+                TextButton(onClick = { viewModel.previewVersion(version) }, enabled = !busy) {
+                    Text("Просмотр")
+                }
                 TextButton(onClick = { viewModel.downloadVersion(version) }, enabled = !busy) {
                     Text("Скачать")
                 }

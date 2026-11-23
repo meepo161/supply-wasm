@@ -86,7 +86,7 @@ tasks.test {
     }
 }
 
-val erpDbUrl = providers.gradleProperty("erp.db.url").orElse("jdbc:postgresql://localhost:5433/erp")
+val erpDbUrl = providers.gradleProperty("erp.db.url").orElse("jdbc:postgresql://localhost:5434/erp")
 val erpDbUser = providers.gradleProperty("erp.db.user").orElse("erp")
 val erpDbPassword = providers.gradleProperty("erp.db.password").orElse("erp")
 

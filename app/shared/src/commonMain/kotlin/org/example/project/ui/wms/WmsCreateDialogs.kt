@@ -1,13 +1,12 @@
 package org.example.project.ui.wms
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
@@ -15,7 +14,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,6 +34,9 @@ import org.example.project.dto.ReceiptSourceType
 import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.WarehouseDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpDialog
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
 
 @Composable
 fun CreateWarehouseDialog(
@@ -42,41 +46,40 @@ fun CreateWarehouseDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новый склад") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                OutlinedTextField(
-                    value = form.code,
-                    onValueChange = { onFormChange(form.copy(code = it)) },
-                    label = { Text("Код *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.name,
-                    onValueChange = { onFormChange(form.copy(name = it)) },
-                    label = { Text("Название *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.address,
-                    onValueChange = { onFormChange(form.copy(address = it)) },
-                    label = { Text("Адрес") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onCreate) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Новый склад",
+        glyph = ErpIconGlyph.Warehouse,
+        gradient = Gradients.Emerald,
+        width = 580.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = form.code,
+                onValueChange = { onFormChange(form.copy(code = it)) },
+                label = { Text("Код *") },
+                modifier = Modifier.weight(0.4f),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = form.name,
+                onValueChange = { onFormChange(form.copy(name = it)) },
+                label = { Text("Название *") },
+                modifier = Modifier.weight(0.6f),
+                singleLine = true
+            )
+        }
+        OutlinedTextField(
+            value = form.address,
+            onValueChange = { onFormChange(form.copy(address = it)) },
+            label = { Text("Адрес") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+    }
 }
 
 @Composable
@@ -88,72 +91,76 @@ fun CreateLocationDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая ячейка") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                if (warehouses.isEmpty()) {
-                    Text(
-                        text = "Нет доступных складов. Сначала создайте склад.",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                } else {
-                    WarehouseDropdown(
-                        warehouses = warehouses,
-                        selected = warehouses.find { it.id == form.warehouseId },
-                        onSelect = { onFormChange(form.copy(warehouseId = it.id)) },
-                        label = "Склад *",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                OutlinedTextField(
-                    value = form.code,
-                    onValueChange = { onFormChange(form.copy(code = it)) },
-                    label = { Text("Код *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.name,
-                    onValueChange = { onFormChange(form.copy(name = it)) },
-                    label = { Text("Название *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.parentId,
-                    onValueChange = { onFormChange(form.copy(parentId = it)) },
-                    label = { Text("Родительский ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                StorageLocationKindDropdown(
-                    selected = form.kind,
-                    onSelect = { onFormChange(form.copy(kind = it)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                StorageLocationPurposeDropdown(
-                    selected = form.purpose,
-                    onSelect = { onFormChange(form.copy(purpose = it)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = form.capacity,
-                    onValueChange = { onFormChange(form.copy(capacity = it)) },
-                    label = { Text("Ёмкость") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onCreate, enabled = warehouses.isNotEmpty()) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Новая ячейка",
+        glyph = ErpIconGlyph.Warehouse,
+        gradient = Gradients.Emerald,
+        width = 640.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty(),
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        if (warehouses.isEmpty()) {
+            Text(
+                text = "Нет доступных складов. Сначала создайте склад.",
+                color = MaterialTheme.colorScheme.error
+            )
+        } else {
+            WarehouseDropdown(
+                warehouses = warehouses,
+                selected = warehouses.find { it.id == form.warehouseId },
+                onSelect = { onFormChange(form.copy(warehouseId = it.id)) },
+                label = "Склад *",
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = form.code,
+                onValueChange = { onFormChange(form.copy(code = it)) },
+                label = { Text("Код *") },
+                modifier = Modifier.weight(0.4f),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = form.name,
+                onValueChange = { onFormChange(form.copy(name = it)) },
+                label = { Text("Название *") },
+                modifier = Modifier.weight(0.6f),
+                singleLine = true
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StorageLocationKindDropdown(
+                selected = form.kind,
+                onSelect = { onFormChange(form.copy(kind = it)) },
+                modifier = Modifier.weight(1f)
+            )
+            StorageLocationPurposeDropdown(
+                selected = form.purpose,
+                onSelect = { onFormChange(form.copy(purpose = it)) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = form.parentId,
+                onValueChange = { onFormChange(form.copy(parentId = it)) },
+                label = { Text("Родительский ID") },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = form.capacity,
+                onValueChange = { onFormChange(form.copy(capacity = it)) },
+                label = { Text("Ёмкость") },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+        }
+    }
 }
 
 @Composable
@@ -164,72 +171,79 @@ fun CreateNomenclatureDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая номенклатура") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                OutlinedTextField(
-                    value = form.code,
-                    onValueChange = { onFormChange(form.copy(code = it)) },
-                    label = { Text("Код *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.name,
-                    onValueChange = { onFormChange(form.copy(name = it)) },
-                    label = { Text("Название *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.description,
-                    onValueChange = { onFormChange(form.copy(description = it)) },
-                    label = { Text("Описание") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                NomenclatureTypeDropdown(
-                    selected = form.type,
-                    onSelect = { onFormChange(form.copy(type = it)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = form.unit,
-                    onValueChange = { onFormChange(form.copy(unit = it)) },
-                    label = { Text("Единица измерения *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = form.lotTracked, onCheckedChange = { onFormChange(form.copy(lotTracked = it)) })
-                    Text("Учёт по партиям")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = form.serialTracked, onCheckedChange = { onFormChange(form.copy(serialTracked = it)) })
-                    Text("Учёт по сериям")
-                }
-                Text("Штрихкоды", style = MaterialTheme.typography.labelLarge)
-                form.barcodes.forEachIndexed { index, barcode ->
-                    BarcodeRow(
-                        barcode = barcode,
-                        onChange = { onFormChange(form.copy(barcodes = form.barcodes.toMutableList().apply { this[index] = it })) },
-                        onRemove = { onFormChange(form.copy(barcodes = form.barcodes.toMutableList().apply { removeAt(index) })) }
-                    )
-                }
-                TextButton(onClick = { onFormChange(form.copy(barcodes = form.barcodes + CreateNomenclatureBarcodeRequest(barcode = ""))) }) {
-                    Text("Добавить штрихкод")
-                }
+    ErpDialog(
+        title = "Новая номенклатура",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Emerald,
+        width = 660.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = form.code,
+                onValueChange = { onFormChange(form.copy(code = it)) },
+                label = { Text("Код *") },
+                modifier = Modifier.weight(0.45f),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = form.unit,
+                onValueChange = { onFormChange(form.copy(unit = it)) },
+                label = { Text("Единица измерения *") },
+                modifier = Modifier.weight(0.55f),
+                singleLine = true
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = form.name,
+                onValueChange = { onFormChange(form.copy(name = it)) },
+                label = { Text("Название *") },
+                modifier = Modifier.weight(0.6f),
+                singleLine = true
+            )
+            NomenclatureTypeDropdown(
+                selected = form.type,
+                onSelect = { onFormChange(form.copy(type = it)) },
+                modifier = Modifier.weight(0.4f)
+            )
+        }
+        OutlinedTextField(
+            value = form.description,
+            onValueChange = { onFormChange(form.copy(description = it)) },
+            label = { Text("Описание") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = form.lotTracked, onCheckedChange = { onFormChange(form.copy(lotTracked = it)) })
+                Text("Учёт по партиям")
             }
-        },
-        confirmButton = { Button(onClick = onCreate) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = form.serialTracked, onCheckedChange = { onFormChange(form.copy(serialTracked = it)) })
+                Text("Учёт по сериям")
+            }
+        }
+        Text("Штрихкоды", style = MaterialTheme.typography.labelLarge)
+        form.barcodes.forEachIndexed { index, barcode ->
+            BarcodeRow(
+                barcode = barcode,
+                onChange = { onFormChange(form.copy(barcodes = form.barcodes.toMutableList().apply { this[index] = it })) },
+                onRemove = { onFormChange(form.copy(barcodes = form.barcodes.toMutableList().apply { removeAt(index) })) }
+            )
+        }
+        TextButton(onClick = { onFormChange(form.copy(barcodes = form.barcodes + CreateNomenclatureBarcodeRequest(barcode = ""))) }) {
+            Text("Добавить штрихкод")
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -302,120 +316,209 @@ fun CreateReceiptDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая приёмка") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                ReceiptSourceTypeDropdown(
-                    selected = form.sourceType,
-                    onSelect = { onFormChange(form.copy(sourceType = it)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                // Основание проверяется сервером: для заказа, счёта, накладной,
-                // возврата и перемещения номер документа обязателен.
-                OutlinedTextField(
-                    value = form.sourceDocumentNo,
-                    onValueChange = { onFormChange(form.copy(sourceDocumentNo = it)) },
-                    label = { Text("Номер документа-основания") },
-                    placeholder = { Text("УПД-123 или СЧ-45") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    isError = form.sourceDocumentNo.isBlank() && form.sourceType != ReceiptSourceType.INITIAL_STOCK &&
-                        form.sourceType != ReceiptSourceType.OTHER
-                )
-                org.example.project.ui.theme.ErpDateField(
-                    value = form.sourceDocumentDate,
-                    onValueChange = { onFormChange(form.copy(sourceDocumentDate = it)) },
-                    label = "Дата документа",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (form.sourceType == ReceiptSourceType.PURCHASE_ORDER ||
-                    form.sourceType == ReceiptSourceType.DELIVERY_NOTE ||
-                    form.sourceType == ReceiptSourceType.INVOICE
-                ) {
-                    PurchaseOrderPicker(
-                        value = form.purchaseOrderId,
-                        onChange = { orderId ->
-                            onFormChange(
-                                form.copy(
-                                    purchaseOrderId = orderId,
-                                    lines = form.lines.map { it.copy(purchaseOrderLineId = null) }
-                                )
+    ErpDialog(
+        title = "Новая приёмка",
+        subtitle = "Приёмка товара на склад с привязкой к основанию и ячейкам",
+        glyph = ErpIconGlyph.Warehouse,
+        gradient = Gradients.Emerald,
+        width = 760.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty() && form.lines.isNotEmpty(),
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ReceiptSourceTypeDropdown(
+                selected = form.sourceType,
+                onSelect = { onFormChange(form.copy(sourceType = it)) },
+                modifier = Modifier.weight(1f)
+            )
+            org.example.project.ui.theme.ErpDateField(
+                value = form.sourceDocumentDate,
+                onValueChange = { onFormChange(form.copy(sourceDocumentDate = it)) },
+                label = "Дата документа",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (form.sourceType == ReceiptSourceType.PURCHASE_ORDER ||
+            form.sourceType == ReceiptSourceType.DELIVERY_NOTE ||
+            form.sourceType == ReceiptSourceType.INVOICE
+        ) {
+            PurchaseOrderPicker(
+                value = form.purchaseOrderId,
+                onChange = { orderId ->
+                    onFormChange(
+                        form.copy(
+                            purchaseOrderId = orderId,
+                            lines = form.lines.map { it.copy(purchaseOrderLineId = null) }
+                        )
+                    )
+                },
+                onSelectOrder = { order ->
+                    if (form.sourceType == ReceiptSourceType.PURCHASE_ORDER) {
+                        onFormChange(
+                            form.copy(
+                                purchaseOrderId = order.id,
+                                sourceDocumentNo = order.number,
+                                lines = form.lines.map { it.copy(purchaseOrderLineId = null) }
                             )
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "Заказ уменьшает ожидаемый остаток; приёмка может быть частичной",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (form.sourceType == ReceiptSourceType.INVOICE) {
+            SupplierInvoicePicker(
+                selectedNumber = form.sourceDocumentNo,
+                onSelect = { invoice ->
+                    onFormChange(
+                        form.copy(
+                            sourceDocumentNo = invoice.number,
+                            sourceDocumentDate = invoice.invoiceDate.ifBlank { form.sourceDocumentDate },
+                            purchaseOrderId = invoice.purchaseOrderId ?: form.purchaseOrderId,
+                            lines = if (invoice.purchaseOrderId != null && invoice.purchaseOrderId != form.purchaseOrderId) {
+                                form.lines.map { it.copy(purchaseOrderLineId = null) }
+                            } else {
+                                form.lines
+                            }
+                        )
                     )
+                },
+                onClear = { onFormChange(form.copy(sourceDocumentNo = "")) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else if (form.sourceType != ReceiptSourceType.INITIAL_STOCK) {
+            BasisDocumentPicker(
+                selectedNumber = form.sourceDocumentNo,
+                onSelect = { doc ->
+                    onFormChange(form.copy(sourceDocumentNo = doc.number))
+                },
+                onClear = { onFormChange(form.copy(sourceDocumentNo = "")) },
+                label = "Выбрать документ-основание",
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        // Основание проверяется сервером: для заказа, счёта, накладной,
+        // возврата и перемещения номер документа обязателен.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = form.sourceDocumentNo,
+                onValueChange = { onFormChange(form.copy(sourceDocumentNo = it)) },
+                label = {
                     Text(
-                        "Заказ уменьшает ожидаемый остаток; приёмка может быть частичной",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (form.sourceType == ReceiptSourceType.INVOICE) {
+                            "Номер счёта-основания"
+                        } else {
+                            "Номер документа-основания"
+                        }
                     )
-                }
-                OutlinedTextField(
-                    value = form.sourceRef,
-                    onValueChange = { onFormChange(form.copy(sourceRef = it)) },
-                    label = { Text("Свободное описание основания") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                },
+                placeholder = { Text("УПД-123 или СЧ-45") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                isError = form.sourceDocumentNo.isBlank() && form.sourceType != ReceiptSourceType.INITIAL_STOCK &&
+                    form.sourceType != ReceiptSourceType.OTHER
+            )
+            OutlinedTextField(
+                value = form.sourceRef,
+                onValueChange = { onFormChange(form.copy(sourceRef = it)) },
+                label = { Text("Свободное описание основания") },
+                modifier = Modifier.weight(1f),
+                singleLine = true
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (warehouses.isEmpty()) {
+                Text(
+                    text = "Нет доступных складов.",
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f)
                 )
-                if (warehouses.isEmpty()) {
-                    Text(
-                        text = "Нет доступных складов.",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                } else {
-                    WarehouseDropdown(
-                        warehouses = warehouses,
-                        selected = warehouses.find { it.id == form.warehouseId },
-                        onSelect = { onWarehouseChange(it.id) },
-                        label = "Склад *",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                org.example.project.ui.theme.ErpDateField(
-                    value = form.expectedAt,
-                    onValueChange = { onFormChange(form.copy(expectedAt = it)) },
-                    label = "Ожидается",
-                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
-                    modifier = Modifier.fillMaxWidth()
+            } else {
+                WarehouseDropdown(
+                    warehouses = warehouses,
+                    selected = warehouses.find { it.id == form.warehouseId },
+                    onSelect = { onWarehouseChange(it.id) },
+                    label = "Склад *",
+                    modifier = Modifier.weight(1f)
                 )
-                OutlinedTextField(
-                    value = form.note,
-                    onValueChange = { onFormChange(form.copy(note = it)) },
-                    label = { Text("Примечание") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
+            }
+            org.example.project.ui.theme.ErpDateField(
+                value = form.expectedAt,
+                onValueChange = { onFormChange(form.copy(expectedAt = it)) },
+                label = "Ожидается",
+                format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        OutlinedTextField(
+            value = form.note,
+            onValueChange = { onFormChange(form.copy(note = it)) },
+            label = { Text("Примечание") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
 
-                Text("Строки приёмки", style = MaterialTheme.typography.labelLarge)
-                if (form.lines.isEmpty()) {
-                    Text("Строки не добавлены.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                val orderLines = rememberPurchaseOrderLines(form.purchaseOrderId)
-                form.lines.forEachIndexed { index, line ->
-                    ReceiptLineRow(
-                        line = line,
-                        locations = locations,
-                        nomenclature = nomenclature.filterNot { it.archived },
-                        showPurchaseOrderLine = form.purchaseOrderId != null,
-                        orderLines = orderLines,
-                        onChange = { onUpdateLine(index, it) },
-                        onRemove = { onRemoveLine(index) }
-                    )
+        val orderLines = rememberPurchaseOrderLines(form.purchaseOrderId)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Строки приёмки", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (form.purchaseOrderId != null && orderLines.isNotEmpty() && form.warehouseId != null) {
+                    OutlinedButton(
+                        onClick = {
+                            val defaultLocationId = locations.firstOrNull()?.id
+                            val existingOrderLineIds = form.lines.mapNotNull { it.purchaseOrderLineId }.toSet()
+                            val startNo = (form.lines.maxOfOrNull { it.lineNo } ?: 0) + 1
+                            val appended = orderLines
+                                .filter { it.id !in existingOrderLineIds }
+                                .mapIndexed { idx, orderLine ->
+                                    CreateReceiptLineForm(
+                                        lineNo = startNo + idx,
+                                        nomenclatureId = orderLine.nomenclatureId,
+                                        expectedQuantity = org.example.project.ui.theme.ErpFormat.qty(orderLine.quantity),
+                                        locationId = defaultLocationId,
+                                        purchaseOrderLineId = orderLine.id
+                                    )
+                                }
+                            if (appended.isNotEmpty()) {
+                                onFormChange(form.copy(lines = form.lines + appended))
+                            }
+                        }
+                    ) {
+                        Text("Заполнить из заказа")
+                    }
                 }
                 Button(onClick = onAddLine, enabled = form.warehouseId != null) {
                     Text("Добавить строку")
                 }
             }
-        },
-        confirmButton = { Button(onClick = onCreate, enabled = warehouses.isNotEmpty() && form.lines.isNotEmpty()) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+        }
+        if (form.lines.isEmpty()) {
+            Text("Строки не добавлены.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        form.lines.forEachIndexed { index, line ->
+            ReceiptLineRow(
+                line = line,
+                locations = locations,
+                nomenclature = nomenclature.filterNot { it.archived },
+                showPurchaseOrderLine = form.purchaseOrderId != null,
+                orderLines = orderLines,
+                onChange = { onUpdateLine(index, it) },
+                onRemove = { onRemoveLine(index) }
+            )
+        }
+    }
 }
 
 @Composable
@@ -428,97 +531,111 @@ private fun ReceiptLineRow(
     onChange: (CreateReceiptLineForm) -> Unit,
     onRemove: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     ) {
-        Text("Строка ${line.lineNo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        NomenclatureDropdown(
-            items = nomenclature,
-            selected = nomenclature.find { it.id == line.nomenclatureId },
-            onSelect = { onChange(line.copy(nomenclatureId = it.id)) },
-            label = "Номенклатура *",
-            modifier = Modifier.fillMaxWidth()
-        )
-        LocationDropdown(
-            locations = locations,
-            selected = locations.find { it.id == line.locationId },
-            onSelect = { onChange(line.copy(locationId = it.id)) },
-            label = "Ячейка *",
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = line.expectedQuantity,
-            onValueChange = { onChange(line.copy(expectedQuantity = it)) },
-            label = { Text("Ожидаемое количество *") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        if (showPurchaseOrderLine) {
-            org.example.project.ui.components.SearchableDropdown(
-                items = orderLines,
-                selected = orderLines.find { it.id == line.purchaseOrderLineId },
-                onSelect = { orderLine ->
-                    onChange(
-                        line.copy(
-                            purchaseOrderLineId = orderLine.id,
-                            nomenclatureId = line.nomenclatureId ?: orderLine.nomenclatureId
-                        )
-                    )
-                },
-                label = "Позиция заказа",
-                itemText = { orderLine ->
-                    "№${orderLine.lineNo} · ${listOfNotNull(orderLine.nomenclatureCode, orderLine.nomenclatureName).joinToString(" · ")}" +
-                        " · ${org.example.project.ui.theme.ErpFormat.qty(orderLine.quantity)} ${orderLine.unit}"
-                },
-                emptyText = "Позиции заказа не загружены",
-                onClear = { onChange(line.copy(purchaseOrderLineId = null)) },
-                clearText = "Не указана",
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                "Обязательна для заказа с несколькими позициями",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        OutlinedTextField(
-            value = line.receivedQuantity,
-            onValueChange = { onChange(line.copy(receivedQuantity = it)) },
-            label = { Text("Фактическое количество") },
-            supportingText = { Text("Если пусто, принимается ожидаемое количество. Расхождение фиксируется отдельно") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        if (line.receivedQuantity.isNotBlank() &&
-            line.receivedQuantity.trim() != line.expectedQuantity.trim()
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedTextField(
-                value = line.discrepancyReason,
-                onValueChange = { onChange(line.copy(discrepancyReason = it)) },
-                label = { Text("Обоснование расхождения *") },
-                supportingText = { Text("Недопоставка или излишек без обоснования не принимается") },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Строка ${line.lineNo}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                TextButton(onClick = onRemove) { Text("Удалить") }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NomenclatureDropdown(
+                    items = nomenclature,
+                    selected = nomenclature.find { it.id == line.nomenclatureId },
+                    onSelect = { onChange(line.copy(nomenclatureId = it.id)) },
+                    label = "Номенклатура *",
+                    modifier = Modifier.weight(1.2f)
+                )
+                LocationDropdown(
+                    locations = locations,
+                    selected = locations.find { it.id == line.locationId },
+                    onSelect = { onChange(line.copy(locationId = it.id)) },
+                    label = "Ячейка *",
+                    modifier = Modifier.weight(0.8f)
+                )
+            }
+            if (showPurchaseOrderLine) {
+                org.example.project.ui.components.SearchableDropdown(
+                    items = orderLines,
+                    selected = orderLines.find { it.id == line.purchaseOrderLineId },
+                    onSelect = { orderLine ->
+                        onChange(
+                            line.copy(
+                                purchaseOrderLineId = orderLine.id,
+                                nomenclatureId = line.nomenclatureId ?: orderLine.nomenclatureId
+                            )
+                        )
+                    },
+                    label = "Позиция заказа",
+                    itemText = { orderLine ->
+                        "№${orderLine.lineNo} · ${listOfNotNull(orderLine.nomenclatureCode, orderLine.nomenclatureName).joinToString(" · ")}" +
+                            " · ${org.example.project.ui.theme.ErpFormat.qty(orderLine.quantity)} ${orderLine.unit}"
+                    },
+                    emptyText = "Позиции заказа не загружены",
+                    onClear = { onChange(line.copy(purchaseOrderLineId = null)) },
+                    clearText = "Не указана",
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = line.expectedQuantity,
+                    onValueChange = { onChange(line.copy(expectedQuantity = it)) },
+                    label = { Text("Ожидаемое количество *") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = line.receivedQuantity,
+                    onValueChange = { onChange(line.copy(receivedQuantity = it)) },
+                    label = { Text("Фактическое количество") },
+                    supportingText = { Text("Пусто = ожидаемому") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
+            if (line.receivedQuantity.isNotBlank() &&
+                line.receivedQuantity.trim() != line.expectedQuantity.trim()
+            ) {
+                OutlinedTextField(
+                    value = line.discrepancyReason,
+                    onValueChange = { onChange(line.copy(discrepancyReason = it)) },
+                    label = { Text("Обоснование расхождения *") },
+                    supportingText = { Text("Недопоставка или излишек без обоснования не принимается") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = line.lotNumber,
+                    onValueChange = { onChange(line.copy(lotNumber = it)) },
+                    label = {
+                        Text(if (nomenclature.find { it.id == line.nomenclatureId }?.lotTracked == true) "Номер партии *" else "Номер партии")
+                    },
+                    modifier = Modifier.weight(0.8f),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = line.note,
+                    onValueChange = { onChange(line.copy(note = it)) },
+                    label = { Text("Примечание") },
+                    modifier = Modifier.weight(1.2f),
+                    singleLine = true
+                )
+            }
         }
-        OutlinedTextField(
-            value = line.lotNumber,
-            onValueChange = { onChange(line.copy(lotNumber = it)) },
-            label = {
-                Text(if (nomenclature.find { it.id == line.nomenclatureId }?.lotTracked == true) "Номер партии *" else "Номер партии")
-            },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-        OutlinedTextField(
-            value = line.note,
-            onValueChange = { onChange(line.copy(note = it)) },
-            label = { Text("Примечание") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 2
-        )
-        TextButton(onClick = onRemove) { Text("Удалить строку") }
     }
 }
 
@@ -534,96 +651,104 @@ fun CreateReservationDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новый резерв") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                ReservationReasonTypeDropdown(
-                    selected = form.reasonType,
-                    onSelect = { onFormChange(form.copy(reasonType = it)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                ProjectPicker(
-                    value = form.projectId,
-                    onChange = { onFormChange(form.copy(projectId = it, taskId = "")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                TaskPicker(
-                    value = form.taskId,
-                    onChange = { onFormChange(form.copy(taskId = it)) },
-                    projectId = form.projectId,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = form.reasonNote,
-                    onValueChange = { onFormChange(form.copy(reasonNote = it)) },
-                    label = { Text("Примечание к основанию") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                if (warehouses.isEmpty()) {
-                    Text("Нет доступных складов.", color = MaterialTheme.colorScheme.error)
-                } else {
-                    WarehouseDropdown(
-                        warehouses = warehouses,
-                        selected = warehouses.find { it.id == form.warehouseId },
-                        onSelect = { onWarehouseChange(it.id) },
-                        label = "Склад *",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                NomenclatureDropdown(
-                    items = nomenclature,
-                    selected = nomenclature.find { it.id == form.nomenclatureId },
-                    onSelect = { onFormChange(form.copy(nomenclatureId = it.id, lotId = "", serialId = "")) },
-                    label = "Номенклатура *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (form.warehouseId != null && locations.isEmpty()) {
-                    Text("У выбранного склада нет ячеек.", color = MaterialTheme.colorScheme.error)
-                }
-                LocationDropdown(
-                    locations = locations,
-                    selected = locations.find { it.id == form.locationId },
-                    onSelect = { onFormChange(form.copy(locationId = it.id)) },
-                    label = "Ячейка *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                LotPicker(
-                    value = form.lotId,
-                    onChange = { onFormChange(form.copy(lotId = it)) },
-                    nomenclatureId = form.nomenclatureId,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                SerialPicker(
-                    value = form.serialId,
-                    onChange = { onFormChange(form.copy(serialId = it)) },
-                    nomenclatureId = form.nomenclatureId,
-                    lotId = form.lotId.trim().toLongOrNull(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = form.quantity,
-                    onValueChange = { onFormChange(form.copy(quantity = it)) },
-                    label = { Text("Количество *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                org.example.project.ui.theme.ErpDateField(
-                    value = form.expiresAt,
-                    onValueChange = { onFormChange(form.copy(expiresAt = it)) },
-                    label = "Резерв действует до",
-                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
-                    modifier = Modifier.fillMaxWidth()
+    ErpDialog(
+        title = "Новый резерв",
+        glyph = ErpIconGlyph.Warehouse,
+        gradient = Gradients.Emerald,
+        width = 680.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty(),
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ReservationReasonTypeDropdown(
+                selected = form.reasonType,
+                onSelect = { onFormChange(form.copy(reasonType = it)) },
+                modifier = Modifier.weight(1f)
+            )
+            org.example.project.ui.theme.ErpDateField(
+                value = form.expiresAt,
+                onValueChange = { onFormChange(form.copy(expiresAt = it)) },
+                label = "Резерв действует до",
+                format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ProjectPicker(
+                value = form.projectId,
+                onChange = { onFormChange(form.copy(projectId = it, taskId = "")) },
+                modifier = Modifier.weight(1f)
+            )
+            TaskPicker(
+                value = form.taskId,
+                onChange = { onFormChange(form.copy(taskId = it)) },
+                projectId = form.projectId,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        OutlinedTextField(
+            value = form.reasonNote,
+            onValueChange = { onFormChange(form.copy(reasonNote = it)) },
+            label = { Text("Примечание к основанию") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (warehouses.isEmpty()) {
+                Text("Нет доступных складов.", color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+            } else {
+                WarehouseDropdown(
+                    warehouses = warehouses,
+                    selected = warehouses.find { it.id == form.warehouseId },
+                    onSelect = { onWarehouseChange(it.id) },
+                    label = "Склад *",
+                    modifier = Modifier.weight(1f)
                 )
             }
-        },
-        confirmButton = { Button(onClick = onCreate, enabled = warehouses.isNotEmpty()) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+            LocationDropdown(
+                locations = locations,
+                selected = locations.find { it.id == form.locationId },
+                onSelect = { onFormChange(form.copy(locationId = it.id)) },
+                label = "Ячейка *",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        if (form.warehouseId != null && locations.isEmpty()) {
+            Text("У выбранного склада нет ячеек.", color = MaterialTheme.colorScheme.error)
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NomenclatureDropdown(
+                items = nomenclature,
+                selected = nomenclature.find { it.id == form.nomenclatureId },
+                onSelect = { onFormChange(form.copy(nomenclatureId = it.id, lotId = "", serialId = "")) },
+                label = "Номенклатура *",
+                modifier = Modifier.weight(1.3f)
+            )
+            OutlinedTextField(
+                value = form.quantity,
+                onValueChange = { onFormChange(form.copy(quantity = it)) },
+                label = { Text("Количество *") },
+                modifier = Modifier.weight(0.7f),
+                singleLine = true
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LotPicker(
+                value = form.lotId,
+                onChange = { onFormChange(form.copy(lotId = it)) },
+                nomenclatureId = form.nomenclatureId,
+                modifier = Modifier.weight(1f)
+            )
+            SerialPicker(
+                value = form.serialId,
+                onChange = { onFormChange(form.copy(serialId = it)) },
+                nomenclatureId = form.nomenclatureId,
+                lotId = form.lotId.trim().toLongOrNull(),
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
 }

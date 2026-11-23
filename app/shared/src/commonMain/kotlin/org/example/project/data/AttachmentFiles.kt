@@ -29,6 +29,11 @@ expect fun pickAttachmentFile(
 expect fun saveAttachmentFile(fileName: String, mimeType: String?, bytes: ByteArray)
 
 /**
+ * Открывает предпросмотр файла в новой вкладке браузера (PDF, изображения, текст и др.).
+ */
+expect fun previewAttachmentFile(fileName: String, mimeType: String?, bytes: ByteArray)
+
+/**
  * Безопасное имя для сохранения: убирает пути, управляющие символы
  * и символы, недопустимые в именах файлов.
  */

@@ -120,7 +120,10 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             val nomenclatureId = call.request.queryParameters["nomenclatureId"]?.let {
                 it.toLongOrNull() ?: throw ValidationException("Invalid nomenclatureId")
             }
-            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getStock(warehouseId, nomenclatureId, call.currentUser())))
+            val locationId = call.request.queryParameters["locationId"]?.let {
+                it.toLongOrNull() ?: throw ValidationException("Invalid locationId")
+            }
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.getStock(warehouseId, nomenclatureId, call.currentUser(), locationId)))
         }
 
         get("/movements") {

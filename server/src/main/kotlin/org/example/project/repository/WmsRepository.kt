@@ -416,10 +416,11 @@ class WmsRepository(private val dsl: DSLContext) {
 
     // Остатки
 
-    fun selectStock(warehouseId: Long?, nomenclatureId: Long?): List<StockRow> {
+    fun selectStock(warehouseId: Long?, nomenclatureId: Long?, locationId: Long? = null): List<StockRow> {
         val conditions = mutableListOf<Condition>()
         warehouseId?.let { conditions += STOCK_BALANCE.WAREHOUSE_ID.eq(it) }
         nomenclatureId?.let { conditions += STOCK_BALANCE.NOMENCLATURE_ID.eq(it) }
+        locationId?.let { conditions += STOCK_BALANCE.LOCATION_ID.eq(it) }
         return dsl.select(
             STOCK_BALANCE.asterisk(),
             STORAGE_LOCATIONS.CODE,

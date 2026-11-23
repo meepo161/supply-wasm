@@ -132,7 +132,7 @@ class ProjectService(
         } else {
             projectRepository.listForUser(currentUser.userId)
         }
-        return records.map { it.toDto() }
+        return records.map { it.toDto(loadMembers(it.id)) }
     }
 
     /**

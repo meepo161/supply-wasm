@@ -187,6 +187,7 @@ private fun UsersTab(state: AdminUiState, viewModel: AdminViewModel) {
         UsersGrid(
             users = state.users,
             departments = state.departments,
+            roles = state.roles,
             onClick = { viewModel.selectUser(it.id) },
             modifier = Modifier.fillMaxWidth().weight(1f)
         )
@@ -511,6 +512,21 @@ private fun localizedAuditAction(action: String): String = when (action.uppercas
     "REJECT", "REJECTED" -> "Отклонение"
     "POST", "POSTED" -> "Проведение"
     "ISSUE", "ISSUED" -> "Выдача"
+    "ACCEPT" -> "Принятие в работу"
+    "START" -> "Запуск"
+    "SUBMIT" -> "Отправка на согласование"
+    "SUBMIT_RESULT" -> "Отправка результата"
+    "SEND_TO_REVIEW" -> "Отправка на приёмку"
+    "REVIEW_ACCEPT" -> "Приёмка задачи"
+    "ADD_MEMBER" -> "Добавление участника"
+    "REMOVE_MEMBER" -> "Удаление участника"
+    "SHIP" -> "Отгрузка"
+    "IN_TRANSIT" -> "Передача в путь"
+    "RECEIVE" -> "Получение"
+    "CHAT_MESSAGE_SEND" -> "Сообщение в чате задачи"
+    "CONVERSATION_MESSAGE_SEND" -> "Сообщение в чате"
+    "CONVERSATION_PROJECT_ENSURE" -> "Инициализация чата проекта"
+    "EMERGENCY_ADMIN_LOGIN" -> "Аварийный вход администратора"
     else -> action
 }
 
@@ -519,13 +535,21 @@ private fun localizedAuditEntity(entityType: String): String = when (entityType.
     "ROLE" -> "Роль"
     "DEPARTMENT" -> "Подразделение"
     "PROJECT" -> "Проект"
+    "PROJECT_STAGE" -> "Этап проекта"
+    "PROJECT_MILESTONE" -> "Контрольная точка"
+    "PROJECT_RISK" -> "Риск проекта"
     "TASK" -> "Задача"
     "DEMAND" -> "Потребность"
+    "SUPPLIER" -> "Поставщик"
+    "SUPPLIER_OFFER" -> "Предложение поставщика"
     "PURCHASE_ORDER" -> "Заказ поставщику"
     "RECEIPT" -> "Приёмка"
+    "TRANSFER" -> "Перемещение"
     "NOMENCLATURE" -> "Номенклатура"
     "WAREHOUSE" -> "Склад"
+    "STORAGE_LOCATION" -> "Ячейка хранения"
     "DOCUMENT" -> "Документ"
+    "CONVERSATION" -> "Беседа"
     "PRODUCTION_ORDER" -> "Производственный заказ"
     else -> entityType
 }

@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
  */
 object ApiServer {
     const val HOST = "localhost"
-    const val PORT = 8080
+    val PORT: Int get() = resolveApiPort()
     val baseUrl: String get() = "http://$HOST:$PORT"
 }
 
@@ -40,5 +40,7 @@ internal fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureBaseClien
         }
     }
 }
+
+expect fun resolveApiPort(): Int
 
 expect fun createAuthHttpClient(): HttpClient

@@ -791,11 +791,12 @@ private fun CreateRiskDialog(
                 singleLine = false,
                 minLines = 2
             )
-            ErpTextField(
+            org.example.project.ui.theme.ErpDateField(
                 value = dueDate,
                 onValueChange = { dueDate = it },
                 label = "Срок",
-                placeholder = "2026-12-01"
+                format = org.example.project.ui.theme.DateValueFormat.DATE,
+                modifier = Modifier.fillMaxWidth()
             )
             if (stages.isNotEmpty()) {
                 EnumRow(

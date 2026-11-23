@@ -374,10 +374,15 @@ class WmsInventoryService(
         if (order.version != request.version) {
             throw ConflictException("Inventory was modified concurrently")
         }
-        if (order.status !in setOf("DISCREPANCY", "APPROVED")) {
+        val discrepancies = inventoryRepository.latestDiscrepancies(id).filter { it.kind != null }
+        val allowedStatuses = if (discrepancies.isEmpty()) {
+            setOf("COUNTING", "DISCREPANCY", "APPROVED")
+        } else {
+            setOf("DISCREPANCY", "APPROVED")
+        }
+        if (order.status !in allowedStatuses) {
             throw ConflictException("Inventory can be posted only after counting")
         }
-        val discrepancies = inventoryRepository.latestDiscrepancies(id).filter { it.kind != null }
         if (discrepancies.isEmpty()) {
             val postedNoChanges = inventoryRepository.markPosted(id, request.version, currentUser.userId)
                 ?: throw ConflictException("Inventory was modified concurrently")
