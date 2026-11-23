@@ -3,7 +3,7 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-11-17
+- Last refreshed: 2026-11-23
 - Primary product surfaces: desktop ERP/WMS, task list, task card and Task Chat.
 - Evidence reviewed: `docs/ТЗ_ERP_WMS_CHAT_TASK_MANAGER.md` (M.2, M.3, M.5, M.8, N), `docs/decisions.md` (MVP-02, D-50, D-51), `app/shared/src/commonMain/kotlin/org/example/project/ui/tasks/` and the shared theme components.
 
@@ -40,6 +40,21 @@
 
 ## Visual language
 
+Dial: ENERGY 1 / RHYTHM 2 / MOTION 1.
+
+- Palette (`ui/theme/Brand.kt`, `ErpTheme.kt`): factory blue `#1C5FC9` is the only action and selection colour; graphite and cool grey neutrals carry the data; signal amber `#E0A21B` marks only the current place (active navigation item, keyboard focus in the dark rail). Module and status hues are muted and never become button fills.
+- No decorative gradients, colour blobs, glass or glow: `Gradients.*` keep their `List<Color>` API but are solid fills.
+- Action hierarchy, one primary per screen or dialog:
+  - primary: `GradientButton` / theme `Button`, solid blue, white text;
+  - secondary: `SoftButton` / theme `OutlinedButton`, outlined;
+  - tertiary: `TextButton`, `ErpIconButton` (refresh, close, back);
+  - dangerous: `GradientButton(gradient = Gradients.Danger)` or `confirmGradient = Gradients.Danger`, the only red button (cancel a document, delete).
+- Screens import `Button`, `OutlinedButton`, `TextButton` and `Tab` from `org.example.project.ui.theme`, not from Material 3: the wrappers give 6 dp corners, a hand cursor and neutral unselected tabs.
+- Selection (filters, sub-sections) uses `ErpFilterChip`; metrics stay neutral and turn red only when the value is alarming.
+- Shape: tags 4 dp, buttons and fields 6 dp, cards 8-10 dp, dialogs 12 dp. Status and count tags are rectangular "labels", the repeated identity motif.
+- Elevation: only dialogs cast a shadow; cards sit flat with a 1 dp border.
+- Every custom clickable uses `Modifier.erpInteractive`: hand cursor plus a 2 dp focus ring shown for keyboard focus only.
+- Narrow screens: list and card areas use `ErpSplitRow`; header actions and chip rows use `FlowRow` so nothing is squeezed to one letter per line.
 - Color: use existing semantic status and priority accents; every status retains its textual label.
 - Typography: compact, readable table headers and values; titles are not oversized.
 - Spacing/layout rhythm: compact toolbar and rows; no large empty regions between control and result.
