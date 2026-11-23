@@ -44,7 +44,7 @@ fun ErpFilterChip(
     val accent = scheme.primary
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(6.dp)
 
     val background = when {
         selected && hovered && enabled -> accent.copy(alpha = 0.20f)
@@ -66,6 +66,7 @@ fun ErpFilterChip(
             .clip(shape)
             .background(background)
             .border(1.dp, borderColor, shape)
+            .erpInteractive(interaction, shape, enabled)
             .clickable(
                 interactionSource = interaction,
                 indication = null,

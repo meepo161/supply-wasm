@@ -11,7 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -178,7 +178,7 @@ private fun CancelOrderDialog(state: ProductionUiState, viewModel: ProductionVie
         onDismiss = viewModel::dismissDialog,
         confirmText = "Отменить заказ",
         onConfirm = viewModel::submitCancel,
-        confirmGradient = Gradients.Berry,
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         confirmEnabled = !state.isActionRunning,
         dismissText = "Назад"
     ) {

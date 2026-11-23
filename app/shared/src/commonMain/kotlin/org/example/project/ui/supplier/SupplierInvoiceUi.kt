@@ -36,6 +36,7 @@ import org.example.project.dto.SupplierInvoiceDto
 import org.example.project.dto.SupplierInvoiceStatus
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpSplitRow
 import org.example.project.ui.theme.DetailRow
 import org.example.project.ui.theme.EmptyState
 import org.example.project.ui.theme.ErpDialog
@@ -105,7 +106,7 @@ fun SupplierInvoicesPane(viewModel: SupplierInvoiceViewModel) {
     Column(modifier = Modifier.fillMaxSize()) {
         state.message?.let { message ->
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(14.dp))
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(8.dp))
                     .background(Brand.Mint.copy(alpha = 0.14f)).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -114,8 +115,8 @@ fun SupplierInvoicesPane(viewModel: SupplierInvoiceViewModel) {
             }
         }
         if (state.dialog == null) state.error?.let { ErrorMessageCard(error = it, modifier = Modifier.padding(bottom = 8.dp)) }
-        Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            GlassCard(modifier = Modifier.weight(0.4f).fillMaxHeight(), contentPadding = 14.dp) {
+        ErpSplitRow {
+            GlassCard(modifier = Modifier.pane(0.4f), contentPadding = 14.dp) {
                 SectionHeader(
                     title = "Счета поставщиков",
                     count = state.invoices.size,
@@ -146,7 +147,7 @@ fun SupplierInvoicesPane(viewModel: SupplierInvoiceViewModel) {
                     }
                 }
             }
-            InvoiceCard(state, viewModel, Modifier.weight(0.6f).fillMaxHeight())
+            InvoiceCard(state, viewModel, Modifier.pane(0.6f, narrowHeight = 640.dp))
         }
     }
 }
@@ -166,7 +167,7 @@ private fun FilterChip(text: String, active: Boolean, onClick: () -> Unit) {
 @Composable
 private fun InvoiceRow(invoice: SupplierInvoiceDto, selected: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp))
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(8.dp))
             .background(if (selected) Brand.Violet.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -253,14 +254,14 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
             invoice.cancelReason?.let { DetailRow("Причина отмены", it, valueColor = Brand.Rose) }
             DetailRow(
                 "Поступление на склад",
-                invoice.receiptNumber?.let { "$it — ${receiptStatusTitle(invoice.receiptStatus)}" } ?: "не оформлено"
+                invoice.receiptNumber?.let { "$it · ${receiptStatusTitle(invoice.receiptStatus)}" } ?: "не оформлено"
             )
 
             Spacer(Modifier.height(12.dp))
             SectionHeader(title = "Строки счёта", count = invoice.lines.size, accent = Brand.Blue)
             invoice.lines.forEach { line ->
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)).padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
@@ -297,12 +298,12 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
                     state.check == null -> "не выполнена"
                     issues.isEmpty() -> "расхождений нет"
                     state.check.canConfirm -> "ошибок нет"
-                    else -> "есть ошибки — счёт нужно исправить"
+                    else -> "есть ошибки, счёт нужно исправить"
                 }
             )
             issues.forEach { issue ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp))
                         .background(issue.severity.accent().copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -320,7 +321,7 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
             SectionHeader(title = "История", count = state.history.size, accent = Brand.Amber)
             state.history.forEach { h ->
                 Text(
-                    "${h.changedAt.asDate()} · ${historyTitle(h.action)}" + (h.reason?.let { " — $it" } ?: ""),
+                    "${h.changedAt.asDate()} · ${historyTitle(h.action)}" + (h.reason?.let { ": $it" } ?: ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -365,7 +366,7 @@ private fun InvoiceActions(invoice: SupplierInvoiceDto, state: SupplierInvoiceUi
 
 @Composable
 private fun TotalChip(label: String, value: String, accent: Color, modifier: Modifier) {
-    Column(modifier = modifier.clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Column(modifier = modifier.clip(RoundedCornerShape(8.dp)).background(accent.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = accent)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
@@ -442,7 +443,7 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
     ErpDialog(
         title = if (form.invoiceId == null) "Загрузка счёта поставщика" else "Счёт № ${form.number}",
         subtitle = "${form.supplierName}" + (form.purchaseOrderNumber?.let { " · заказ $it" } ?: "") +
-            " — перенесите реквизиты из файла счёта",
+            ": перенесите реквизиты из файла счёта",
         glyph = ErpIconGlyph.Documents,
         gradient = Gradients.Berry,
         onDismiss = viewModel::dismissDialog,
@@ -458,13 +459,13 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
         ) {
             state.error?.let { ErrorMessageCard(error = it) }
             Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                     .background((if (form.hasFile) Brand.Mint else Brand.Rose).copy(alpha = 0.12f))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    form.fileLabel?.let { "Файл счёта: $it" } ?: "Файл счёта не выбран — без файла счёт не регистрируется",
+                    form.fileLabel?.let { "Файл счёта: $it" } ?: "Файл счёта не выбран: без файла счёт не регистрируется",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (form.hasFile) Brand.Teal else Brand.Rose,
                     modifier = Modifier.weight(1f)
@@ -485,7 +486,7 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
                     onClick = { showTextParser.value = !showTextParser.value }
                 )
                 Text(
-                    "Скопируйте текст из PDF или письма поставщика — номер, дата, ИНН/КПП и строки подставятся автоматически",
+                    "Скопируйте текст из PDF или письма поставщика: номер, дата, ИНН/КПП и строки подставятся автоматически",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
@@ -494,7 +495,7 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
             if (showTextParser.value) {
                 Column(
                     modifier = Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
                         .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -549,7 +550,7 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
             }
             form.lines.forEachIndexed { index, line ->
                 Column(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)).padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -565,14 +566,14 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ErpTextField(line.quantity, { v -> viewModel.updateLine(index, { it.copy(quantity = v) }, true) }, "Кол-во, ${line.unit}", Modifier.weight(1f))
                         ErpTextField(line.unitPrice, { v -> viewModel.updateLine(index, { it.copy(unitPrice = v) }, true) }, "Цена", Modifier.weight(1f))
-                        ErpTextField(line.vatRate, { v -> viewModel.updateLine(index, { it.copy(vatRate = v) }, true) }, "НДС, % (пусто — без НДС)", Modifier.weight(1f))
+                        ErpTextField(line.vatRate, { v -> viewModel.updateLine(index, { it.copy(vatRate = v) }, true) }, "НДС, % (пусто: без НДС)", Modifier.weight(1f))
                         ErpTextField(line.vatAmount, { v -> viewModel.updateLine(index, { it.copy(vatAmount = v) }, false) }, "Сумма НДС", Modifier.weight(1f))
                         ErpTextField(line.lineTotal, { v -> viewModel.updateLine(index, { it.copy(lineTotal = v) }, false) }, "Сумма", Modifier.weight(1f))
                     }
                 }
             }
             Text(
-                "Итоги подставляются по строкам; если в файле счёта они другие — введите как в документе, расхождение покажет сверка",
+                "Итоги подставляются по строкам; если в файле счёта они другие, введите как в документе, расхождение покажет сверка",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -633,7 +634,7 @@ private fun CancelInvoiceDialog(state: SupplierInvoiceUiState, viewModel: Suppli
         confirmText = "Отменить счёт",
         onConfirm = viewModel::cancel,
         confirmEnabled = !state.isBusy && state.cancelReason.isNotBlank(),
-        confirmGradient = Gradients.Berry,
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         dismissText = "Назад"
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -671,7 +672,7 @@ private fun ReceiptDialog(state: SupplierInvoiceUiState, viewModel: SupplierInvo
                 Text("Нет доступных складов (нужно право «wms:read»)", style = MaterialTheme.typography.bodySmall, color = Brand.Amber)
             }
             Text(
-                "Ожидается: " + invoice.lines.joinToString(", ") { "${it.supplierItemName} — ${it.quantity.trimZeros()} ${it.unit}" },
+                "Ожидается: " + invoice.lines.joinToString(", ") { "${it.supplierItemName} · ${it.quantity.trimZeros()} ${it.unit}" },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

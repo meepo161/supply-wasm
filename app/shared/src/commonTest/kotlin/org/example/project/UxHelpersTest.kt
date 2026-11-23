@@ -44,7 +44,7 @@ class UxHelpersTest {
     fun errorsAreExplainedInRussianWithTechnicalDetailKept() {
         val forbidden = ApiError("FORBIDDEN", "Missing permission wms:post")
         assertEquals("Недостаточно прав", forbidden.userTitle())
-        assertTrue(forbidden.userText().contains("Склад — проведение"))
+        assertTrue(forbidden.userText().contains("Склад: проведение"))
         assertEquals("Missing permission wms:post", forbidden.technicalDetail())
 
         val conflict = ApiError("CONFLICT", "Receipt was modified concurrently")
@@ -52,7 +52,7 @@ class UxHelpersTest {
         assertTrue(conflict.userText().contains("Обновите карточку"))
 
         val validation = ApiError("VALIDATION_ERROR", "Discrepancy requires a reason", mapOf("lines[0].discrepancyReason" to "required"))
-        assertTrue(validation.userText().contains("discrepancyReason — обязательно"))
+        assertTrue(validation.userText().contains("discrepancyReason: обязательно"))
 
         val russian = ApiError("CONFLICT", "Сверка не пройдена: ИНН не совпадает")
         assertEquals("Сверка не пройдена: ИНН не совпадает", russian.userText())

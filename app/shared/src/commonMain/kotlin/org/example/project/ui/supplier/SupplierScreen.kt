@@ -19,7 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
+import org.example.project.ui.theme.Tab
+import org.example.project.ui.theme.ErpSplitRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -117,11 +118,8 @@ fun SupplierScreen(viewModel: SupplierViewModel, modifier: Modifier = Modifier) 
 
 @Composable
 private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
-    Row(
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        GlassCard(modifier = Modifier.weight(0.6f).fillMaxHeight(), contentPadding = 14.dp) {
+    ErpSplitRow {
+        GlassCard(modifier = Modifier.pane(0.6f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Список",
                 count = state.suppliers.size,
@@ -177,7 +175,7 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
                 )
             }
         }
-        SupplierCardPane(state, viewModel, Modifier.weight(0.4f).fillMaxHeight())
+        SupplierCardPane(state, viewModel, Modifier.pane(0.4f, narrowHeight = 640.dp))
     }
 }
 
@@ -249,10 +247,12 @@ private fun SupplierCardPane(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 sectionTitles.forEachIndexed { idx, label ->
-                    SoftButton(
-                        text = label,
+
+                    org.example.project.ui.theme.ErpFilterChip(
+                        selected = cardSection == idx,
                         onClick = { cardSection = idx },
-                        tint = if (cardSection == idx) Brand.Orange else Brand.Slate
+                        label = { Text(label) }
+
                     )
                 }
             }
@@ -401,11 +401,8 @@ private fun SupplierCardPane(
 
 @Composable
 private fun OffersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
-    Row(
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        GlassCard(modifier = Modifier.weight(0.46f).fillMaxHeight(), contentPadding = 14.dp) {
+    ErpSplitRow {
+        GlassCard(modifier = Modifier.pane(0.46f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Предложения",
                 count = state.offers.size,
@@ -450,7 +447,7 @@ private fun OffersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                 )
             }
         }
-        ComparisonPane(state, viewModel, Modifier.weight(0.54f).fillMaxHeight())
+        ComparisonPane(state, viewModel, Modifier.pane(0.54f, narrowHeight = 640.dp))
     }
 }
 
@@ -552,7 +549,7 @@ private fun ComparisonCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
             .padding(12.dp)
     ) {
@@ -610,7 +607,7 @@ private fun SuccessNote(text: String, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Brand.Mint.copy(alpha = 0.14f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -664,7 +661,7 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "${claim.number} — ${claim.supplierName.ifBlank { "#${claim.supplierId}" }}",
+                                    text = "${claim.number} · ${claim.supplierName.ifBlank { "#${claim.supplierId}" }}",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 PillBadge(text = claim.status.name, accent = Brand.Orange)
@@ -720,7 +717,9 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
             onDismiss = viewModel::dismissDialog
         ) {
             Box {
-                androidx.compose.material3.OutlinedButton(onClick = { supplierExpanded = true }) {
+
+                org.example.project.ui.theme.OutlinedButton(onClick = { supplierExpanded = true }) {
+
                     Text(selectedSupplier?.name ?: "Выберите поставщика")
                 }
                 androidx.compose.material3.DropdownMenu(

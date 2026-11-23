@@ -20,7 +20,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
+import org.example.project.ui.theme.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -160,9 +160,9 @@ private fun TaskDescription(
     TaskSummary(task, state.users)
 
     val waitingHint = when (task.status) {
-        TaskStatus.ASSIGNED -> "Ожидает исполнителя: ${task.assigneeId?.let { userName(state.users, it) } ?: "не назначен"} — взять в работу"
-        TaskStatus.ON_REVIEW -> "Ожидает проверки: ${task.reviewerId?.let { userName(state.users, it) } ?: "инициатор"} — принять или вернуть на доработку"
-        TaskStatus.NEW -> "Новая задача — требуется назначить исполнителя"
+        TaskStatus.ASSIGNED -> "Ожидает исполнителя: ${task.assigneeId?.let { userName(state.users, it) } ?: "не назначен"}. Взять в работу"
+        TaskStatus.ON_REVIEW -> "Ожидает проверки: ${task.reviewerId?.let { userName(state.users, it) } ?: "инициатор"}. Принять или вернуть на доработку"
+        TaskStatus.NEW -> "Новая задача: требуется назначить исполнителя"
         TaskStatus.BLOCKED -> "Заблокирована${task.unblockResponsibleId?.let { " · снимает ${userName(state.users, it)}" } ?: ""}"
         else -> null
     }

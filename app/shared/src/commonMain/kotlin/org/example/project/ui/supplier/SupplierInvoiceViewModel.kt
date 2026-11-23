@@ -339,7 +339,7 @@ class SupplierInvoiceViewModel(
             if (parsed.lines.isNotEmpty()) add("строк: ${parsed.lines.size}")
         }
         if (recognizedParts.isEmpty()) {
-            update { it.copy(error = ApiError("VALIDATION_ERROR", "Не удалось распознать поля счёта — проверьте формат текста")) }
+            update { it.copy(error = ApiError("VALIDATION_ERROR", "Не удалось распознать поля счёта, проверьте формат текста")) }
         } else {
             update {
                 it.copy(
@@ -372,7 +372,7 @@ class SupplierInvoiceViewModel(
                 val file = form.pendingFile!!
                 val created = documentRepository.create(
                     CreateDocumentRequest(
-                        name = "Счёт № ${form.number.ifBlank { "б/н" }} — ${form.supplierName}",
+                        name = "Счёт № ${form.number.ifBlank { "б/н" }} · ${form.supplierName}",
                         docType = DocumentType.INVOICE
                     )
                 )
@@ -403,7 +403,7 @@ class SupplierInvoiceViewModel(
             }
             when (result) {
                 is ApiResult.Success -> {
-                    update { it.copy(isBusy = false, dialog = null, form = null, message = "Счёт № ${result.data.number} сохранён — проверьте сверку") }
+                    update { it.copy(isBusy = false, dialog = null, form = null, message = "Счёт № ${result.data.number} сохранён, проверьте сверку") }
                     load()
                     refreshSelected(result.data.id)
                 }

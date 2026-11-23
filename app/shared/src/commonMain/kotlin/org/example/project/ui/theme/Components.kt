@@ -7,6 +7,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.FocusInteraction
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +28,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,130 +75,99 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 
-/** Мягкий градиентный фон страницы с цветными «свечениями». */
+/**
+ * Фон рабочей области: ровный нейтральный цвет темы.
+ * Пятна, свечения и псевдосетка убраны: фон не должен спорить с таблицами.
+ */
 @Composable
 fun AppBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val palette = LocalBrandPalette.current
-    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(palette.pageGradient))
-    ) {
-        // Цветные размытые пятна создают глубину без тяжёлого blur-эффекта.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(palette.blobs[0], Color.Transparent),
-                        center = Offset(220f, 80f),
-                        radius = 1400f
-                    )
-                )
-        )
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(palette.blobs[1], Color.Transparent),
-                        center = Offset(1800f, 320f),
-                        radius = 1600f
-                    )
-                )
-        )
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(palette.blobs[2], Color.Transparent),
-                        center = Offset(900f, 1500f),
-                        radius = 1500f
-                    )
-                )
-        )
-        // Тонкая «сетка» для техничности.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color.Transparent, scheme.outlineVariant.copy(alpha = 0.35f), Color.Transparent)
-                    )
-                )
-                .alpha(0.25f)
-        )
-        content()
-    }
+            .background(MaterialTheme.colorScheme.background),
+        content = content
+    )
 }
 
 /**
- * «Стеклянная» карточка: полупрозрачная поверхность, тонкая градиентная
- * рамка, мягкая тень и подсветка при наведении.
+ * Видимая рамка клавиатурного фокуса и курсор-рука для собственных
+ * кликабельных элементов (у них отключена стандартная индикация Material).
+ */
+@Composable
+fun Modifier.erpInteractive(
+    interaction: MutableInteractionSource,
+    shape: Shape,
+    enabled: Boolean = true,
+    focusColor: Color = MaterialTheme.colorScheme.primary
+): Modifier {
+    val focused by interaction.collectIsFocusedAsState()
+    // Фокус, полученный кликом мышью, рамку не показывает: она нужна для навигации клавиатурой.
+    var focusedByPointer by remember(interaction) { mutableStateOf(false) }
+    LaunchedEffect(interaction) {
+        interaction.interactions.collect { event ->
+            when (event) {
+                is PressInteraction.Press -> focusedByPointer = true
+                is FocusInteraction.Unfocus -> focusedByPointer = false
+            }
+        }
+    }
+    val showRing = focused && !focusedByPointer
+    return this
+        .pointerHoverIcon(if (enabled) PointerIcon.Hand else PointerIcon.Default)
+        .then(if (showRing) Modifier.border(2.dp, focusColor, shape) else Modifier)
+}
+
+/**
+ * Карточка рабочей области: непрозрачная поверхность, тонкая граница.
+ * Тени нет: карточка лежит на странице, а не парит. Кликабельная карточка
+ * отвечает на наведение рамкой основного цвета, на фокус рамкой 2 dp.
+ * Имя `GlassCard` сохранено ради совместимости вызовов.
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(22.dp),
+    shape: Shape = RoundedCornerShape(10.dp),
     gradient: List<Color>? = null,
     onClick: (() -> Unit)? = null,
-    contentPadding: Dp = 18.dp,
+    contentPadding: Dp = 16.dp,
     elevated: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val palette = LocalBrandPalette.current
+    val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
-    val lift by animateFloatAsState(
-        targetValue = if (hovered && onClick != null) 1f else 0f,
-        animationSpec = tween(220),
-        label = "glassLift"
-    )
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.985f else 1f,
-        animationSpec = tween(120),
-        label = "glassPress"
-    )
+    val clickable = onClick != null
 
-    val backgroundBrush = if (gradient != null) {
-        Brush.linearGradient(gradient)
-    } else {
-        Brush.linearGradient(
-            listOf(
-                palette.glassOverlay,
-                palette.glassOverlay.copy(alpha = (palette.glassOverlay.alpha * 0.82f).coerceAtLeast(0.1f))
-            )
-        )
+    val background = when {
+        gradient != null -> gradient.first()
+        clickable && pressed -> scheme.surfaceContainerHigh
+        clickable && hovered -> scheme.surfaceContainerLow
+        else -> palette.glassOverlay
+    }
+    val borderColor = when {
+        clickable && hovered -> scheme.primary.copy(alpha = 0.55f)
+        else -> palette.glassBorder.first()
     }
 
     Box(
         modifier = modifier
-            .scale(pressScale)
             .clip(shape)
-            .background(backgroundBrush, shape)
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    listOf(
-                        palette.glassBorder[0].copy(alpha = 0.55f + 0.35f * lift),
-                        palette.glassBorder[1]
-                    )
-                ),
-                shape = shape
-            )
+            .background(background, shape)
+            .border(1.dp, borderColor, shape)
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = interaction,
-                        indication = null,
-                        onClick = onClick
-                    )
+                    Modifier
+                        .erpInteractive(interaction, shape)
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null,
+                            onClick = onClick
+                        )
                 } else {
                     Modifier
                 }
@@ -196,7 +178,12 @@ fun GlassCard(
     }
 }
 
-/** Кнопка с градиентной заливкой и подсветкой. */
+/**
+ * Основная кнопка: сплошная заливка смыслового цвета (по умолчанию основной синий),
+ * белый текст с контрастом не ниже 4.5:1. Наведение затемняет заливку,
+ * нажатие затемняет сильнее; тени и свечения нет.
+ * Имя `GradientButton` сохранено ради совместимости вызовов.
+ */
 @Composable
 fun GradientButton(
     text: String,
@@ -207,42 +194,35 @@ fun GradientButton(
     leadingIcon: ErpIconGlyph? = null,
     compact: Boolean = false
 ) {
+    val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val shape = RoundedCornerShape(14.dp)
-    val lift by animateFloatAsState(
-        targetValue = if (hovered && enabled) 1f else 0f,
-        animationSpec = tween(200),
-        label = "btnLift"
-    )
+    val pressed by interaction.collectIsPressedAsState()
+    val shape = RoundedCornerShape(6.dp)
+    // Главное действие везде одного цвета, чтобы его узнавали в любом разделе.
+    // Цвета модулей на кнопки не переносятся; красной бывает только опасная кнопка (Gradients.Danger).
+    val base = if (gradient == Gradients.Danger) gradient.first() else Gradients.Primary.first()
+    val fill = when {
+        !enabled -> scheme.surfaceContainerHighest
+        pressed -> base.shade(0.78f)
+        hovered -> base.shade(0.88f)
+        else -> base
+    }
+    val contentColor = if (enabled) Color.White else scheme.onSurfaceVariant
 
     Box(
         modifier = modifier
-            .shadow(
-                elevation = if (enabled) (4 + 8 * lift).dp else 0.dp,
-                shape = shape,
-                clip = false
-            )
+            .heightIn(min = if (compact) 34.dp else 40.dp)
             .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    if (enabled) gradient
-                    else gradient.map { it.copy(alpha = 0.35f) }
-                ),
-                shape
-            )
-            .border(
-                1.dp,
-                Color.White.copy(alpha = 0.18f + 0.2f * lift),
-                shape
-            )
+            .background(fill, shape)
+            .erpInteractive(interaction, shape, enabled, focusColor = scheme.onBackground)
             .clickable(
                 enabled = enabled,
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = if (compact) 14.dp else 20.dp, vertical = if (compact) 9.dp else 12.dp),
+            .padding(horizontal = if (compact) 14.dp else 18.dp, vertical = if (compact) 7.dp else 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -252,8 +232,8 @@ fun GradientButton(
             if (leadingIcon != null) {
                 ErpIcon(
                     glyph = leadingIcon,
-                    tint = Color.White.copy(alpha = if (enabled) 1f else 0.6f),
-                    modifier = Modifier.size(if (compact) 15.dp else 17.dp)
+                    tint = contentColor,
+                    modifier = Modifier.size(if (compact) 15.dp else 16.dp)
                 )
                 Spacer(Modifier.width(8.dp))
             }
@@ -261,7 +241,7 @@ fun GradientButton(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = if (enabled) 1f else 0.65f),
+                color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -269,7 +249,13 @@ fun GradientButton(
     }
 }
 
-/** Второстепенная «стеклянная» кнопка. */
+/** Затемнение цвета для состояний наведения и нажатия. */
+internal fun Color.shade(factor: Float): Color = Color(red * factor, green * factor, blue * factor, alpha)
+
+/**
+ * Второстепенная кнопка: контурная, текст цветом действия.
+ * Наведение даёт лёгкую подложку, нажатие плотнее, отключённая бледнеет.
+ */
 @Composable
 fun SoftButton(
     text: String,
@@ -279,47 +265,58 @@ fun SoftButton(
     leadingIcon: ErpIconGlyph? = null,
     tint: Color? = null
 ) {
-    val palette = LocalBrandPalette.current
     val scheme = MaterialTheme.colorScheme
     val accent = tint ?: scheme.primary
+    val textColor = if (tint != null) readableAccent(accent) else accent
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val shape = RoundedCornerShape(14.dp)
-    val bg by animateFloatAsState(
-        targetValue = if (hovered) 0.16f else 0.08f,
-        animationSpec = tween(180),
-        label = "softBtn"
-    )
+    val pressed by interaction.collectIsPressedAsState()
+    val shape = RoundedCornerShape(6.dp)
+    val fill = when {
+        !enabled -> Color.Transparent
+        pressed -> accent.copy(alpha = 0.16f)
+        hovered -> accent.copy(alpha = 0.08f)
+        else -> scheme.surface
+    }
     Box(
         modifier = modifier
+            .heightIn(min = 36.dp)
             .clip(shape)
-            .background(accent.copy(alpha = if (palette.isDark) bg * 1.4f else bg), shape)
-            .border(1.dp, accent.copy(alpha = 0.22f), shape)
+            .background(fill, shape)
+            .border(1.dp, if (enabled) accent.copy(alpha = 0.45f) else scheme.outlineVariant, shape)
+            .erpInteractive(interaction, shape, enabled)
             .clickable(
                 enabled = enabled,
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 16.dp, vertical = 9.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (leadingIcon != null) {
-                ErpIcon(glyph = leadingIcon, tint = accent, modifier = Modifier.size(15.dp))
+                ErpIcon(
+                    glyph = leadingIcon,
+                    tint = if (enabled) textColor else scheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(15.dp)
+                )
                 Spacer(Modifier.width(7.dp))
             }
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (enabled) accent else accent.copy(alpha = 0.45f),
+                color = if (enabled) textColor else scheme.onSurfaceVariant.copy(alpha = 0.6f),
                 maxLines = 1
             )
         }
     }
 }
 
-/** Заголовок секции с необязательным счётчиком и действием справа. */
+/**
+ * Заголовок секции: название, счётчик-бирка и действие справа.
+ * Цветная полоса слева убрана: заголовок держится размером и весом.
+ */
 @Composable
 fun SectionHeader(
     title: String,
@@ -335,13 +332,6 @@ fun SectionHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(width = 4.dp, height = 20.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Brush.verticalGradient(listOf(accent, accent.copy(alpha = 0.35f))))
-            )
-            Spacer(Modifier.width(10.dp))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -379,7 +369,11 @@ fun Color.deepened(): Color = Color(red * 0.6f, green * 0.6f, blue * 0.6f, alpha
 fun readableAccent(accent: Color): Color =
     if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) accent.deepened() else accent
 
-/** Компактный бейдж-«таблетка». */
+/**
+ * Бирка статуса или счётчика. Прямоугольная, со скруглением 4 dp, как
+ * маркировочная бирка на оборудовании: это повторяющийся мотив интерфейса.
+ * Статус всегда передан текстом, цвет только дублирует его.
+ */
 @Composable
 fun PillBadge(
     text: String,
@@ -388,12 +382,13 @@ fun PillBadge(
     filled: Boolean = false
 ) {
     val solid = accent.deepened()
+    val shape = RoundedCornerShape(4.dp)
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (filled) solid else accent.copy(alpha = 0.13f))
-            .border(1.dp, accent.copy(alpha = if (filled) 0.6f else 0.2f), RoundedCornerShape(50))
-            .padding(horizontal = 9.dp, vertical = 3.dp)
+            .clip(shape)
+            .background(if (filled) solid else accent.copy(alpha = 0.11f))
+            .border(1.dp, accent.copy(alpha = if (filled) 0.6f else 0.28f), shape)
+            .padding(horizontal = 7.dp, vertical = 2.dp)
     ) {
         Text(
             text = text,
@@ -404,7 +399,7 @@ fun PillBadge(
     }
 }
 
-/** Круглый/скруглённый аватар с инициалами и градиентом по имени. */
+/** Аватар с инициалами на сплошной приглушённой подложке, цвет стабилен для имени. */
 @Composable
 fun Avatar(
     name: String,
@@ -412,7 +407,7 @@ fun Avatar(
     size: Dp = 40.dp,
     gradient: List<Color>? = null
 ) {
-    val colors = gradient ?: gradientFor(name)
+    val colors = gradient ?: remember(name) { avatarColorFor(name).let { listOf(it, it) } }
     val initials = remember(name) {
         // Слова без букв («—», «·», номер вида «T-2026-00001» оставляет свою букву) пропускаются.
         name.trim().split(" ", ".").filter { word -> word.any { it.isLetter() } }
@@ -424,8 +419,8 @@ fun Avatar(
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(size * 0.34f))
-            .background(Brush.linearGradient(colors)),
+            .clip(RoundedCornerShape(size * 0.22f))
+            .background(colors.first()),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -437,17 +432,22 @@ fun Avatar(
     }
 }
 
-private fun gradientFor(seed: String): List<Color> {
-    val palettes = listOf(
-        Gradients.Primary, Gradients.Ocean, Gradients.Aurora,
-        Gradients.Sunset, Gradients.Berry, Gradients.Emerald, Gradients.AmberGlow
-    )
+/** Приглушённые оттенки для аватаров: различимы между собой, белые инициалы читаются. */
+private val AvatarColors = listOf(
+    Color(0xFF2F5A93), Color(0xFF2F6B5E), Color(0xFF6B4E2E),
+    Color(0xFF5A4B7A), Color(0xFF7A3E46), Color(0xFF3F5566)
+)
+
+private fun avatarColorFor(seed: String): Color {
     var hash = 7
     seed.forEach { hash = hash * 31 + it.code }
-    return palettes[(hash % palettes.size + palettes.size) % palettes.size]
+    return AvatarColors[(hash % AvatarColors.size + AvatarColors.size) % AvatarColors.size]
 }
 
-/** Иконка в градиентной плашке. */
+/**
+ * Значок модуля: иконка цветом модуля на бледной подложке того же цвета.
+ * Цвет помогает узнать раздел, но не перекрикивает данные.
+ */
 @Composable
 fun IconBadge(
     glyph: ErpIconGlyph,
@@ -456,44 +456,49 @@ fun IconBadge(
     size: Dp = 40.dp,
     iconSize: Dp = 20.dp
 ) {
+    val dark = LocalBrandPalette.current.isDark
+    val accent = gradient.first()
+    val iconTint = if (dark) accent.lifted() else accent
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(size * 0.32f))
-            .background(Brush.linearGradient(gradient)),
+            .clip(RoundedCornerShape(size * 0.2f))
+            .background(accent.copy(alpha = if (dark) 0.22f else 0.10f))
+            .border(1.dp, accent.copy(alpha = if (dark) 0.35f else 0.22f), RoundedCornerShape(size * 0.2f)),
         contentAlignment = Alignment.Center
     ) {
-        ErpIcon(glyph = glyph, tint = Color.White, modifier = Modifier.size(iconSize))
+        ErpIcon(glyph = glyph, tint = iconTint, modifier = Modifier.size(iconSize))
     }
 }
 
-/** Пустое состояние. */
+/** Осветление тёмного цвета модуля для иконок на тёмной теме. */
+internal fun Color.lifted(): Color = Color(
+    red + (1f - red) * 0.45f,
+    green + (1f - green) * 0.45f,
+    blue + (1f - blue) * 0.45f,
+    alpha
+)
+
+/**
+ * Пустое состояние: заголовок называет причину, текст подсказывает следующее действие.
+ * Иконка необязательна и ставится, только если она относится к содержимому.
+ */
 @Composable
 fun EmptyState(
     title: String,
     modifier: Modifier = Modifier,
     text: String? = null,
-    glyph: ErpIconGlyph = ErpIconGlyph.Sparkle,
-    accent: Color = MaterialTheme.colorScheme.primary
+    glyph: ErpIconGlyph? = null,
+    accent: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(vertical = 28.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(accent.copy(alpha = 0.18f), accent.copy(alpha = 0.04f))
-                    )
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            ErpIcon(glyph = glyph, tint = accent, modifier = Modifier.size(28.dp))
+        if (glyph != null && glyph != ErpIconGlyph.Sparkle) {
+            ErpIcon(glyph = glyph, tint = accent, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(10.dp))
         }
-        Spacer(Modifier.height(14.dp))
         Text(
             text = title,
             style = MaterialTheme.typography.titleSmall,
@@ -541,23 +546,18 @@ fun DetailRow(
     }
 }
 
-/** Небольшой индикатор загрузки в виде пульсирующих градиентных точек. */
+/**
+ * Индикатор загрузки. Вращение здесь единственная постоянная анимация
+ * в интерфейсе: оно показывает, что запрос ещё выполняется (MOTION 1).
+ */
 @Composable
 fun GradientSpinner(modifier: Modifier = Modifier, size: Dp = 44.dp) {
-    val colors = Gradients.Primary
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(size))
-                .background(Brush.sweepGradient(colors + colors.first()))
-                .alpha(0.2f)
-        )
-        Box(
-            Modifier
-                .size(size * 0.55f)
-                .clip(RoundedCornerShape(size))
-                .background(Brush.linearGradient(colors))
+        androidx.compose.material3.CircularProgressIndicator(
+            modifier = Modifier.size(size * 0.7f),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            strokeWidth = 3.dp
         )
     }
 }
@@ -575,29 +575,8 @@ fun SkeletonLine(
             Modifier
                 .width(maxWidth * widthFraction)
                 .height(height)
-                .clip(RoundedCornerShape(50))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            scheme.surfaceContainerHigh,
-                            scheme.surfaceVariant.copy(alpha = 0.55f),
-                            scheme.surfaceContainerHigh
-                        )
-                    )
-                )
-        )
-    }
-}
-
-/** Декоративное кольцо-градиент (используется на герое и в login). */
-@Composable
-fun GradientRing(modifier: Modifier = Modifier, colors: List<Color> = Gradients.Aurora) {
-    Canvas(modifier) {
-        val stroke = size.minDimension * 0.05f
-        drawCircle(
-            brush = Brush.sweepGradient(colors + colors.first()),
-            radius = size.minDimension / 2f - stroke / 2f,
-            style = Stroke(width = stroke, cap = StrokeCap.Round)
+                .clip(RoundedCornerShape(3.dp))
+                .background(scheme.surfaceContainerHighest)
         )
     }
 }
@@ -951,30 +930,54 @@ fun PageHeader(
     actions: (@Composable RowScope.() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        // На узком экране действия уходят под заголовок, иначе кнопки сжимаются до одной буквы.
+        if (maxWidth < 600.dp && actions != null) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PageHeaderTitleRow(title, glyph, gradient, subtitle, onBack, null)
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+                }
+            }
+        } else {
+            PageHeaderTitleRow(
+                title, glyph, gradient, subtitle, onBack, actions,
+                Modifier.padding(horizontal = if (maxWidth < 600.dp) 16.dp else 24.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PageHeaderTitleRow(
+    title: String,
+    glyph: ErpIconGlyph,
+    gradient: List<Color>,
+    subtitle: String?,
+    onBack: (() -> Unit)?,
+    actions: (@Composable RowScope.() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 6.dp),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f))
-                    .clickable(onClick = onBack),
-                contentAlignment = Alignment.Center
-            ) {
-                ErpIcon(
-                    glyph = ErpIconGlyph.ChevronLeft,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            ErpIconButton(
+                glyph = ErpIconGlyph.ChevronLeft,
+                contentDescription = "Назад",
+                onClick = onBack
+            )
             Spacer(Modifier.width(12.dp))
         }
-        IconBadge(glyph, gradient = gradient, size = 40.dp, iconSize = 20.dp)
+        IconBadge(glyph, gradient = gradient, size = 36.dp, iconSize = 18.dp)
         Spacer(Modifier.width(13.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -1035,13 +1038,12 @@ fun ErpTextField(
         },
         visualTransformation = if (isPassword) androidx.compose.ui.text.input.PasswordVisualTransformation()
         else androidx.compose.ui.text.input.VisualTransformation.None,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(6.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = scheme.primary,
-            unfocusedBorderColor = scheme.outline.copy(alpha = 0.7f),
-            focusedContainerColor = if (palette.isDark) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
-            unfocusedContainerColor = if (palette.isDark) scheme.surfaceContainer.copy(alpha = 0.6f)
-            else scheme.surfaceContainerLow.copy(alpha = 0.7f),
+            unfocusedBorderColor = scheme.outline,
+            focusedContainerColor = if (palette.isDark) scheme.surfaceContainerHigh else scheme.surface,
+            unfocusedContainerColor = if (palette.isDark) scheme.surfaceContainer else scheme.surface,
             focusedLabelColor = scheme.primary,
             unfocusedLabelColor = scheme.onSurfaceVariant
         ),
@@ -1082,56 +1084,46 @@ fun ErpDialog(
                 .padding(horizontal = 24.dp, vertical = 18.dp)
                 .widthIn(max = width)
                 .fillMaxWidth()
-                .shadow(28.dp, RoundedCornerShape(22.dp))
-                .clip(RoundedCornerShape(22.dp))
+                // Диалог единственный «парящий» слой, поэтому тень остаётся только здесь.
+                .shadow(16.dp, RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(palette.glassOverlay)
-                .border(1.dp, scheme.outlineVariant.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
+                .border(1.dp, scheme.outlineVariant, RoundedCornerShape(12.dp))
         ) {
             Column {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Brush.linearGradient(gradient))
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                        .padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.18f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ErpIcon(glyph, Color.White, Modifier.size(18.dp))
+                    if (glyph != ErpIconGlyph.Sparkle) {
+                        IconBadge(glyph, gradient = gradient, size = 32.dp, iconSize = 16.dp)
+                        Spacer(Modifier.width(12.dp))
                     }
-                    Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
+                            color = scheme.onSurface
                         )
                         if (subtitle != null) {
                             Text(
                                 text = subtitle,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.78f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White.copy(alpha = 0.16f))
-                            .clickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ErpIcon(ErpIconGlyph.Close, Color.White, Modifier.size(15.dp))
-                    }
+                    ErpIconButton(
+                        glyph = ErpIconGlyph.Close,
+                        contentDescription = "Закрыть",
+                        onClick = onDismiss
+                    )
                 }
+                HorizontalDivider(color = scheme.outlineVariant)
 
                 Column(
                     modifier = Modifier
@@ -1143,7 +1135,7 @@ fun ErpDialog(
                     content = content
                 )
 
-                HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.35f))
+                HorizontalDivider(color = scheme.outlineVariant)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1166,6 +1158,93 @@ fun ErpDialog(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Служебная кнопка-иконка (третий уровень иерархии: назад, закрыть, обновить).
+ * Без рамки в покое; наведение даёт подложку, фокус рамку 2 dp.
+ * Область нажатия 36 dp, у иконки есть доступное имя.
+ */
+@Composable
+fun ErpIconButton(
+    glyph: ErpIconGlyph,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant
+) {
+    val scheme = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val pressed by interaction.collectIsPressedAsState()
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier = modifier
+            .size(36.dp)
+            .clip(shape)
+            .background(
+                when {
+                    !enabled -> Color.Transparent
+                    pressed -> scheme.surfaceContainerHighest
+                    hovered -> scheme.surfaceContainerHigh
+                    else -> Color.Transparent
+                }
+            )
+            .erpInteractive(interaction, shape, enabled)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick
+            )
+            .semantics { this.contentDescription = contentDescription; role = Role.Button },
+        contentAlignment = Alignment.Center
+    ) {
+        ErpIcon(
+            glyph = glyph,
+            tint = if (enabled) tint else tint.copy(alpha = 0.4f),
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/**
+ * Область «список и карточка». Панели помечаются `Modifier.pane(вес)`.
+ * Широкий экран: панели рядом, доли ширины по весу.
+ * Узкий экран (меньше [breakpoint]): панели друг под другом на всю ширину,
+ * каждая фиксированной высоты, страница прокручивается. Так таблица и карточка
+ * не сжимаются до столбика из букв.
+ */
+class ErpSplitScope internal constructor(
+    private val wide: Boolean,
+    private val rowScope: RowScope?
+) {
+    fun Modifier.pane(weight: Float, narrowHeight: Dp = 520.dp): Modifier =
+        if (wide && rowScope != null) with(rowScope) { this@pane.weight(weight).fillMaxHeight() }
+        else this.fillMaxWidth().height(narrowHeight)
+}
+
+@Composable
+fun ErpSplitRow(
+    modifier: Modifier = Modifier,
+    breakpoint: Dp = 760.dp,
+    content: @Composable ErpSplitScope.() -> Unit
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        if (maxWidth >= breakpoint) {
+            Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ErpSplitScope(wide = true, rowScope = this).content()
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ErpSplitScope(wide = false, rowScope = null).content()
             }
         }
     }

@@ -17,9 +17,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -242,7 +242,7 @@ private fun ModelInfoCard(
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(text = "${model.code} — ${model.name}", style = MaterialTheme.typography.titleMedium)
+            Text(text = "${model.code} · ${model.name}", style = MaterialTheme.typography.titleMedium)
             Text(text = "Статус: ${model.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
             if (!model.description.isNullOrBlank()) {
                 Text(text = "Описание: ${model.description}", style = MaterialTheme.typography.bodyMedium)
@@ -550,7 +550,9 @@ private fun BomRevisionDiffDialog(
                     ) {
                         items(diff.items) { item ->
                             Text(
-                                text = "[${item.kind.name}] ${item.code} — ${item.name} (${item.unit}): было ${item.leftQuantity ?: "—"}, стало ${item.rightQuantity ?: "—"}",
+
+                                text = "[${item.kind.name}] ${item.code} · ${item.name} (${item.unit}): было ${item.leftQuantity ?: "—"}, стало ${item.rightQuantity ?: "—"}",
+
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -584,12 +586,16 @@ private fun BomWhereUsedDialog(
         } else {
             Box {
                 OutlinedButton(onClick = { expanded = true }) {
-                    Text(selectedNom?.let { "${it.code} — ${it.name}" } ?: "Выберите компонент")
+
+                    Text(selectedNom?.let { "${it.code} · ${it.name}" } ?: "Выберите компонент")
+
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     state.nomenclature.take(40).forEach { nom ->
                         DropdownMenuItem(
-                            text = { Text("${nom.code} — ${nom.name}") },
+
+                            text = { Text("${nom.code} · ${nom.name}") },
+
                             onClick = {
                                 expanded = false
                                 onSelectNomenclature(nom.id)

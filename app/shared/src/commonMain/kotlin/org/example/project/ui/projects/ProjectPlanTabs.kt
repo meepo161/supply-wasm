@@ -17,7 +17,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -110,7 +110,9 @@ fun StagesTab(
         } else {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+
+                shape = RoundedCornerShape(8.dp),
+
                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             ) {
@@ -283,7 +285,7 @@ private fun StageRow(
         }
         Text(
             text = buildList {
-                add("план ${stage.plannedStartAt.toShortDate()} — ${stage.plannedEndAt.toShortDate()}")
+                add("план ${stage.plannedStartAt.toShortDate()} · ${stage.plannedEndAt.toShortDate()}")
                 if (stage.actualStartAt != null) add("начат ${stage.actualStartAt.toShortDate()}")
                 if (stage.actualEndAt != null) add("завершён ${stage.actualEndAt.toShortDate()}")
             }.joinToString(" · "),
@@ -387,7 +389,7 @@ private fun ProjectStageStatus.accentColor() = when (this) {
     ProjectStageStatus.CANCELLED -> MaterialTheme.colorScheme.error
 }
 
-private fun ProjectMilestoneStatus.localizedName(): String = when (this) {
+internal fun ProjectMilestoneStatus.localizedName(): String = when (this) {
     ProjectMilestoneStatus.PLANNED -> "Ожидается"
     ProjectMilestoneStatus.REACHED -> "Достигнута"
     ProjectMilestoneStatus.MISSED -> "Пропущена"
@@ -526,7 +528,9 @@ private fun RiskCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+
+        shape = RoundedCornerShape(8.dp),
+
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -708,6 +712,7 @@ private fun CancelStageDialog(
         subtitle = stage.name,
         onDismiss = onDismiss,
         confirmText = "Отменить этап",
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         confirmEnabled = reason.isNotBlank(),
         onConfirm = { onConfirm(reason) }
     ) {

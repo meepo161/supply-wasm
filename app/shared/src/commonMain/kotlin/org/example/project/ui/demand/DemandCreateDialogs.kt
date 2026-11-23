@@ -5,12 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+
+import org.example.project.ui.theme.Button
+import org.example.project.ui.theme.OutlinedButton
+
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -182,7 +185,7 @@ private fun ManualLinesSection(
                 onRemove = { onRemoveLine(index) }
             )
         }
-        Button(onClick = onAddLine) { Text("Добавить позицию") }
+        OutlinedButton(onClick = onAddLine) { Text("Добавить позицию") }
     }
 }
 
@@ -239,6 +242,9 @@ fun CancelDemandDialog(
         gradient = Gradients.Sunset,
         width = 520.dp,
         confirmText = "Отменить потребность",
+
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
+
         onConfirm = onCancel,
         dismissText = "Закрыть",
         onDismiss = onDismiss

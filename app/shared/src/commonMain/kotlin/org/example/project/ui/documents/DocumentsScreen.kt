@@ -18,7 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -116,10 +116,12 @@ private fun DocumentListPage(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
+        // FlowRow: на узком экране кнопки переносятся, а не уходят за край.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val extrasRepo: org.example.project.data.ErpExtrasRepository = koinInject()
             val tplScope = rememberCoroutineScope()
@@ -186,7 +188,9 @@ private fun DocumentListPage(
                 ) {
                     tplError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     templates.forEach { t ->
-                        Text("${t.code} — ${t.name} (${t.docType})", style = MaterialTheme.typography.bodySmall)
+
+                        Text("${t.code} · ${t.name} (${t.docType})", style = MaterialTheme.typography.bodySmall)
+
                     }
                     HorizontalDivider()
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -269,7 +273,7 @@ private fun DocumentHeaderCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "${document.number} — ${document.name}",
+                text = "${document.number} · ${document.name}",
                 style = MaterialTheme.typography.titleMedium
             )
             DetailRow("Тип", document.docType.localizedName())
@@ -361,7 +365,7 @@ private fun VersionRow(
             Text(
                 text = "Версия ${version.versionNumber}" +
                     (if (isCurrent) " (действующая)" else "") +
-                    " — ${version.status.localizedName()}",
+                    ": ${version.status.localizedName()}",
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
@@ -485,7 +489,7 @@ private fun LinkRow(
         Text(
             text = when (link.linkType) {
                 DocumentLinkType.PROJECT -> state.projects.find { it.id == link.targetId }
-                    ?.let { "Проект: ${it.number} — ${it.name}" }
+                    ?.let { "Проект: ${it.number} · ${it.name}" }
                     ?: "Проект: ID ${link.targetId}"
                 else -> "${link.linkType.localizedName()}: ID ${link.targetId}"
             },

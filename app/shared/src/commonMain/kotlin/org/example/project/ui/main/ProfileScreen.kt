@@ -96,21 +96,11 @@ fun ProfileScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Brush.linearGradient(Gradients.Sidebar))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(22.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
                     .padding(20.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(110.dp)
-                        .align(Alignment.TopEnd)
-                        .background(
-                            Brush.radialGradient(
-                                listOf(Brand.Violet.copy(alpha = 0.35f), Color.Transparent)
-                            )
-                        )
-                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(name = user.fullName, size = 72.dp)
                     Spacer(Modifier.width(20.dp))
@@ -124,10 +114,10 @@ fun ProfileScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            PillBadge(
+                            Text(
                                 text = "@${user.login}",
-                                accent = Brand.Cyan,
-                                modifier = Modifier
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = 0.8f)
                             )
                             user.email?.takeIf { it.isNotBlank() }?.let {
                                 Spacer(Modifier.width(8.dp))
@@ -223,11 +213,11 @@ fun ProfileScreen(
                         }
                     }
                     GlassCard(modifier = Modifier.weight(1f)) {
-                        SectionTitle("Оформление", ErpIconGlyph.Sparkle)
+                        SectionTitle("Оформление", if (theme.isDark) ErpIconGlyph.Moon else ErpIconGlyph.Sun)
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = if (theme.isDark) "Включена тёмная тема — комфортно для вечерней работы."
-                            else "Используется светлая тема с мягкими градиентами.",
+                            text = if (theme.isDark) "Включена тёмная тема."
+                            else "Включена светлая тема.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

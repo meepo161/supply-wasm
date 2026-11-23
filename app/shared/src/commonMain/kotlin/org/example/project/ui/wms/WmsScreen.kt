@@ -25,7 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import org.example.project.ui.theme.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -34,14 +34,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
+import org.example.project.ui.theme.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -730,13 +730,14 @@ private fun StockTab(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = "Остатки на складе", style = MaterialTheme.typography.headlineSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     viewModel.selectTab(WmsTab.RESERVATIONS)
                     viewModel.showDialog(WmsDialog.CreateReservation)
@@ -752,10 +753,15 @@ private fun StockTab(
             }
         }
 
-        // Сводка по остаткам (KPI — кликабельная быстрая фильтрация)
-        Row(
+        // Сводка по остаткам: плитки «Позиций», «Доступно» и «Карантин» включают быструю фильтрацию.
+        // На узком экране плитки идут по две в ряд, а не сжимаются в столбики.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            maxItemsInEachRow = if (maxWidth < 600.dp) 2 else 5
         ) {
             StockKpiCard("Позиций", "${filteredStock.size}", Brand.Blue, Modifier.weight(1f).clickable {
                 filterOnlyAvailable = false
@@ -769,6 +775,7 @@ private fun StockTab(
             StockKpiCard("Карантин / брак", "$quarantineCount", if (quarantineCount > 0) Brand.Rose else Brand.Graphite, Modifier.weight(1f).clickable {
                 filterQuarantineOnly = !filterQuarantineOnly
             })
+        }
         }
 
         Row(
@@ -792,8 +799,8 @@ private fun StockTab(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Button(onClick = viewModel::loadStock) { Text("Обновить", softWrap = false) }
-            OutlinedButton(onClick = {
+            OutlinedButton(onClick = viewModel::loadStock) { Text("Обновить", softWrap = false) }
+            TextButton(onClick = {
                 filterOnlyAvailable = false
                 filterQuarantineOnly = false
                 viewModel.updateStockFilters(StockFilters())
@@ -824,14 +831,24 @@ private fun StockKpiCard(
     accent: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
 ) {
+    // Нейтральная плитка: цвет появляется только у тревожного значения (карантин / брак).
+    val alarming = accent == Brand.Rose
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
-        color = accent.copy(alpha = 0.08f)
+        color = if (alarming) accent.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (alarming) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = value, style = MaterialTheme.typography.titleMedium, color = accent)
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (alarming) org.example.project.ui.theme.readableAccent(accent) else MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -1583,7 +1600,7 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
-                Button(onClick = viewModel::lookupBarcode) { Text("Найти") }
+                OutlinedButton(onClick = viewModel::lookupBarcode) { Text("Найти") }
                 OutlinedButton(onClick = viewModel::loadMovementsAndLowStock) {
                     ErpIcon(
                         glyph = ErpIconGlyph.Refresh,
@@ -1597,9 +1614,9 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
             state.barcodeResult?.let { nom ->
                 Spacer(Modifier.height(8.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(6.dp),
                     color = Brand.Teal.copy(alpha = 0.10f),
-                    modifier = Modifier.fillMaxWidth().border(1.dp, Brand.Teal.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
+                    modifier = Modifier.fillMaxWidth().border(1.dp, Brand.Teal.copy(alpha = 0.30f), RoundedCornerShape(6.dp))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1796,7 +1813,7 @@ private fun MovementKpiTile(
             Box(
                 modifier = Modifier
                     .size(34.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(accent.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -1838,7 +1855,7 @@ private fun MovementLogCard(m: StockMovementDto, nomenclature: NomenclatureDto?)
     val serviceNote = m.note?.trim()?.let { Regex("^(Receipt|Issue|Transfer|Return|Write[- ]?off|Inventory|Initial stock) +([^ ]+)$", RegexOption.IGNORE_CASE).find(it) }
     val docNumber = serviceNote?.groupValues?.get(2)
     val visibleNote = if (serviceNote != null) null else m.note
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(8.dp)
 
     Surface(
         shape = shape,
@@ -1961,7 +1978,7 @@ private fun LowStockItemCard(item: LowStockItemDto) {
     val minS = item.minStock.toDoubleOrNull() ?: 0.0
     val ratio = if (minS > 0.0) (avail / minS).toFloat().coerceIn(0f, 1f) else 0f
     val barColor = if (ratio < 0.35f) Brand.Rose else Brand.Amber
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(8.dp)
 
     Surface(
         shape = shape,
@@ -2138,7 +2155,9 @@ private fun WmsTopNav(
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+
+        shape = RoundedCornerShape(8.dp),
+
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -2304,7 +2323,7 @@ private fun WmsNavItemRow(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val scheme = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(8.dp)
 
     val bgModifier = when {
         selected -> Modifier.background(

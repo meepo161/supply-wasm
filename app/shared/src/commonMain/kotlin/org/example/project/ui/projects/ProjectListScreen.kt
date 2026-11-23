@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import org.example.project.ui.theme.erpInteractive
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -73,10 +74,12 @@ fun ProjectListScreen(
             .fillMaxSize()
             .padding(horizontal = 24.dp)
     ) {
-        Row(
+        // FlowRow: на узком экране кнопки переносятся под заголовок, а не уходят за край.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(ErpIconGlyph.Projects, gradient = Gradients.Aurora, size = 40.dp, iconSize = 20.dp)
@@ -138,9 +141,11 @@ fun ProjectListScreen(
                     }
                 }
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilterChip(
                             selected = statusFilter == "ALL",
@@ -180,7 +185,7 @@ fun ProjectListScreen(
                             "Сроки" to filteredProjects.map { p ->
                                 val s = org.example.project.ui.theme.ErpFormat.dateRu(p.plannedStartAt)
                                 val e = org.example.project.ui.theme.ErpFormat.dateRu(p.plannedEndAt)
-                                if (s == "—" && e == "—") "—" else "$s — $e"
+                                if (s == "—" && e == "—") "—" else "$s · $e"
                             }
                         )
                     }
@@ -221,25 +226,14 @@ private fun ProjectCard(project: ProjectDto, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        scheme.surfaceContainerLowest,
-                        accent.copy(alpha = 0.05f + 0.06f * lift)
-                    )
-                )
-            )
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (hovered) scheme.surfaceContainerLow else scheme.surface)
             .border(
                 1.dp,
-                Brush.linearGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.4f),
-                        accent.copy(alpha = 0.16f + 0.22f * lift)
-                    )
-                ),
-                RoundedCornerShape(20.dp)
+                if (hovered) scheme.primary.copy(alpha = 0.55f) else scheme.outlineVariant,
+                RoundedCornerShape(10.dp)
             )
+            .erpInteractive(interaction, RoundedCornerShape(10.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
     ) {
         Column {
@@ -327,7 +321,7 @@ private fun ProjectCard(project: ProjectDto, onClick: () -> Unit) {
                             color = scheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )
                         Text(
-                            text = "${project.plannedStartAt.toShortDate()} — ${project.plannedEndAt.toShortDate()}",
+                            text = "${project.plannedStartAt.toShortDate()} · ${project.plannedEndAt.toShortDate()}",
                             style = MaterialTheme.typography.labelMedium,
                             color = scheme.onSurface
                         )

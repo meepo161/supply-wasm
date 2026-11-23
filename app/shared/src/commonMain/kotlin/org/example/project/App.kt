@@ -29,7 +29,6 @@ import org.example.project.ui.auth.LoginScreen
 import org.example.project.ui.main.MainScaffold
 import org.example.project.ui.theme.AppBackground
 import org.example.project.ui.theme.ErpTheme
-import org.example.project.ui.theme.GradientRing
 import org.example.project.ui.theme.GradientSpinner
 import org.example.project.ui.theme.LocalThemeController
 import org.example.project.ui.theme.ThemeController
@@ -90,10 +89,7 @@ private fun LoadingScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                GradientRing(modifier = Modifier.size(96.dp))
-                GradientSpinner(size = 36.dp)
-            }
+            GradientSpinner(size = 44.dp)
             Spacer(Modifier.height(20.dp))
             Text(
                 text = "Загрузка системы…",

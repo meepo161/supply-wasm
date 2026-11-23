@@ -15,7 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
-import androidx.compose.material3.Tab
+import org.example.project.ui.theme.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +49,9 @@ import org.example.project.dto.DemandSourceType
 import org.example.project.dto.LowStockItemDto
 import org.example.project.dto.ProcurementPlanItemDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.projects.localizedName
+import org.example.project.ui.approvals.localizedName
+import org.example.project.ui.tasks.localizedName
 import org.example.project.ui.theme.DetailRow
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.GlassCard
@@ -284,27 +287,24 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                         org.example.project.ui.tables.PaginatedCardList(
                             items = calendar,
                             modifier = Modifier.fillMaxSize()
-                        ) { index, item ->
-                            val progress = ((index + 1).toFloat() / calendar.size.coerceAtLeast(1).toFloat()).coerceIn(0.15f, 1f)
-                            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("${item.number} · ${item.title}", style = MaterialTheme.typography.titleSmall)
-                                            Spacer(Modifier.height(2.dp))
-                                            Text("Срок: ${item.date}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        PillBadge(text = item.status)
+                        ) { _, item ->
+                            // Полоса «Ганта» убрана: она считалась по номеру строки и не отражала реальный прогресс.
+                            GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 12.dp) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("${item.number} · ${item.title}", style = MaterialTheme.typography.titleSmall)
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            "${item.kindLabel()} · срок ${item.date}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                    // Шкала Ганта по последовательности сроков
-                                    LinearProgressIndicator(
-                                        progress = { progress },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    PillBadge(text = item.statusLabel())
                                 }
                             }
                         }
@@ -391,7 +391,7 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Text("${cp.name} (${cp.kind.name})", style = MaterialTheme.typography.titleSmall)
+                                            Text("${cp.name} (${cp.kind.label()})", style = MaterialTheme.typography.titleSmall)
                                             cp.inn?.let { PillBadge(text = "ИНН $it") }
                                         }
                                         Text(
@@ -484,7 +484,7 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text("Шаблоны согласований ($tplTargetType): ${templates.size}", style = MaterialTheme.typography.titleSmall)
                                     templates.forEach { tpl ->
-                                        Text("${tpl.code} — ${tpl.name} (этапов: ${tpl.stages.size})", style = MaterialTheme.typography.bodySmall)
+                                        Text("${tpl.code} · ${tpl.name} (этапов: ${tpl.stages.size})", style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
                             }
@@ -508,12 +508,12 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                                                 style = MaterialTheme.typography.titleSmall
                                             )
                                             Text(
-                                                "Этап ${route.currentStageNo} · ${route.status.name}",
+                                                "Этап ${route.currentStageNo} · ${route.status.localizedName()}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
-                                        PillBadge(text = route.status.name)
+                                        PillBadge(text = route.status.localizedName())
                                     }
                                 }
                             }
@@ -551,4 +551,29 @@ private fun AnalyticsKpiCard(
             )
         }
     }
+}
+
+/** Тип события календаря по-русски. */
+private fun CalendarEventDto.kindLabel(): String = when (kind) {
+    org.example.project.dto.CalendarEventKind.TASK_DUE -> "Задача"
+    org.example.project.dto.CalendarEventKind.PROJECT_DEADLINE -> "Проект"
+    org.example.project.dto.CalendarEventKind.MILESTONE -> "Контрольная точка"
+}
+
+/** Статус события календаря по-русски; неизвестный код показывается как есть. */
+private fun CalendarEventDto.statusLabel(): String = when (kind) {
+    org.example.project.dto.CalendarEventKind.TASK_DUE ->
+        org.example.project.dto.TaskStatus.entries.firstOrNull { it.name == status }?.localizedName()
+    org.example.project.dto.CalendarEventKind.PROJECT_DEADLINE ->
+        org.example.project.dto.ProjectStatus.entries.firstOrNull { it.name == status }?.localizedName()
+    org.example.project.dto.CalendarEventKind.MILESTONE ->
+        org.example.project.dto.ProjectMilestoneStatus.entries.firstOrNull { it.name == status }?.localizedName()
+} ?: status
+
+/** Вид контрагента по-русски. */
+private fun CounterpartyKind.label(): String = when (this) {
+    CounterpartyKind.CUSTOMER -> "заказчик"
+    CounterpartyKind.PARTNER -> "партнёр"
+    CounterpartyKind.SUPPLIER -> "поставщик"
+    CounterpartyKind.OTHER -> "прочее"
 }

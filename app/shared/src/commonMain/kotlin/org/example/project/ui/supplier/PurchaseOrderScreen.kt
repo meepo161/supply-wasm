@@ -17,7 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
+import org.example.project.ui.theme.Tab
+import org.example.project.ui.theme.ErpSplitRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -112,8 +113,8 @@ private fun OrdersPane(
     viewModel: PurchaseOrderViewModel,
     invoiceViewModel: SupplierInvoiceViewModel?
 ) {
-    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        GlassCard(modifier = Modifier.weight(0.42f).fillMaxHeight(), contentPadding = 14.dp) {
+    ErpSplitRow {
+        GlassCard(modifier = Modifier.pane(0.42f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Заказы",
                 count = state.orders.size,
@@ -146,7 +147,7 @@ private fun OrdersPane(
                 )
             }
         }
-        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.weight(0.58f).fillMaxHeight())
+        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.pane(0.58f, narrowHeight = 640.dp))
     }
 }
 
@@ -246,7 +247,7 @@ private fun OrderCardPane(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -409,7 +410,7 @@ private fun TotalsRow(order: PurchaseOrderDto) {
 private fun PurchaseOrderTotalChip(label: String, value: String, accent: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(accent.copy(alpha = 0.12f))
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
@@ -431,7 +432,7 @@ private fun PurchaseOrderSuccessNote(text: String, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Brand.Mint.copy(alpha = 0.14f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically

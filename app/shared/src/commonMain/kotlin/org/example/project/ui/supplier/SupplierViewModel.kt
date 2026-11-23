@@ -553,7 +553,7 @@ class SupplierViewModel(
                         DemandLineOption(
                             demandLineId = line.id,
                             nomenclatureId = line.nomenclatureId,
-                            label = nomenclature?.let { "${it.code} — ${it.name}" }
+                            label = nomenclature?.let { "${it.code} · ${it.name}" }
                                 ?: "Позиция ${line.lineNo}",
                             deficit = line.deficitQuantity ?: line.quantity
                         )
@@ -639,7 +639,7 @@ class SupplierViewModel(
         if (!canSelect()) return fail("Нет права выбирать предложение")
         val offerId = _uiState.value.pendingSelectionOfferId ?: return
         val reason = _uiState.value.selectionReason.trim()
-        if (reason.length < 10) return fail("Обоснование выбора — не короче 10 символов")
+        if (reason.length < 10) return fail("Обоснование выбора: не короче 10 символов")
         update { it.copy(isActionRunning = true, operationError = null) }
         viewModelScope.launch {
             val offer = _uiState.value.comparison?.columns?.firstOrNull { it.offerId == offerId }

@@ -21,20 +21,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import org.example.project.ui.theme.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
+import org.example.project.ui.theme.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -134,7 +134,7 @@ fun ProjectDetailScreen(
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
@@ -511,7 +511,7 @@ private fun ProjectHeader(project: ProjectDto, modifier: Modifier = Modifier) {
 private fun ProjectInfoSection(project: ProjectDto, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -539,7 +539,7 @@ private fun ProjectInfoSection(project: ProjectDto, modifier: Modifier = Modifie
                     DetailRow(label = "Заказчик", value = project.customer?.takeIf { it.isNotBlank() } ?: "—")
                     DetailRow(
                         label = "Сроки",
-                        value = "${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedStartAt)} — ${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedEndAt)}"
+                        value = "${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedStartAt)} · ${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedEndAt)}"
                     )
                 }
             }
@@ -629,7 +629,7 @@ private fun MembersSection(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {

@@ -38,7 +38,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -179,7 +179,7 @@ fun ErpDataGrid(
         if (showAllRows) sortedRows else paginateList(sortedRows, safePage, pageSize)
     }
 
-    val outerShape = RoundedCornerShape(14.dp)
+    val outerShape = RoundedCornerShape(8.dp)
     val isDark = LocalBrandPalette.current.isDark
 
     Surface(
@@ -252,7 +252,7 @@ fun ErpDataGrid(
                             focusedBorderColor = Brand.Indigo.copy(alpha = 0.7f),
                             unfocusedBorderColor = scheme.outlineVariant.copy(alpha = 0.55f)
                         ),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(6.dp),
                         modifier = Modifier.weight(1f).height(44.dp)
                     )
                     } else {
@@ -279,10 +279,10 @@ fun ErpDataGrid(
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(6.dp),
                             color = scheme.surfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(6.dp))
                                 .clickable {
                                     val entries = GridDensity.entries
                                     gridDensity = entries[(gridDensity.ordinal + 1) % entries.size]
@@ -301,10 +301,10 @@ fun ErpDataGrid(
                     // Меню колонок
                     Box {
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(6.dp),
                             color = scheme.surfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(6.dp))
                                 .clickable { columnsMenuExpanded = true }
                         ) {
                             Row(

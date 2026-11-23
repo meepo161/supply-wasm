@@ -56,7 +56,7 @@ fun ProjectDropdown(
         selected = selected,
         onSelect = onSelect,
         label = label,
-        itemText = { "${it.number} — ${it.name}" },
+        itemText = { "${it.number} · ${it.name}" },
         modifier = modifier,
         emptyText = "Нет доступных проектов"
     )
@@ -75,7 +75,7 @@ fun ProductModelDropdown(
         selected = selected,
         onSelect = onSelect,
         label = label,
-        itemText = { "${it.code} — ${it.name}" },
+        itemText = { "${it.code} · ${it.name}" },
         modifier = modifier,
         emptyText = "Нет доступных моделей"
     )
@@ -113,7 +113,7 @@ fun DemandNomenclatureDropdown(
         selected = selected,
         onSelect = onSelect,
         label = label,
-        itemText = { "${it.code} — ${it.name}" },
+        itemText = { "${it.code} · ${it.name}" },
         modifier = modifier,
         emptyText = "Нет доступной номенклатуры"
     )

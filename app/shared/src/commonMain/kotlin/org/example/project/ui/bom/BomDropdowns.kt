@@ -135,7 +135,7 @@ fun BomNomenclatureDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: "",
+            value = selected?.let { "${it.code} · ${it.name}" } ?: "",
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
@@ -148,7 +148,7 @@ fun BomNomenclatureDropdown(
         ) {
             items.forEach { item ->
                 DropdownMenuItem(
-                    text = { Text("${item.code} — ${item.name}") },
+                    text = { Text("${item.code} · ${item.name}") },
                     onClick = {
                         onSelect(item)
                         expanded = false
@@ -177,7 +177,7 @@ fun BomWarehouseDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: "Не выбран",
+            value = selected?.let { "${it.code} · ${it.name}" } ?: "Не выбран",
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
@@ -190,7 +190,7 @@ fun BomWarehouseDropdown(
         ) {
             options.forEach { warehouse ->
                 DropdownMenuItem(
-                    text = { Text(warehouse?.let { "${it.code} — ${it.name}" } ?: "Не выбран") },
+                    text = { Text(warehouse?.let { "${it.code} · ${it.name}" } ?: "Не выбран") },
                     onClick = {
                         warehouse?.let(onSelect)
                         expanded = false

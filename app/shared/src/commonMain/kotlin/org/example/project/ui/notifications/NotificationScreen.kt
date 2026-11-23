@@ -186,12 +186,12 @@ private fun NotificationCard(notification: NotificationDto, onClick: () -> Unit)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(
                 if (notification.isRead) scheme.surfaceContainerLow.copy(alpha = 0.55f)
                 else scheme.surfaceContainerLowest
             )
-            .border(1.dp, accent.copy(alpha = if (notification.isRead) 0.10f else 0.24f), RoundedCornerShape(16.dp))
+            .border(1.dp, accent.copy(alpha = if (notification.isRead) 0.10f else 0.24f), RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically

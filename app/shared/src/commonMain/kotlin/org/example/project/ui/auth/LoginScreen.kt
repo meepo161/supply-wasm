@@ -49,7 +49,6 @@ import org.example.project.ui.theme.ErpIcon
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.GlassCard
 import org.example.project.ui.theme.GradientButton
-import org.example.project.ui.theme.GradientRing
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.IconBadge
 import org.example.project.ui.theme.LocalBrandPalette
@@ -155,9 +154,9 @@ fun LoginScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(RoundedCornerShape(8.dp))
                                         .background(Brand.Mint.copy(alpha = 0.14f))
-                                        .border(1.dp, Brand.Mint.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                        .border(1.dp, Brand.Mint.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -174,7 +173,6 @@ fun LoginScreen(
                                 onClick = { onLogin(login, password) },
                                 modifier = Modifier.fillMaxWidth(),
                                 enabled = !state.isLoading && login.isNotBlank() && password.isNotBlank(),
-                                leadingIcon = if (state.isLoading) null else ErpIconGlyph.ChevronRight
                             )
                             if (state.isLoading) {
                                 Box(
@@ -232,43 +230,31 @@ fun LoginScreen(
 private fun BrandPanel(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(32.dp))
-            .background(Brush.linearGradient(Gradients.Sidebar))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(32.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(Gradients.Sidebar.first())
             .padding(36.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(Brush.linearGradient(listOf(Brand.BlueBright, Brand.Violet))),
-                contentAlignment = Alignment.Center
-            ) {
-                ErpIcon(ErpIconGlyph.Sparkle, Color.White, Modifier.size(22.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Авиаагрегат-Н",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
-                )
-                Text(
-                    text = "Единая ERP-платформа",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.55f)
-                )
-            }
+        // Логотип не утверждён, поэтому вместо знака стоит название предприятия текстом.
+        Column {
+            Text(
+                text = "Авиаагрегат-Н",
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White
+            )
+            Text(
+                text = "Единая ERP-платформа",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.72f)
+            )
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            // Короткая сигнальная черта: тот же янтарный маркер, что отмечает текущий раздел в меню.
             Box(
                 modifier = Modifier
-                    .size(width = 150.dp, height = 3.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Brush.horizontalGradient(Gradients.Aurora))
+                    .size(width = 48.dp, height = 3.dp)
+                    .background(Brand.Signal)
             )
             Text(
                 text = "От потребности\nдо готового изделия",
@@ -276,9 +262,9 @@ private fun BrandPanel(modifier: Modifier = Modifier) {
                 color = Color.White
             )
             Text(
-                text = "Проекты, задачи, склад, снабжение и документы — в одном связанном контуре с историей изменений и прозрачными статусами.",
+                text = "Проекты, задачи, склад, снабжение и документы в одном связанном контуре: с историей изменений и понятными статусами.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.68f)
+                color = Color.White.copy(alpha = 0.78f)
             )
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -295,15 +281,12 @@ private fun BrandPanel(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-                GradientRing(modifier = Modifier.size(44.dp))
-                ErpIcon(ErpIconGlyph.Shield, Color.White.copy(alpha = 0.85f), Modifier.size(18.dp))
-            }
-            Spacer(Modifier.width(14.dp))
+            ErpIcon(ErpIconGlyph.Shield, Color.White.copy(alpha = 0.8f), Modifier.size(16.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
-                text = "Безопасный доступ по ролям и правам",
+                text = "Доступ к разделам определяется ролью и правами пользователя",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.6f)
+                color = Color.White.copy(alpha = 0.72f)
             )
         }
     }
@@ -313,9 +296,9 @@ private fun BrandPanel(modifier: Modifier = Modifier) {
 private fun FeaturePill(text: String, glyph: ErpIconGlyph) {
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(alpha = 0.08f))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(50))
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(4.dp))
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -329,13 +312,13 @@ private fun FeaturePill(text: String, glyph: ErpIconGlyph) {
     }
 }
 
+/** На узком экране вместо неутверждённого логотипа показывается название предприятия. */
 @Composable
 private fun LogoMark() {
-    IconBadge(
-        glyph = ErpIconGlyph.Sparkle,
-        gradient = listOf(Brand.BlueBright, Brand.Violet),
-        size = 56.dp,
-        iconSize = 28.dp
+    Text(
+        text = "Авиаагрегат-Н",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 
@@ -364,7 +347,7 @@ private fun AppTextField(
         },
         trailingIcon = if (isPassword) {
             {
-                androidx.compose.material3.TextButton(
+                org.example.project.ui.theme.TextButton(
                     onClick = { passwordVisible = !passwordVisible },
                     enabled = enabled
                 ) {
@@ -379,7 +362,7 @@ private fun AppTextField(
         visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = scheme.primary,
             unfocusedBorderColor = scheme.outline.copy(alpha = 0.7f),
@@ -397,9 +380,9 @@ private fun ErrorBanner(error: ApiError) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.75f))
-            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -437,9 +420,7 @@ private fun BootstrapForm(
     isLoading: Boolean
 ) {
     GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(22.dp)),
+        modifier = Modifier.fillMaxWidth(),
         contentPadding = 20.dp
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

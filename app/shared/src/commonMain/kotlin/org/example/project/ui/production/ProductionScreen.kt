@@ -34,6 +34,7 @@ import org.example.project.dto.ProductionOrderStatus
 import org.example.project.dto.ProductionStageStatus
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpSplitRow
 import org.example.project.ui.theme.DetailRow
 import org.example.project.ui.theme.EmptyState
 import org.example.project.ui.theme.ErpIcon
@@ -74,23 +75,22 @@ fun ProductionScreen(
             }
         )
         Spacer(Modifier.height(8.dp))
-        Row(
+        ErpSplitRow(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(bottom = 20.dp)
         ) {
             OrdersPane(
                 state = state,
                 viewModel = viewModel,
-                modifier = Modifier.weight(0.42f).fillMaxHeight()
+                modifier = Modifier.pane(0.42f)
             )
             OrderDetailPane(
                 state = state,
                 viewModel = viewModel,
                 canManage = canManage,
-                modifier = Modifier.weight(0.58f).fillMaxHeight()
+                modifier = Modifier.pane(0.58f, narrowHeight = 640.dp)
             )
         }
     }
@@ -410,7 +410,7 @@ private fun SuccessNote(text: String, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Brand.Mint.copy(alpha = 0.14f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -431,7 +431,7 @@ private fun OrderHeader(order: ProductionOrderDto) {
         Box(
             modifier = Modifier
                 .size(46.dp)
-                .clip(RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(Brush.linearGradient(Gradients.Aurora)),
             contentAlignment = Alignment.Center
         ) {
@@ -512,7 +512,7 @@ private fun TotalChip(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(accent.copy(alpha = 0.10f))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {

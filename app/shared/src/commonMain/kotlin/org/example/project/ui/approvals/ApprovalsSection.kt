@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import org.example.project.ui.theme.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -18,10 +18,10 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -252,7 +252,7 @@ private fun RouteDetail(
 private fun StageRow(stage: ApprovalStageDto, isCurrent: Boolean) {
     Column {
         Text(
-            text = "${stage.stageNo}. ${stage.name} — ${stage.status.localizedName()}" +
+            text = "${stage.stageNo}. ${stage.name} · ${stage.status.localizedName()}" +
                 if (isCurrent) " (текущий)" else "",
             style = MaterialTheme.typography.bodyMedium,
             color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -292,7 +292,7 @@ private fun StartRouteBlock(state: ApprovalUiState, viewModel: ApprovalViewModel
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedTextField(
-                    value = selectedTemplate?.let { "${it.code} — ${it.name}" } ?: "",
+                    value = selectedTemplate?.let { "${it.code} · ${it.name}" } ?: "",
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Шаблон маршрута") },
@@ -306,7 +306,7 @@ private fun StartRouteBlock(state: ApprovalUiState, viewModel: ApprovalViewModel
                     state.templates.forEach { template ->
                         DropdownMenuItem(
                             text = {
-                                Text("${template.code} — ${template.name} (${template.stages.size} этап.)")
+                                Text("${template.code} · ${template.name} (${template.stages.size} этап.)")
                             },
                             onClick = {
                                 viewModel.selectTemplate(template.id)
@@ -342,7 +342,9 @@ private fun CancelRouteDialog(
         confirmText = "Отменить маршрут",
         onConfirm = onConfirm,
         confirmEnabled = !busy,
-        confirmGradient = org.example.project.ui.theme.Gradients.Sunset,
+
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
+
         dismissText = "Закрыть",
         onDismiss = onDismiss
     ) {

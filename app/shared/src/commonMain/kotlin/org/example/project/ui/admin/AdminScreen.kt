@@ -11,17 +11,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
+import org.example.project.ui.theme.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
+import org.example.project.ui.theme.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -291,7 +291,7 @@ private fun DepartmentsTab(state: AdminUiState, viewModel: AdminViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${selected.code} — ${selected.name}",
+                        text = "${selected.code} · ${selected.name}",
                         style = MaterialTheme.typography.titleMedium
                     )
                     OutlinedButton(onClick = { viewModel.showDialog(AdminDialog.EditDepartment) }) {
