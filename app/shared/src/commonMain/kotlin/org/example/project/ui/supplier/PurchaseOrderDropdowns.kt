@@ -62,7 +62,7 @@ fun SelectedOfferDropdown(
     val selected = offers.firstOrNull { it.id == selectedId }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(
-            value = selected?.let { "${it.number} — ${it.supplierName ?: "поставщик #${it.supplierId}"}" }
+            value = selected?.let { "${it.number} · ${it.supplierName ?: "поставщик #${it.supplierId}"}" }
                 ?: if (offers.isEmpty()) "Нет выбранных предложений" else "Не выбрано",
             onValueChange = { },
             readOnly = true,
@@ -75,7 +75,7 @@ fun SelectedOfferDropdown(
             offers.forEach { offer ->
                 DropdownMenuItem(
                     text = {
-                        Text("${offer.number} — ${offer.supplierName ?: "поставщик #${offer.supplierId}"}")
+                        Text("${offer.number} · ${offer.supplierName ?: "поставщик #${offer.supplierId}"}")
                     },
                     onClick = { onSelect(offer.id); expanded = false }
                 )

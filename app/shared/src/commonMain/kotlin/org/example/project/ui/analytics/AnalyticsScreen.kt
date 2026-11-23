@@ -484,7 +484,7 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text("Шаблоны согласований ($tplTargetType): ${templates.size}", style = MaterialTheme.typography.titleSmall)
                                     templates.forEach { tpl ->
-                                        Text("${tpl.code} — ${tpl.name} (этапов: ${tpl.stages.size})", style = MaterialTheme.typography.bodySmall)
+                                        Text("${tpl.code} · ${tpl.name} (этапов: ${tpl.stages.size})", style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
                             }

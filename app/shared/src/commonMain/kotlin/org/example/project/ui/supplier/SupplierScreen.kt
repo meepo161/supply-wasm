@@ -664,7 +664,7 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "${claim.number} — ${claim.supplierName.ifBlank { "#${claim.supplierId}" }}",
+                                    text = "${claim.number} · ${claim.supplierName.ifBlank { "#${claim.supplierId}" }}",
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 PillBadge(text = claim.status.name, accent = Brand.Orange)

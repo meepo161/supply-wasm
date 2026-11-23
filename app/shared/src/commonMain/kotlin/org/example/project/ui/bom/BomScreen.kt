@@ -242,7 +242,7 @@ private fun ModelInfoCard(
         Column(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(text = "${model.code} — ${model.name}", style = MaterialTheme.typography.titleMedium)
+            Text(text = "${model.code} · ${model.name}", style = MaterialTheme.typography.titleMedium)
             Text(text = "Статус: ${model.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
             if (!model.description.isNullOrBlank()) {
                 Text(text = "Описание: ${model.description}", style = MaterialTheme.typography.bodyMedium)
@@ -550,7 +550,7 @@ private fun BomRevisionDiffDialog(
                     ) {
                         items(diff.items) { item ->
                             Text(
-                                text = "[${item.kind.name}] ${item.code} — ${item.name} (${item.unit}): было ${item.leftQuantity ?: "—"}, стало ${item.rightQuantity ?: "—"}",
+                                text = "[${item.kind.name}] ${item.code} · ${item.name} (${item.unit}): было ${item.leftQuantity ?: "—"}, стало ${item.rightQuantity ?: "—"}",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -584,12 +584,12 @@ private fun BomWhereUsedDialog(
         } else {
             Box {
                 OutlinedButton(onClick = { expanded = true }) {
-                    Text(selectedNom?.let { "${it.code} — ${it.name}" } ?: "Выберите компонент")
+                    Text(selectedNom?.let { "${it.code} · ${it.name}" } ?: "Выберите компонент")
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     state.nomenclature.take(40).forEach { nom ->
                         DropdownMenuItem(
-                            text = { Text("${nom.code} — ${nom.name}") },
+                            text = { Text("${nom.code} · ${nom.name}") },
                             onClick = {
                                 expanded = false
                                 onSelectNomenclature(nom.id)

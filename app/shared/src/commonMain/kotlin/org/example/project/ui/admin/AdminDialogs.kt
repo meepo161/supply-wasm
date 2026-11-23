@@ -503,7 +503,7 @@ private fun DepartmentDropdown(
             )
             departments.forEach { department ->
                 DropdownMenuItem(
-                    text = { Text("${department.code} — ${department.name}") },
+                    text = { Text("${department.code} · ${department.name}") },
                     onClick = {
                         onSelect(department.id)
                         expanded = false

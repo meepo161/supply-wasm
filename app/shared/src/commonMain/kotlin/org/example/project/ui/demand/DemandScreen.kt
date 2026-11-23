@@ -272,7 +272,7 @@ private fun DemandHeaderCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${header.number} — ${header.sourceType.localizedName()}",
+                    text = "${header.number} · ${header.sourceType.localizedName()}",
                     style = MaterialTheme.typography.titleMedium
                 )
                 PillBadge(

@@ -283,7 +283,7 @@ private fun StageRow(
         }
         Text(
             text = buildList {
-                add("план ${stage.plannedStartAt.toShortDate()} — ${stage.plannedEndAt.toShortDate()}")
+                add("план ${stage.plannedStartAt.toShortDate()} · ${stage.plannedEndAt.toShortDate()}")
                 if (stage.actualStartAt != null) add("начат ${stage.actualStartAt.toShortDate()}")
                 if (stage.actualEndAt != null) add("завершён ${stage.actualEndAt.toShortDate()}")
             }.joinToString(" · "),

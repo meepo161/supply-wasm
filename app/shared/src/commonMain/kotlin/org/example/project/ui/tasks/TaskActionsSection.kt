@@ -325,7 +325,7 @@ fun TaskActionsSection(
             Text("Связи с объектами ERP (${objLinks.size})", style = MaterialTheme.typography.titleSmall)
             objLinks.forEach { link ->
                 Text(
-                    "${link.objectType} #${link.objectId}${link.note?.let { " — $it" } ?: ""}",
+                    "${link.objectType} #${link.objectId}${link.note?.let { ": $it" } ?: ""}",
                     style = MaterialTheme.typography.bodySmall
                 )
             }

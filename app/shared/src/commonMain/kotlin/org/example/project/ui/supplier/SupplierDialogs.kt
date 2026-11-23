@@ -422,7 +422,7 @@ private fun CategoriesDialog(state: SupplierUiState, viewModel: SupplierViewMode
                         onCheckedChange = { viewModel.toggleCategory(category.id) }
                     )
                     Text(
-                        text = "${category.code} — ${category.name}",
+                        text = "${category.code} · ${category.name}",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -469,7 +469,7 @@ private fun VerifyDialog(state: SupplierUiState, viewModel: SupplierViewModel) {
                 )
             }
             Text(
-                text = "Отклонение требует примечания. Проверка собственной карточки — " +
+                text = "Отклонение требует примечания. Проверка собственной карточки: " +
                     "только с правом suppliers:verify_any.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -569,7 +569,7 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
             }
             if (form.demandLines.isEmpty()) {
                 Text(
-                    text = "Выберите потребность — позиции появятся автоматически",
+                    text = "Выберите потребность, позиции появятся автоматически",
                     style = MaterialTheme.typography.bodySmall,
                     color = Brand.Amber
                 )

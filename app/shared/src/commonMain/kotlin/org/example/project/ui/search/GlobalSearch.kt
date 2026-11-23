@@ -345,7 +345,7 @@ private fun SearchDropdown(
                 }
                 SizedBoxSeparator()
                 Text(
-                    text = "Стрелки — навигация · Enter — открыть · Esc — закрыть",
+                    text = "Стрелки: навигация · Enter: открыть · Esc: закрыть",
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)

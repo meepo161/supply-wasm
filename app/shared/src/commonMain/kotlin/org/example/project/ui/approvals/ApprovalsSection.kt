@@ -252,7 +252,7 @@ private fun RouteDetail(
 private fun StageRow(stage: ApprovalStageDto, isCurrent: Boolean) {
     Column {
         Text(
-            text = "${stage.stageNo}. ${stage.name} — ${stage.status.localizedName()}" +
+            text = "${stage.stageNo}. ${stage.name} · ${stage.status.localizedName()}" +
                 if (isCurrent) " (текущий)" else "",
             style = MaterialTheme.typography.bodyMedium,
             color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -292,7 +292,7 @@ private fun StartRouteBlock(state: ApprovalUiState, viewModel: ApprovalViewModel
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedTextField(
-                    value = selectedTemplate?.let { "${it.code} — ${it.name}" } ?: "",
+                    value = selectedTemplate?.let { "${it.code} · ${it.name}" } ?: "",
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Шаблон маршрута") },
@@ -306,7 +306,7 @@ private fun StartRouteBlock(state: ApprovalUiState, viewModel: ApprovalViewModel
                     state.templates.forEach { template ->
                         DropdownMenuItem(
                             text = {
-                                Text("${template.code} — ${template.name} (${template.stages.size} этап.)")
+                                Text("${template.code} · ${template.name} (${template.stages.size} этап.)")
                             },
                             onClick = {
                                 viewModel.selectTemplate(template.id)

@@ -37,7 +37,7 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
     val form = state.createForm
     ErpDialog(
         title = "Заказ поставщику",
-        subtitle = "Основание — предложение, выбранное инициатором",
+        subtitle = "Основание: предложение, выбранное инициатором",
         glyph = ErpIconGlyph.Documents,
         gradient = Gradients.Berry,
         onDismiss = viewModel::dismissDialog,
@@ -114,7 +114,7 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "Позиции предложения — количество можно только уменьшить",
+                text = "Позиции предложения: количество можно только уменьшить",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -239,7 +239,7 @@ private fun EditOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOrde
                 label = "Обоснование изменения (если условия существенные)",
                 singleLine = false,
                 minLines = 2,
-                supportingText = "Количество, срок, оплата и адрес доставки — существенные условия",
+                supportingText = "Количество, срок, оплата и адрес доставки: существенные условия",
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -296,7 +296,7 @@ private fun RegisterDeliveryDialog(state: PurchaseOrderUiState, viewModel: Purch
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "Количество не может превышать остаток по позиции; одна поставка — частичная",
+                text = "Количество не может превышать остаток по позиции; одна поставка может быть частичной",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

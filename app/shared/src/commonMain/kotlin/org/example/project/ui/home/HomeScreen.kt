@@ -184,7 +184,7 @@ fun HomeScreen(
                             gradient = Gradients.Sunset,
                             loading = state.isLoadingTasks,
                             onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                            emptyText = "Просроченных задач нет — отличная работа."
+                            emptyText = "Просроченных задач нет."
                         )
                         TaskSection(
                             title = "Ближайшие сроки",
@@ -235,7 +235,7 @@ fun HomeScreen(
                     gradient = Gradients.Sunset,
                     loading = state.isLoadingTasks,
                     onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                    emptyText = "Просроченных задач нет — отличная работа."
+                    emptyText = "Просроченных задач нет."
                 )
                 TaskSection(
                     title = "Ближайшие сроки",

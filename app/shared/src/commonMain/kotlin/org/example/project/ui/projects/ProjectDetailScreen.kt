@@ -539,7 +539,7 @@ private fun ProjectInfoSection(project: ProjectDto, modifier: Modifier = Modifie
                     DetailRow(label = "Заказчик", value = project.customer?.takeIf { it.isNotBlank() } ?: "—")
                     DetailRow(
                         label = "Сроки",
-                        value = "${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedStartAt)} — ${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedEndAt)}"
+                        value = "${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedStartAt)} · ${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedEndAt)}"
                     )
                 }
             }

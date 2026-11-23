@@ -181,7 +181,7 @@ fun ProjectListScreen(
                             "Сроки" to filteredProjects.map { p ->
                                 val s = org.example.project.ui.theme.ErpFormat.dateRu(p.plannedStartAt)
                                 val e = org.example.project.ui.theme.ErpFormat.dateRu(p.plannedEndAt)
-                                if (s == "—" && e == "—") "—" else "$s — $e"
+                                if (s == "—" && e == "—") "—" else "$s · $e"
                             }
                         )
                     }
@@ -317,7 +317,7 @@ private fun ProjectCard(project: ProjectDto, onClick: () -> Unit) {
                             color = scheme.onSurfaceVariant.copy(alpha = 0.8f)
                         )
                         Text(
-                            text = "${project.plannedStartAt.toShortDate()} — ${project.plannedEndAt.toShortDate()}",
+                            text = "${project.plannedStartAt.toShortDate()} · ${project.plannedEndAt.toShortDate()}",
                             style = MaterialTheme.typography.labelMedium,
                             color = scheme.onSurface
                         )

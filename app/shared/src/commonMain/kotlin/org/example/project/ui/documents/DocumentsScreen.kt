@@ -186,7 +186,7 @@ private fun DocumentListPage(
                 ) {
                     tplError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     templates.forEach { t ->
-                        Text("${t.code} — ${t.name} (${t.docType})", style = MaterialTheme.typography.bodySmall)
+                        Text("${t.code} · ${t.name} (${t.docType})", style = MaterialTheme.typography.bodySmall)
                     }
                     HorizontalDivider()
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -269,7 +269,7 @@ private fun DocumentHeaderCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = "${document.number} — ${document.name}",
+                text = "${document.number} · ${document.name}",
                 style = MaterialTheme.typography.titleMedium
             )
             DetailRow("Тип", document.docType.localizedName())
@@ -361,7 +361,7 @@ private fun VersionRow(
             Text(
                 text = "Версия ${version.versionNumber}" +
                     (if (isCurrent) " (действующая)" else "") +
-                    " — ${version.status.localizedName()}",
+                    ": ${version.status.localizedName()}",
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
@@ -485,7 +485,7 @@ private fun LinkRow(
         Text(
             text = when (link.linkType) {
                 DocumentLinkType.PROJECT -> state.projects.find { it.id == link.targetId }
-                    ?.let { "Проект: ${it.number} — ${it.name}" }
+                    ?.let { "Проект: ${it.number} · ${it.name}" }
                     ?: "Проект: ID ${link.targetId}"
                 else -> "${link.linkType.localizedName()}: ID ${link.targetId}"
             },

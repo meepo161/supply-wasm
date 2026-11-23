@@ -65,7 +65,7 @@ fun CreateDocumentDialog(
                     users = users,
                     selected = users.find { it.id == form.ownerId },
                     onSelect = { onFormChange(form.copy(ownerId = it.id)) },
-                    label = "Владелец (по умолчанию — вы)",
+                    label = "Владелец (по умолчанию вы)",
                     modifier = Modifier.weight(1f)
                 )
             }

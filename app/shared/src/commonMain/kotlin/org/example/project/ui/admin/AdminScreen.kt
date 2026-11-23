@@ -291,7 +291,7 @@ private fun DepartmentsTab(state: AdminUiState, viewModel: AdminViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${selected.code} — ${selected.name}",
+                        text = "${selected.code} · ${selected.name}",
                         style = MaterialTheme.typography.titleMedium
                     )
                     OutlinedButton(onClick = { viewModel.showDialog(AdminDialog.EditDepartment) }) {

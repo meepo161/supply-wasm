@@ -33,7 +33,7 @@ fun ApiError.userText(): String {
         "UNAUTHORIZED" -> knownMessage() ?: "Сессия истекла или вход не выполнен. Войдите снова."
         "NOT_FOUND" -> "Объект удалён или у вас нет к нему доступа. Обновите список."
         "CONFLICT" -> if (isVersionConflict()) {
-            "Пока карточка была открыта, документ изменили. Обновите карточку и повторите действие — ваши данные не сохранены."
+            "Пока карточка была открыта, документ изменили. Обновите карточку и повторите действие: ваши данные не сохранены."
         } else {
             knownMessage() ?: "Статус документа не позволяет выполнить действие. Обновите карточку и проверьте статус."
         }
@@ -84,7 +84,7 @@ private fun ApiError.missingPermission(): Pair<String, String>? {
     val code = Regex("""([a-z_]+):([a-z_*]+)""").find(message)?.value ?: return null
     val resource = code.substringBefore(':')
     val action = code.substringAfter(':')
-    val title = listOfNotNull(resourceNames[resource] ?: resource, actionNames[action] ?: action).joinToString(" — ")
+    val title = listOfNotNull(resourceNames[resource] ?: resource, actionNames[action] ?: action).joinToString(": ")
     return title to code
 }
 
@@ -97,7 +97,7 @@ private val fieldReasons = mapOf(
 )
 
 private fun ApiError.fieldHints(): List<String> =
-    details.orEmpty().map { (field, reason) -> "${field.substringAfterLast('.')} — ${fieldReasons[reason] ?: reason}" }
+    details.orEmpty().map { (field, reason) -> "${field.substringAfterLast('.')}: ${fieldReasons[reason] ?: reason}" }
 
 /** Частые сообщения сервера, у которых есть точный перевод. */
 private fun ApiError.knownMessage(): String? {
@@ -108,7 +108,7 @@ private fun ApiError.knownMessage(): String? {
         m.contains("exceeds the order line remainder") -> "Количество больше остатка по заказу поставщику."
         m.startsWith("Receipt is already posted") -> "Приёмка уже проведена."
         m.startsWith("Idempotency key is required") -> "Повторите действие: запрос не был обработан."
-        m.contains("Bootstrap is only allowed") -> "Первый администратор уже создан — войдите под своей учётной записью."
+        m.contains("Bootstrap is only allowed") -> "Первый администратор уже создан. Войдите под своей учётной записью."
         m.startsWith("Invalid credentials") || m.startsWith("Invalid login") -> "Неверный логин или пароль."
         m.startsWith("Receipt by invoice is created by procurement") -> "Приёмку по счёту оформляет снабжение из карточки счёта."
         else -> null

@@ -216,7 +216,7 @@ fun ProfileScreen(
                         SectionTitle("Оформление", ErpIconGlyph.Sparkle)
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = if (theme.isDark) "Включена тёмная тема — комфортно для вечерней работы."
+                            text = if (theme.isDark) "Включена тёмная тема: комфортно для вечерней работы."
                             else "Используется светлая тема с мягкими градиентами.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

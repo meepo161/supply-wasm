@@ -160,9 +160,9 @@ private fun TaskDescription(
     TaskSummary(task, state.users)
 
     val waitingHint = when (task.status) {
-        TaskStatus.ASSIGNED -> "Ожидает исполнителя: ${task.assigneeId?.let { userName(state.users, it) } ?: "не назначен"} — взять в работу"
-        TaskStatus.ON_REVIEW -> "Ожидает проверки: ${task.reviewerId?.let { userName(state.users, it) } ?: "инициатор"} — принять или вернуть на доработку"
-        TaskStatus.NEW -> "Новая задача — требуется назначить исполнителя"
+        TaskStatus.ASSIGNED -> "Ожидает исполнителя: ${task.assigneeId?.let { userName(state.users, it) } ?: "не назначен"}. Взять в работу"
+        TaskStatus.ON_REVIEW -> "Ожидает проверки: ${task.reviewerId?.let { userName(state.users, it) } ?: "инициатор"}. Принять или вернуть на доработку"
+        TaskStatus.NEW -> "Новая задача: требуется назначить исполнителя"
         TaskStatus.BLOCKED -> "Заблокирована${task.unblockResponsibleId?.let { " · снимает ${userName(state.users, it)}" } ?: ""}"
         else -> null
     }
