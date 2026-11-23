@@ -737,7 +737,7 @@ private fun StockTab(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = "Остатки на складе", style = MaterialTheme.typography.headlineSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     viewModel.selectTab(WmsTab.RESERVATIONS)
                     viewModel.showDialog(WmsDialog.CreateReservation)
