@@ -334,24 +334,25 @@ private fun CancelRouteDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Отменить маршрут согласования") },
-        text = {
-            OutlinedTextField(
-                value = reason,
-                onValueChange = onReasonChange,
-                label = { Text("Причина отмены *") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-                enabled = !busy
-            )
-        },
-        confirmButton = {
-            Button(onClick = onConfirm, enabled = !busy) { Text("Отменить маршрут") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !busy) { Text("Закрыть") }
-        }
-    )
+    org.example.project.ui.theme.ErpDialog(
+        title = "Отменить маршрут согласования",
+        glyph = org.example.project.ui.theme.ErpIconGlyph.Documents,
+        gradient = org.example.project.ui.theme.Gradients.Sunset,
+        width = 520.dp,
+        confirmText = "Отменить маршрут",
+        onConfirm = onConfirm,
+        confirmEnabled = !busy,
+        confirmGradient = org.example.project.ui.theme.Gradients.Sunset,
+        dismissText = "Закрыть",
+        onDismiss = onDismiss
+    ) {
+        OutlinedTextField(
+            value = reason,
+            onValueChange = onReasonChange,
+            label = { Text("Причина отмены *") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            enabled = !busy
+        )
+    }
 }

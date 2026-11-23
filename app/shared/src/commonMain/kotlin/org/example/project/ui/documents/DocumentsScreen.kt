@@ -154,55 +154,56 @@ private fun DocumentListPage(
             }
 
             if (showTemplates) {
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { showTemplates = false },
-                    title = { Text("Шаблоны документов") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            tplError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                            templates.forEach { t ->
-                                Text("${t.code} — ${t.name} (${t.docType})", style = MaterialTheme.typography.bodySmall)
-                            }
-                            HorizontalDivider()
-                            org.example.project.ui.theme.ErpTextField(
-                                value = tplCode,
-                                onValueChange = { tplCode = it },
-                                label = "Код шаблона"
-                            )
-                            org.example.project.ui.theme.ErpTextField(
-                                value = tplName,
-                                onValueChange = { tplName = it },
-                                label = "Название шаблона"
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        SoftButton(text = "Создать шаблон", onClick = {
-                            if (tplCode.isNotBlank() && tplName.isNotBlank()) {
-                                tplScope.launch {
-                                    when (val res = extrasRepo.createDocumentTemplate(
-                                        org.example.project.dto.CreateDocumentTemplateRequest(
-                                            code = tplCode.trim(),
-                                            name = tplName.trim(),
-                                            docType = "INSTRUCTION"
-                                        )
-                                    )) {
-                                        is org.example.project.data.ApiResult.Success -> {
-                                            templates = listOf(res.data) + templates
-                                            tplCode = ""
-                                            tplName = ""
-                                            tplError = null
-                                        }
-                                        is org.example.project.data.ApiResult.Error -> tplError = res.error.userText()
+                org.example.project.ui.theme.ErpDialog(
+                    title = "Шаблоны документов",
+                    glyph = ErpIconGlyph.Documents,
+                    gradient = Gradients.Primary,
+                    width = 600.dp,
+                    confirmText = "Создать шаблон",
+                    onConfirm = {
+                        if (tplCode.isNotBlank() && tplName.isNotBlank()) {
+                            tplScope.launch {
+                                when (val res = extrasRepo.createDocumentTemplate(
+                                    org.example.project.dto.CreateDocumentTemplateRequest(
+                                        code = tplCode.trim(),
+                                        name = tplName.trim(),
+                                        docType = "INSTRUCTION"
+                                    )
+                                )) {
+                                    is org.example.project.data.ApiResult.Success -> {
+                                        templates = listOf(res.data) + templates
+                                        tplCode = ""
+                                        tplName = ""
+                                        tplError = null
                                     }
+                                    is org.example.project.data.ApiResult.Error -> tplError = res.error.userText()
                                 }
                             }
-                        })
+                        }
                     },
-                    dismissButton = {
-                        TextButton(onClick = { showTemplates = false }) { Text("Закрыть") }
+                    dismissText = "Закрыть",
+                    onDismiss = { showTemplates = false }
+                ) {
+                    tplError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    templates.forEach { t ->
+                        Text("${t.code} — ${t.name} (${t.docType})", style = MaterialTheme.typography.bodySmall)
                     }
-                )
+                    HorizontalDivider()
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        org.example.project.ui.theme.ErpTextField(
+                            value = tplCode,
+                            onValueChange = { tplCode = it },
+                            label = "Код шаблона",
+                            modifier = Modifier.weight(0.4f)
+                        )
+                        org.example.project.ui.theme.ErpTextField(
+                            value = tplName,
+                            onValueChange = { tplName = it },
+                            label = "Название шаблона",
+                            modifier = Modifier.weight(0.6f)
+                        )
+                    }
+                }
             }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }

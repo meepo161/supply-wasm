@@ -248,33 +248,33 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                     }
                     if (showCsvImport) {
                         var csvText by remember { mutableStateOf("code;name;type;unit\nCMP-NEW-01;Новый резистор;COMPONENT;шт") }
-                        androidx.compose.material3.AlertDialog(
-                            onDismissRequest = { showCsvImport = false },
-                            title = { Text("Импорт номенклатуры (CSV)") },
-                            text = {
-                                org.example.project.ui.theme.ErpTextField(
-                                    value = csvText,
-                                    onValueChange = { csvText = it },
-                                    label = "CSV (code;name;type;unit)"
-                                )
-                            },
-                            confirmButton = {
-                                SoftButton(text = "Импортировать", onClick = {
-                                    scope.launch {
-                                        when (val res = extrasRepository.importNomenclatureCsv(CsvImportRequest(csvText))) {
-                                            is ApiResult.Success -> {
-                                                infoMessage = "Импортировано: ${res.data.importedCount}, пропущено: ${res.data.skippedCount}"
-                                                showCsvImport = false
-                                            }
-                                            is ApiResult.Error -> error = res.error
+                        org.example.project.ui.theme.ErpDialog(
+                            title = "Импорт номенклатуры (CSV)",
+                            glyph = ErpIconGlyph.Layers,
+                            gradient = Gradients.Primary,
+                            width = 620.dp,
+                            confirmText = "Импортировать",
+                            onConfirm = {
+                                scope.launch {
+                                    when (val res = extrasRepository.importNomenclatureCsv(CsvImportRequest(csvText))) {
+                                        is ApiResult.Success -> {
+                                            infoMessage = "Импортировано: ${res.data.importedCount}, пропущено: ${res.data.skippedCount}"
+                                            showCsvImport = false
                                         }
+                                        is ApiResult.Error -> error = res.error
                                     }
-                                })
+                                }
                             },
-                            dismissButton = {
-                                SoftButton(text = "Отмена", onClick = { showCsvImport = false })
-                            }
-                        )
+                            onDismiss = { showCsvImport = false }
+                        ) {
+                            org.example.project.ui.theme.ErpTextField(
+                                value = csvText,
+                                onValueChange = { csvText = it },
+                                label = "CSV (code;name;type;unit)",
+                                singleLine = false,
+                                minLines = 5
+                            )
+                        }
                     }
                 }
                 AnalyticsTab.CALENDAR -> {
@@ -408,54 +408,54 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                         var cpName by remember { mutableStateOf("") }
                         var cpInn by remember { mutableStateOf("") }
                         var cpPhone by remember { mutableStateOf("") }
-                        androidx.compose.material3.AlertDialog(
-                            onDismissRequest = { showCreateCounterparty = false },
-                            title = { Text("Новый контрагент") },
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    org.example.project.ui.theme.ErpTextField(
-                                        value = cpName,
-                                        onValueChange = { cpName = it },
-                                        label = "Наименование"
-                                    )
-                                    org.example.project.ui.theme.ErpTextField(
-                                        value = cpInn,
-                                        onValueChange = { cpInn = it },
-                                        label = "ИНН"
-                                    )
-                                    org.example.project.ui.theme.ErpTextField(
-                                        value = cpPhone,
-                                        onValueChange = { cpPhone = it },
-                                        label = "Телефон"
-                                    )
-                                }
-                            },
-                            confirmButton = {
-                                SoftButton(text = "Создать", onClick = {
-                                    if (cpName.isNotBlank()) {
-                                        scope.launch {
-                                            when (val res = extrasRepository.createCounterparty(
-                                                CreateCounterpartyRequest(
-                                                    name = cpName.trim(),
-                                                    kind = CounterpartyKind.CUSTOMER,
-                                                    inn = cpInn.ifBlank { null },
-                                                    phone = cpPhone.ifBlank { null }
-                                                )
-                                            )) {
-                                                is ApiResult.Success -> {
-                                                    counterparties = listOf(res.data) + counterparties
-                                                    showCreateCounterparty = false
-                                                }
-                                                is ApiResult.Error -> error = res.error
+                        org.example.project.ui.theme.ErpDialog(
+                            title = "Новый контрагент",
+                            glyph = ErpIconGlyph.Cart,
+                            gradient = Gradients.Primary,
+                            width = 580.dp,
+                            confirmText = "Создать",
+                            onConfirm = {
+                                if (cpName.isNotBlank()) {
+                                    scope.launch {
+                                        when (val res = extrasRepository.createCounterparty(
+                                            CreateCounterpartyRequest(
+                                                name = cpName.trim(),
+                                                kind = CounterpartyKind.CUSTOMER,
+                                                inn = cpInn.ifBlank { null },
+                                                phone = cpPhone.ifBlank { null }
+                                            )
+                                        )) {
+                                            is ApiResult.Success -> {
+                                                counterparties = listOf(res.data) + counterparties
+                                                showCreateCounterparty = false
                                             }
+                                            is ApiResult.Error -> error = res.error
                                         }
                                     }
-                                })
+                                }
                             },
-                            dismissButton = {
-                                SoftButton(text = "Отмена", onClick = { showCreateCounterparty = false })
+                            onDismiss = { showCreateCounterparty = false }
+                        ) {
+                            org.example.project.ui.theme.ErpTextField(
+                                value = cpName,
+                                onValueChange = { cpName = it },
+                                label = "Наименование"
+                            )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                org.example.project.ui.theme.ErpTextField(
+                                    value = cpInn,
+                                    onValueChange = { cpInn = it },
+                                    label = "ИНН",
+                                    modifier = Modifier.weight(1f)
+                                )
+                                org.example.project.ui.theme.ErpTextField(
+                                    value = cpPhone,
+                                    onValueChange = { cpPhone = it },
+                                    label = "Телефон",
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
-                        )
+                        }
                     }
                 }
                 AnalyticsTab.APPROVALS -> {

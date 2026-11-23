@@ -44,7 +44,7 @@ fun CreateUserDialog(
 ) {
     ErpDialog(
         title = "Новый пользователь",
-        glyph = ErpIconGlyph.Users,
+        glyph = ErpIconGlyph.User,
         gradient = Gradients.Primary,
         width = 660.dp,
         confirmText = "Создать",
@@ -118,7 +118,7 @@ fun EditUserDialog(
 ) {
     ErpDialog(
         title = "Редактирование пользователя",
-        glyph = ErpIconGlyph.Users,
+        glyph = ErpIconGlyph.User,
         gradient = Gradients.Primary,
         width = 660.dp,
         confirmText = "Сохранить",
@@ -185,7 +185,7 @@ fun ResetPasswordDialog(
 ) {
     ErpDialog(
         title = "Сброс пароля",
-        glyph = ErpIconGlyph.Admin,
+        glyph = ErpIconGlyph.Shield,
         gradient = Gradients.Sunset,
         width = 520.dp,
         confirmText = "Сбросить",
@@ -230,7 +230,7 @@ fun DepartmentDialog(
 ) {
     ErpDialog(
         title = if (isEdit) "Редактирование подразделения" else "Новое подразделение",
-        glyph = ErpIconGlyph.Admin,
+        glyph = ErpIconGlyph.Shield,
         gradient = Gradients.Primary,
         width = 600.dp,
         confirmText = if (isEdit) "Сохранить" else "Создать",
@@ -293,7 +293,7 @@ fun CreateRoleDialog(
 ) {
     ErpDialog(
         title = "Новая роль",
-        glyph = ErpIconGlyph.Admin,
+        glyph = ErpIconGlyph.Shield,
         gradient = Gradients.Primary,
         width = 660.dp,
         confirmText = "Создать",
@@ -363,7 +363,7 @@ fun AddPermissionDialog(
 ) {
     ErpDialog(
         title = "Новое право",
-        glyph = ErpIconGlyph.Admin,
+        glyph = ErpIconGlyph.Shield,
         gradient = Gradients.Primary,
         width = 540.dp,
         confirmText = "Добавить",

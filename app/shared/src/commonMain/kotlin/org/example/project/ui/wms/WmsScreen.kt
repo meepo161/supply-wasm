@@ -1,5 +1,6 @@
 package org.example.project.ui.wms
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +28,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -93,62 +96,21 @@ fun WmsScreen(
                 gradient = Gradients.Emerald,
                 subtitle = "Склады, ячейки, остатки, приёмка, резервы, перемещения, выдача, возвраты, списания и инвентаризация"
             )
-            Spacer(Modifier.height(10.dp))
-            BoxWithConstraints(
+            Spacer(Modifier.height(6.dp))
+            WmsTopNav(
+                state = state,
+                onSelectTab = viewModel::selectTab,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            )
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
-                val isWide = maxWidth >= 780.dp
-                if (isWide) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        WmsVerticalNav(
-                            state = state,
-                            onSelectTab = viewModel::selectTab,
-                            modifier = Modifier
-                                .width(256.dp)
-                                .fillMaxHeight()
-                        )
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                        ) {
-                            WmsTabContent(state, viewModel)
-                        }
-                    }
-                } else {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        ScrollableTabRow(
-                            selectedTabIndex = WmsTab.entries.indexOf(state.selectedTab),
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                            edgePadding = 12.dp
-                        ) {
-                            WmsTab.entries.forEach { tab ->
-                                val count = wmsTabCount(tab, state)
-                                val label = if (count > 0) "${tab.title} ($count)" else tab.title
-                                Tab(
-                                    selected = state.selectedTab == tab,
-                                    onClick = { viewModel.selectTab(tab) },
-                                    text = { Text(label) }
-                                )
-                            }
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            WmsTabContent(state, viewModel)
-                        }
-                    }
-                }
+                WmsTabContent(state, viewModel)
             }
         }
 
@@ -479,15 +441,19 @@ private fun NomenclatureDetailDialog(
     var newBarcode by remember(item.id) { mutableStateOf("") }
     var localStatus by remember(item.id) { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("${item.code} · ${item.name}") },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(text = "Тип: ${item.type.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+    org.example.project.ui.theme.ErpDialog(
+        title = "${item.code} · ${item.name}",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Emerald,
+        width = 720.dp,
+        confirmText = if (!item.archived) "Архивировать" else null,
+        onConfirm = if (!item.archived) { { confirmArchive = true } } else null,
+        confirmEnabled = !loading,
+        confirmGradient = Gradients.Sunset,
+        dismissText = "Закрыть",
+        onDismiss = onClose
+    ) {
+        Text(text = "Тип: ${item.type.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 Text(text = "Единица измерения: ${item.unit}", style = MaterialTheme.typography.bodyMedium)
                 Text(text = "Статус: ${if (item.archived) "Архив" else "Активна"}")
                 item.description?.takeIf { it.isNotBlank() }?.let { Text(it) }
@@ -715,37 +681,23 @@ private fun NomenclatureDetailDialog(
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            if (!item.archived) {
-                OutlinedButton(
-                    onClick = { confirmArchive = true },
-                    enabled = !loading,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Архивировать") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
-    )
+    }
     if (confirmArchive) {
-        AlertDialog(
-            onDismissRequest = { confirmArchive = false },
-            title = { Text("Архивировать позицию?") },
-            text = {
-                Text("${item.code} · ${item.name} перестанет предлагаться в новых документах. История и остатки сохранятся.")
+        org.example.project.ui.theme.ErpDialog(
+            title = "Архивировать позицию?",
+            glyph = ErpIconGlyph.Alert,
+            gradient = Gradients.Sunset,
+            width = 500.dp,
+            confirmText = "Архивировать",
+            onConfirm = {
+                confirmArchive = false
+                onArchive()
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        confirmArchive = false
-                        onArchive()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Архивировать") }
-            },
-            dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Отмена") } }
-        )
+            confirmGradient = Gradients.Sunset,
+            onDismiss = { confirmArchive = false }
+        ) {
+            Text("${item.code} · ${item.name} перестанет предлагаться в новых документах. История и остатки сохранятся.")
+        }
     }
 }
 
@@ -1218,54 +1170,52 @@ private fun ReceiptDetailCard(
             }
             if (showQcDialog) {
                 var qcComment by remember { mutableStateOf("") }
-                AlertDialog(
-                    onDismissRequest = { showQcDialog = false },
-                    title = { Text("Входной контроль ОТК (${receipt.number})") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            qcInfo?.let { qc ->
-                                Text("Статус ОТК: ${qc.status.qcLabel()}")
+                org.example.project.ui.theme.ErpDialog(
+                    title = "Входной контроль ОТК (${receipt.number})",
+                    glyph = ErpIconGlyph.CheckCircle,
+                    gradient = Gradients.Emerald,
+                    width = 560.dp,
+                    confirmText = "Принять всё (ОТК)",
+                    onConfirm = {
+                        qcScope.launch {
+                            val lines = receipt.lines.map { line ->
+                                org.example.project.dto.ReceiptQcLineInput(
+                                    receiptLineId = line.id,
+                                    acceptedQty = line.receivedQuantity
+                                )
                             }
-                            qcStatusMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                            OutlinedTextField(
-                                value = qcComment,
-                                onValueChange = { qcComment = it },
-                                label = { Text("Комментарий ОТК") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
+                            val res = wmsRepoForQc.inspectReceiptQc(
+                                receipt.id,
+                                org.example.project.dto.InspectReceiptQcRequest(
+                                    comment = qcComment.ifBlank { null },
+                                    lines = lines
+                                )
                             )
+                            when (res) {
+                                is org.example.project.data.ApiResult.Success -> {
+                                    qcInfo = res.data
+                                    qcStatusMsg = "ОТК проведён: ${res.data.status.qcLabel()}"
+                                }
+                                is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.userText()
+                            }
                         }
                     },
-                    confirmButton = {
-                        Button(onClick = {
-                            qcScope.launch {
-                                val lines = receipt.lines.map { line ->
-                                    org.example.project.dto.ReceiptQcLineInput(
-                                        receiptLineId = line.id,
-                                        acceptedQty = line.receivedQuantity
-                                    )
-                                }
-                                val res = wmsRepoForQc.inspectReceiptQc(
-                                    receipt.id,
-                                    org.example.project.dto.InspectReceiptQcRequest(
-                                        comment = qcComment.ifBlank { null },
-                                        lines = lines
-                                    )
-                                )
-                                when (res) {
-                                    is org.example.project.data.ApiResult.Success -> {
-                                        qcInfo = res.data
-                                        qcStatusMsg = "ОТК проведён: ${res.data.status.qcLabel()}"
-                                    }
-                                    is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.userText()
-                                }
-                            }
-                        }) { Text("Принять всё (ОТК)") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showQcDialog = false }) { Text("Закрыть") }
+                    confirmGradient = Gradients.Emerald,
+                    dismissText = "Закрыть",
+                    onDismiss = { showQcDialog = false }
+                ) {
+                    qcInfo?.let { qc ->
+                        Text("Статус ОТК: ${qc.status.qcLabel()}")
                     }
-                )
+                    qcStatusMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    OutlinedTextField(
+                        value = qcComment,
+                        onValueChange = { qcComment = it },
+                        label = { Text("Комментарий ОТК") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
             // Поздняя связь: заказ и накладная могут появиться после приёмки.
             // К заказу поставщику привязываются только приёмки по заказу, счёту
@@ -1434,53 +1384,52 @@ private fun ReservationDetailDialog(
     busy: Boolean = false
 ) {
     val unit = nomenclature?.unit?.let { " $it" }.orEmpty()
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("Резерв ${reservation.number}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Позиция: " + (nomenclature?.let { "${it.code} · ${it.name}" } ?: "#${reservation.nomenclatureId}"),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "Склад: " + (warehouse?.let { "${it.code} · ${it.name}" } ?: "#${reservation.warehouseId}"),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "Основание: ${reservation.reasonType.localizedName()}" +
-                        (reservation.reasonNote?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(text = "Количество: ${ErpFormat.qty(reservation.quantity)}$unit", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Выдано по резерву: ${ErpFormat.qty(reservation.issuedQuantity)}$unit", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Статус: ${reservation.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-                reservation.expiresAt?.let {
-                    Text(text = "Действует до: ${ErpFormat.dateRu(it)}", style = MaterialTheme.typography.bodyMedium)
-                }
-                reservation.createdAt?.let {
-                    Text(text = "Создан: ${ErpFormat.dateTimeRu(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                error?.let { ErrorMessageCard(error = it) }
-                if (reservation.status == ReservationStatus.ACTIVE) {
-                    HorizontalDivider()
-                    OutlinedTextField(
-                        value = releaseReason,
-                        onValueChange = onReasonChange,
-                        label = { Text("Причина снятия") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            if (reservation.status == ReservationStatus.ACTIVE) {
-                Button(onClick = onRelease, enabled = !busy) { Text("Снять резерв") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
-    )
+    org.example.project.ui.theme.ErpDialog(
+        title = "Резерв ${reservation.number}",
+        glyph = ErpIconGlyph.Clock,
+        gradient = Gradients.Emerald,
+        width = 620.dp,
+        confirmText = if (reservation.status == ReservationStatus.ACTIVE) "Снять резерв" else null,
+        onConfirm = if (reservation.status == ReservationStatus.ACTIVE) onRelease else null,
+        confirmEnabled = !busy,
+        confirmGradient = Gradients.Sunset,
+        dismissText = "Закрыть",
+        onDismiss = onClose
+    ) {
+        Text(
+            text = "Позиция: " + (nomenclature?.let { "${it.code} · ${it.name}" } ?: "#${reservation.nomenclatureId}"),
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            text = "Склад: " + (warehouse?.let { "${it.code} · ${it.name}" } ?: "#${reservation.warehouseId}"),
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            text = "Основание: ${reservation.reasonType.localizedName()}" +
+                (reservation.reasonNote?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(text = "Количество: ${ErpFormat.qty(reservation.quantity)}$unit", style = MaterialTheme.typography.bodyMedium)
+        Text(text = "Выдано по резерву: ${ErpFormat.qty(reservation.issuedQuantity)}$unit", style = MaterialTheme.typography.bodyMedium)
+        Text(text = "Статус: ${reservation.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+        reservation.expiresAt?.let {
+            Text(text = "Действует до: ${ErpFormat.dateRu(it)}", style = MaterialTheme.typography.bodyMedium)
+        }
+        reservation.createdAt?.let {
+            Text(text = "Создан: ${ErpFormat.dateTimeRu(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        error?.let { ErrorMessageCard(error = it) }
+        if (reservation.status == ReservationStatus.ACTIVE) {
+            HorizontalDivider()
+            OutlinedTextField(
+                value = releaseReason,
+                onValueChange = onReasonChange,
+                label = { Text("Причина снятия") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+        }
+    }
 }
 
 @Composable
@@ -2150,6 +2099,115 @@ private data class WmsNavEntry(
     val glyph: ErpIconGlyph,
     val accent: Color
 )
+
+@Composable
+private fun WmsTopNav(
+    state: WmsUiState,
+    onSelectTab: (WmsTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val primaryItems = remember {
+        listOf(
+            WmsNavEntry(WmsTab.STOCK, ErpIconGlyph.CheckCircle, Brand.Teal),
+            WmsNavEntry(WmsTab.RECEIPTS, ErpIconGlyph.Plus, Brand.Blue),
+            WmsNavEntry(WmsTab.ISSUES, ErpIconGlyph.ChevronRight, Brand.Teal),
+            WmsNavEntry(WmsTab.MOVEMENTS, ErpIconGlyph.TrendUp, Brand.Indigo),
+            WmsNavEntry(WmsTab.NOMENCLATURE, ErpIconGlyph.Layers, Brand.Amber)
+        )
+    }
+    val operationsItems = remember {
+        listOf(
+            WmsNavEntry(WmsTab.RESERVATIONS, ErpIconGlyph.Clock, Brand.Amber),
+            WmsNavEntry(WmsTab.TRANSFERS, ErpIconGlyph.Send, Brand.Indigo),
+            WmsNavEntry(WmsTab.RETURNS, ErpIconGlyph.Refresh, Brand.Violet),
+            WmsNavEntry(WmsTab.WRITE_OFFS, ErpIconGlyph.Alert, Brand.Rose),
+            WmsNavEntry(WmsTab.INVENTORIES, ErpIconGlyph.Documents, Brand.Blue)
+        )
+    }
+    val dictionaryItems = remember {
+        listOf(
+            WmsNavEntry(WmsTab.WAREHOUSES, ErpIconGlyph.Warehouse, Brand.Teal),
+            WmsNavEntry(WmsTab.LOCATIONS, ErpIconGlyph.Grid, Brand.Blue)
+        )
+    }
+    var opsExpanded by remember { mutableStateOf(false) }
+    var dictExpanded by remember { mutableStateOf(false) }
+
+    val activeOperation = operationsItems.firstOrNull { it.tab == state.selectedTab }
+    val activeDict = dictionaryItems.firstOrNull { it.tab == state.selectedTab }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            primaryItems.forEach { entry ->
+                val count = wmsTabCount(entry.tab, state)
+                val selected = state.selectedTab == entry.tab
+                val label = if (count > 0) "${entry.tab.title} ($count)" else entry.tab.title
+                org.example.project.ui.theme.SoftButton(
+                    text = label,
+                    onClick = { onSelectTab(entry.tab) },
+                    tint = if (selected) entry.accent else Brand.Slate,
+                    leadingIcon = entry.glyph
+                )
+            }
+
+            Box {
+                org.example.project.ui.theme.SoftButton(
+                    text = activeOperation?.let { "${it.tab.title} ▾" } ?: "Операции ▾",
+                    onClick = { opsExpanded = true },
+                    tint = activeOperation?.accent ?: Brand.Slate,
+                    leadingIcon = activeOperation?.glyph ?: ErpIconGlyph.Clock
+                )
+                DropdownMenu(expanded = opsExpanded, onDismissRequest = { opsExpanded = false }) {
+                    operationsItems.forEach { entry ->
+                        val count = wmsTabCount(entry.tab, state)
+                        val label = if (count > 0) "${entry.tab.title} ($count)" else entry.tab.title
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                opsExpanded = false
+                                onSelectTab(entry.tab)
+                            }
+                        )
+                    }
+                }
+            }
+
+            Box {
+                org.example.project.ui.theme.SoftButton(
+                    text = activeDict?.let { "${it.tab.title} ▾" } ?: "Справочники ▾",
+                    onClick = { dictExpanded = true },
+                    tint = activeDict?.accent ?: Brand.Slate,
+                    leadingIcon = activeDict?.glyph ?: ErpIconGlyph.Warehouse
+                )
+                DropdownMenu(expanded = dictExpanded, onDismissRequest = { dictExpanded = false }) {
+                    dictionaryItems.forEach { entry ->
+                        val count = wmsTabCount(entry.tab, state)
+                        val label = if (count > 0) "${entry.tab.title} ($count)" else entry.tab.title
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                dictExpanded = false
+                                onSelectTab(entry.tab)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun WmsVerticalNav(

@@ -5,9 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +24,9 @@ import org.example.project.dto.ProductModelDto
 import org.example.project.dto.ProjectDto
 import org.example.project.ui.bom.localizedName
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpDialog
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
 
 @Composable
 fun CreateDemandDialog(
@@ -50,65 +50,64 @@ fun CreateDemandDialog(
     val approvedActiveRevisions = revisions.filter {
         it.status == BomRevisionStatus.APPROVED || it.status == BomRevisionStatus.ACTIVE
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая потребность") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                DemandSourceTypeDropdown(
-                    selected = form.sourceType,
-                    onSelect = onSourceTypeChange,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                DemandPriorityDropdown(
-                    selected = form.priority,
-                    onSelect = { onFormChange(form.copy(priority = it)) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                org.example.project.ui.theme.ErpDateField(
-                    value = form.requiredDate,
-                    onValueChange = { onFormChange(form.copy(requiredDate = it)) },
-                    label = "Требуемая дата",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                when (form.sourceType) {
-                    DemandSourceType.PROJECT -> ProjectDemandFields(
-                        form = form,
-                        projects = projects,
-                        models = models,
-                        revisions = approvedActiveRevisions,
-                        onProjectSelected = onProjectSelected,
-                        onModelSelected = onModelSelected,
-                        onRevisionSelected = onRevisionSelected,
-                        onReleaseQuantityChange = { onFormChange(form.copy(releaseQuantity = it)) }
-                    )
-                    DemandSourceType.STOCKPILE -> OutlinedTextField(
-                        value = form.stockpileNote,
-                        onValueChange = { onFormChange(form.copy(stockpileNote = it)) },
-                        label = { Text("Обоснование задела *") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2
-                    )
-                    DemandSourceType.MANUAL -> { }
-                }
-                if (form.sourceType != DemandSourceType.PROJECT) {
-                    ManualLinesSection(
-                        lines = form.lines,
-                        nomenclature = nomenclature,
-                        onAddLine = onAddLine,
-                        onUpdateLine = onUpdateLine,
-                        onRemoveLine = onRemoveLine
-                    )
-                }
-            }
-        },
-        confirmButton = { Button(onClick = onCreate) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Новая потребность",
+        glyph = ErpIconGlyph.Cart,
+        gradient = Gradients.Primary,
+        width = 720.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            DemandSourceTypeDropdown(
+                selected = form.sourceType,
+                onSelect = onSourceTypeChange,
+                modifier = Modifier.weight(1f)
+            )
+            DemandPriorityDropdown(
+                selected = form.priority,
+                onSelect = { onFormChange(form.copy(priority = it)) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+        org.example.project.ui.theme.ErpDateField(
+            value = form.requiredDate,
+            onValueChange = { onFormChange(form.copy(requiredDate = it)) },
+            label = "Требуемая дата",
+            modifier = Modifier.fillMaxWidth()
+        )
+        when (form.sourceType) {
+            DemandSourceType.PROJECT -> ProjectDemandFields(
+                form = form,
+                projects = projects,
+                models = models,
+                revisions = approvedActiveRevisions,
+                onProjectSelected = onProjectSelected,
+                onModelSelected = onModelSelected,
+                onRevisionSelected = onRevisionSelected,
+                onReleaseQuantityChange = { onFormChange(form.copy(releaseQuantity = it)) }
+            )
+            DemandSourceType.STOCKPILE -> OutlinedTextField(
+                value = form.stockpileNote,
+                onValueChange = { onFormChange(form.copy(stockpileNote = it)) },
+                label = { Text("Обоснование задела *") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+            DemandSourceType.MANUAL -> { }
+        }
+        if (form.sourceType != DemandSourceType.PROJECT) {
+            ManualLinesSection(
+                lines = form.lines,
+                nomenclature = nomenclature,
+                onAddLine = onAddLine,
+                onUpdateLine = onUpdateLine,
+                onRemoveLine = onRemoveLine
+            )
+        }
+    }
 }
 
 @Composable
@@ -234,22 +233,23 @@ fun CancelDemandDialog(
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Отменить потребность") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                error?.let { ErrorMessageCard(error = it) }
-                OutlinedTextField(
-                    value = reason,
-                    onValueChange = onReasonChange,
-                    label = { Text("Причина отмены *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onCancel) { Text("Отменить") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Закрыть") } }
-    )
+    ErpDialog(
+        title = "Отменить потребность",
+        glyph = ErpIconGlyph.Cart,
+        gradient = Gradients.Sunset,
+        width = 520.dp,
+        confirmText = "Отменить потребность",
+        onConfirm = onCancel,
+        dismissText = "Закрыть",
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        OutlinedTextField(
+            value = reason,
+            onValueChange = onReasonChange,
+            label = { Text("Причина отмены *") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+    }
 }

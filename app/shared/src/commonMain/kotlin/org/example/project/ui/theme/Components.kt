@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -1067,6 +1068,7 @@ fun ErpDialog(
     confirmEnabled: Boolean = true,
     confirmGradient: List<Color> = Gradients.Primary,
     dismissText: String = "Отмена",
+    extraActions: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1149,6 +1151,10 @@ fun ErpDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (extraActions != null) {
+                        extraActions()
+                        Spacer(Modifier.width(10.dp))
+                    }
                     SoftButton(text = dismissText, onClick = onDismiss)
                     if (confirmText != null && onConfirm != null) {
                         Spacer(Modifier.width(10.dp))
