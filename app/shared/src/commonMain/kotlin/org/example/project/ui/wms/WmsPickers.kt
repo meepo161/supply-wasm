@@ -43,7 +43,7 @@ internal fun ProjectPicker(
         selected = projects.find { it.id.toString() == value.trim() },
         onSelect = { onChange(it.id.toString()) },
         label = label,
-        itemText = { "${it.number} — ${it.name}" },
+        itemText = { "${it.number} · ${it.name}" },
         modifier = modifier,
         emptyText = loadError ?: "Проектов нет",
         onClear = { onChange("") },
@@ -75,7 +75,7 @@ internal fun TaskPicker(
         selected = tasks.find { it.id.toString() == value.trim() },
         onSelect = { onChange(it.id.toString()) },
         label = label,
-        itemText = { "${it.number} — ${it.title}" },
+        itemText = { "${it.number} · ${it.title}" },
         modifier = modifier,
         emptyText = loadError ?: if (project != null) "В проекте нет задач" else "Задач нет",
         onClear = { onChange("") },
@@ -176,35 +176,35 @@ internal class WmsNames(
     private val issues: List<org.example.project.dto.IssueOrderDto> = emptyList()
 ) {
     fun issue(id: Long?): String = when (id) {
-        null -> "—"
+        null -> "не указана"
         else -> issues.find { it.id == id }?.number ?: "Выдача #$id"
     }
 
     fun warehouse(id: Long?): String = when (id) {
-        null -> "—"
-        else -> warehouses.find { it.id == id }?.let { "${it.code} — ${it.name}" } ?: "Склад #$id"
+        null -> "не указан"
+        else -> warehouses.find { it.id == id }?.let { "${it.code} · ${it.name}" } ?: "Склад #$id"
     }
 
     fun location(id: Long?): String = when (id) {
-        null -> "—"
-        else -> locations.find { it.id == id }?.let { "${it.code} — ${it.name}" } ?: "Ячейка #$id"
+        null -> "не указана"
+        else -> locations.find { it.id == id }?.let { "${it.code} · ${it.name}" } ?: "Ячейка #$id"
     }
 
     fun item(id: Long?): String = when (id) {
-        null -> "—"
-        else -> nomenclature.find { it.id == id }?.let { "${it.code} — ${it.name}" } ?: "Позиция #$id"
+        null -> "не указана"
+        else -> nomenclature.find { it.id == id }?.let { "${it.code} · ${it.name}" } ?: "Позиция #$id"
     }
 
     fun unit(id: Long?): String = nomenclature.find { it.id == id }?.unit.orEmpty()
 
     /** Количество с единицей позиции: «3 шт». */
     fun qty(quantity: String?, nomenclatureId: Long?): String =
-        if (quantity.isNullOrBlank()) "—"
+        if (quantity.isNullOrBlank()) "нет"
         else listOf(org.example.project.ui.theme.ErpFormat.qty(quantity), unit(nomenclatureId))
             .filter { it.isNotBlank() }.joinToString(" ")
 
     fun user(id: Long?): String = when (id) {
-        null -> "—"
+        null -> "не указан"
         else -> users.find { it.id == id }?.fullName ?: "Сотрудник #$id"
     }
 }

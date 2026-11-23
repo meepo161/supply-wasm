@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -364,6 +365,18 @@ fun SectionHeader(
     }
 }
 
+/** Акцент, затемнённый так, чтобы белый текст на нём или он сам на светлом фоне давал 4.5:1 (WCAG AA). */
+fun Color.deepened(): Color = Color(red * 0.6f, green * 0.6f, blue * 0.6f, alpha)
+
+/**
+ * Цвет мелкого текста акцентом. Яркие акценты (янтарный, бирюзовый) на светлой теме
+ * не набирают 4.5:1, поэтому там текст рисуется затемнённым оттенком того же цвета;
+ * на тёмной теме исходный акцент читается и остаётся как есть.
+ */
+@Composable
+fun readableAccent(accent: Color): Color =
+    if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) accent.deepened() else accent
+
 /** Компактный бейдж-«таблетка». */
 @Composable
 fun PillBadge(
@@ -372,10 +385,11 @@ fun PillBadge(
     modifier: Modifier = Modifier,
     filled: Boolean = false
 ) {
+    val solid = accent.deepened()
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(50))
-            .background(if (filled) accent else accent.copy(alpha = 0.13f))
+            .background(if (filled) solid else accent.copy(alpha = 0.13f))
             .border(1.dp, accent.copy(alpha = if (filled) 0.6f else 0.2f), RoundedCornerShape(50))
             .padding(horizontal = 9.dp, vertical = 3.dp)
     ) {
@@ -383,7 +397,7 @@ fun PillBadge(
             text = text,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
-            color = if (filled) Color.White else accent
+            color = if (filled) Color.White else readableAccent(accent)
         )
     }
 }

@@ -129,8 +129,8 @@ fun ReturnInspection.localizedName(): String = when (this) {
 }
 
 fun ReturnInspectionDecision.localizedName(): String = when (this) {
-    ReturnInspectionDecision.GOOD -> "Годно — на хранение"
-    ReturnInspectionDecision.DEFECT -> "Брак — в брак"
+    ReturnInspectionDecision.GOOD -> "Годно, на хранение"
+    ReturnInspectionDecision.DEFECT -> "Брак, в зону брака"
 }
 
 fun WriteOffReasonType.localizedName(): String = when (this) {
@@ -197,6 +197,6 @@ fun filterNomenclature(
 }
 
 fun String?.toShortDate(): String {
-    if (this.isNullOrBlank()) return "—"
+    if (this.isNullOrBlank()) return "не указана"
     return substringBefore("T")
 }

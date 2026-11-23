@@ -111,9 +111,9 @@ fun ReceiptAcceptance(
                 val item = nomenclature.firstOrNull { it.id == line.nomenclatureId }
                 val code = line.nomenclatureCode ?: item?.code
                 val name = line.nomenclatureName ?: item?.name
-                val title = listOfNotNull(code, name).joinToString(" — ").ifBlank { "Позиция ${line.nomenclatureId}" }
+                val title = listOfNotNull(code, name).joinToString(" · ").ifBlank { "Позиция ${line.nomenclatureId}" }
                 Text(
-                    "№${line.lineNo}: $title — ожидается ${line.expectedQuantity.trimZeros()} ${item?.unit.orEmpty()}".trimEnd(),
+                    "№${line.lineNo}: $title, ожидается ${line.expectedQuantity.trimZeros()} ${item?.unit.orEmpty()}".trimEnd(),
                     style = MaterialTheme.typography.bodySmall
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -168,7 +168,7 @@ fun ReceiptAcceptance(
             }
         ) { Text("Сохранить факт приёмки") }
         if (!ready) {
-            Text("Укажите ячейку и количество для каждой строки — без этого документ не проводится", style = MaterialTheme.typography.bodySmall)
+            Text("Укажите ячейку и количество для каждой строки: без этого документ не проводится", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

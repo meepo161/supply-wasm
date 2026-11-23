@@ -525,7 +525,7 @@ class WmsViewModel(
                     _uiState.value = _uiState.value.copy(
                         currentReceipt = result.data,
                         isLoading = false,
-                        successMessage = "Факт приёмки ${result.data.number} сохранён — проверьте и проведите документ"
+                        successMessage = "Факт приёмки ${result.data.number} сохранён. Проверьте и проведите документ"
                     )
                     loadReceipts()
                 }

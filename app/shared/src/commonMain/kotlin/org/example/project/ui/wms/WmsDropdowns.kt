@@ -51,7 +51,7 @@ fun WarehouseDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: placeholder,
+            value = selected?.let { "${it.code} · ${it.name}" } ?: placeholder,
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
@@ -64,7 +64,7 @@ fun WarehouseDropdown(
         ) {
             warehouses.forEach { warehouse ->
                 DropdownMenuItem(
-                    text = { Text("${warehouse.code} — ${warehouse.name}") },
+                    text = { Text("${warehouse.code} · ${warehouse.name}") },
                     onClick = {
                         onSelect(warehouse)
                         expanded = false
@@ -91,7 +91,7 @@ fun LocationDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: "Не выбрана",
+            value = selected?.let { "${it.code} · ${it.name}" } ?: "Не выбрана",
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
@@ -104,7 +104,7 @@ fun LocationDropdown(
         ) {
             locations.forEach { location ->
                 DropdownMenuItem(
-                    text = { Text("${location.code} — ${location.name} (${location.kind.localizedName()})") },
+                    text = { Text("${location.code} · ${location.name} (${location.kind.localizedName()})") },
                     onClick = {
                         onSelect(location)
                         expanded = false
@@ -128,7 +128,7 @@ fun NomenclatureDropdown(
         selected = selected,
         onSelect = onSelect,
         label = label,
-        itemText = { "${it.code} — ${it.name}" },
+        itemText = { "${it.code} · ${it.name}" },
         modifier = modifier,
         emptyText = "Нет доступной номенклатуры"
     )
@@ -147,7 +147,7 @@ fun ReceiptDropdown(
         selected = selected,
         onSelect = onSelect,
         label = label,
-        itemText = { "${it.number} — ${it.status.localizedName()}" },
+        itemText = { "${it.number} · ${it.status.localizedName()}" },
         modifier = modifier,
         emptyText = "Приёмки не найдены"
     )

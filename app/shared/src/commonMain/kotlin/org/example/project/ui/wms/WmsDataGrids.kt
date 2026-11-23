@@ -31,7 +31,7 @@ fun WarehousesGrid(
     val data = mapOf(
         "Код" to warehouses.map { it.code },
         "Название" to warehouses.map { it.name },
-        "Адрес" to warehouses.map { it.address ?: "—" },
+        "Адрес" to warehouses.map { it.address.orEmpty() },
         "Активен" to warehouses.map { if (it.active) "Да" else "Нет" }
     )
     PersistentDataGrid(
@@ -58,7 +58,7 @@ fun LocationsGrid(
         "Название" to locations.map { it.name },
         "Тип" to locations.map { it.kind.localizedName() },
         "Назначение" to locations.map { it.purpose.localizedName() },
-        "Ёмкость" to locations.map { it.capacity ?: "—" }
+        "Ёмкость" to locations.map { it.capacity.orEmpty() }
     )
     PersistentDataGrid(
         data = data,
@@ -117,9 +117,9 @@ fun StockGrid(
         put("Номенклатура", stock.map { s ->
             nomenclature.find { it.id == s.nomenclatureId }?.let { "${it.code} · ${it.name}" } ?: "Поз. #${s.nomenclatureId}"
         })
-        put("Ед.", stock.map { s -> nomenclature.find { it.id == s.nomenclatureId }?.unit ?: "—" })
-        if (hasLot) put("Партия", stock.map { it.lotNumber ?: "—" })
-        if (hasSerial) put("Серия", stock.map { it.serialNumber ?: "—" })
+        put("Ед.", stock.map { s -> nomenclature.find { it.id == s.nomenclatureId }?.unit.orEmpty() })
+        if (hasLot) put("Партия", stock.map { it.lotNumber.orEmpty() })
+        if (hasSerial) put("Серия", stock.map { it.serialNumber.orEmpty() })
         put("Физ.", stock.map { ErpFormat.qty(it.physicalQty) })
         put("Резерв", stock.map { ErpFormat.qty(it.reservedQty) })
         put("Доступно", stock.map { ErpFormat.qty(it.availableQty) })

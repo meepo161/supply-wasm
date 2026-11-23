@@ -192,7 +192,7 @@ private fun TransferDetailDialog(
                     Text("История", style = MaterialTheme.typography.labelLarge)
                     transfer.events.forEach { event ->
                         Text(
-                            text = "${event.action.name} · ${event.quantity ?: "—"} · ${ErpFormat.dateRu(event.createdAt)}",
+                            text = "${event.action.name} · ${event.quantity ?: "без количества"} · ${ErpFormat.dateRu(event.createdAt)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -481,7 +481,7 @@ private fun IssueDetailDialog(
                                 Text(
                                     "Отобрано полностью",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Brand.Teal
+                                    color = org.example.project.ui.theme.readableAccent(Brand.Teal)
                                 )
                             }
                             if (canPick && remaining > 0.0) {
@@ -980,7 +980,7 @@ internal fun CreateReturnDialog(
                             label = "Строка выдачи *",
                             itemText = { issueLine ->
                                 val item = nomenclature.find { it.id == issueLine.nomenclatureId }
-                                "№${issueLine.lineNo} · ${item?.let { "${it.code} — ${it.name}" } ?: "Поз. #${issueLine.nomenclatureId}"}" +
+                                "№${issueLine.lineNo} · ${item?.let { "${it.code} · ${it.name}" } ?: "Поз. #${issueLine.nomenclatureId}"}" +
                                     " · выдано ${ErpFormat.qty(issueLine.issuedQuantity)} ${item?.unit.orEmpty()}"
                             },
                             emptyText = if (selectedIssue == null) "Сначала выберите заказ на выдачу" else "В заказе нет строк",
@@ -1116,9 +1116,9 @@ private fun WriteOffDetailDialog(
                 Text("Количество: ${writeOff.totalQuantity}", style = MaterialTheme.typography.bodyMedium)
                 if (writeOff.overLimit) {
                     Text(
-                        "Сверх лимита склада (${writeOff.limitQuantity ?: "—"}): требуется согласование",
+                        "Сверх лимита склада (${writeOff.limitQuantity ?: "не задан"}): требуется согласование",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Brand.Amber
+                        color = org.example.project.ui.theme.readableAccent(Brand.Amber)
                     )
                 }
                 writeOff.postedAt?.let {

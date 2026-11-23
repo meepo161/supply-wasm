@@ -468,7 +468,7 @@ private fun ReceiptLineRow(
                 },
                 label = "Позиция заказа",
                 itemText = { orderLine ->
-                    "№${orderLine.lineNo} · ${listOfNotNull(orderLine.nomenclatureCode, orderLine.nomenclatureName).joinToString(" — ")}" +
+                    "№${orderLine.lineNo} · ${listOfNotNull(orderLine.nomenclatureCode, orderLine.nomenclatureName).joinToString(" · ")}" +
                         " · ${org.example.project.ui.theme.ErpFormat.qty(orderLine.quantity)} ${orderLine.unit}"
                 },
                 emptyText = "Позиции заказа не загружены",

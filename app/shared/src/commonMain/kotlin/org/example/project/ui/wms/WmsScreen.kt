@@ -481,7 +481,7 @@ private fun NomenclatureDetailDialog(
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("${item.code} — ${item.name}") },
+        title = { Text("${item.code} · ${item.name}") },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -587,7 +587,7 @@ private fun NomenclatureDetailDialog(
                 Text("Аналоги (${analogs.size})", style = MaterialTheme.typography.titleSmall)
                 analogs.forEach { a ->
                     Text(
-                        text = "${a.analogCode} — ${a.analogName} (коэф. ${ErpFormat.qty(a.conversionFactor)})",
+                        text = "${a.analogCode} · ${a.analogName} (коэф. ${ErpFormat.qty(a.conversionFactor)})",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -733,7 +733,7 @@ private fun NomenclatureDetailDialog(
             onDismissRequest = { confirmArchive = false },
             title = { Text("Архивировать позицию?") },
             text = {
-                Text("${item.code} — ${item.name} перестанет предлагаться в новых документах. История и остатки сохранятся.")
+                Text("${item.code} · ${item.name} перестанет предлагаться в новых документах. История и остатки сохранятся.")
             },
             confirmButton = {
                 Button(
@@ -836,7 +836,7 @@ private fun StockTab(
             )
             if (state.lowStock.isNotEmpty()) {
                 TextButton(onClick = { viewModel.selectTab(WmsTab.MOVEMENTS) }) {
-                    Text("Ниже минимума: ${state.lowStock.size}", color = Brand.Rose)
+                    Text("Ниже минимума: ${state.lowStock.size}", color = org.example.project.ui.theme.readableAccent(Brand.Rose))
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -938,7 +938,7 @@ private fun ReceiptsTab(
                 onClear = { viewModel.updateReceiptWarehouseFilter(null) },
                 clearText = "Все склады",
                 label = "Склад",
-                itemText = { "${it.code} — ${it.name}" },
+                itemText = { "${it.code} · ${it.name}" },
                 modifier = Modifier.weight(1f)
             )
             ReceiptStatusDropdown(
@@ -1062,10 +1062,10 @@ private fun ReceiptsTab(
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = when (receipt.status) {
-                                        ReceiptStatus.DRAFT -> Brand.Amber
-                                        ReceiptStatus.POSTED -> Brand.Teal
-                                        ReceiptStatus.IN_PROGRESS -> Brand.Blue
-                                        ReceiptStatus.CANCELLED -> Brand.Graphite
+                                        ReceiptStatus.DRAFT -> org.example.project.ui.theme.readableAccent(Brand.Amber)
+                                        ReceiptStatus.POSTED -> org.example.project.ui.theme.readableAccent(Brand.Teal)
+                                        ReceiptStatus.IN_PROGRESS -> org.example.project.ui.theme.readableAccent(Brand.Blue)
+                                        ReceiptStatus.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
                                     }
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -1126,7 +1126,7 @@ private fun ReceiptDetailCard(
                     (receipt.sourceDocumentNo?.let { " · документ $it" } ?: ""),
                 style = MaterialTheme.typography.bodyMedium
             )
-            warehouse?.let { Text(text = "Склад: ${it.code} — ${it.name}", style = MaterialTheme.typography.bodyMedium) }
+            warehouse?.let { Text(text = "Склад: ${it.code} · ${it.name}", style = MaterialTheme.typography.bodyMedium) }
             receipt.sourceRef?.let { Text(text = "Основание: $it", style = MaterialTheme.typography.bodyMedium) }
             receipt.expectedAt?.let { Text(text = "Ожидается: ${ErpFormat.dateRu(it)}", style = MaterialTheme.typography.bodyMedium) }
             receipt.purchaseOrderNumber?.let { orderNumber ->
@@ -1148,7 +1148,7 @@ private fun ReceiptDetailCard(
                 val item = nomenclature.find { it.id == line.nomenclatureId }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "№${line.lineNo}: ${item?.let { "${it.code} — ${it.name}" } ?: (line.nomenclatureCode ?: "Номенклатура ${line.nomenclatureId}")}\n" +
+                        text = "№${line.lineNo}: ${item?.let { "${it.code} · ${it.name}" } ?: (line.nomenclatureCode ?: "Номенклатура ${line.nomenclatureId}")}\n" +
                             "Ожидалось ${ErpFormat.qty(line.expectedQuantity)} ${item?.unit.orEmpty()}, принято ${ErpFormat.qty(line.receivedQuantity)} ${item?.unit.orEmpty()}",
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -1440,11 +1440,11 @@ private fun ReservationDetailDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Позиция: " + (nomenclature?.let { "${it.code} — ${it.name}" } ?: "#${reservation.nomenclatureId}"),
+                    text = "Позиция: " + (nomenclature?.let { "${it.code} · ${it.name}" } ?: "#${reservation.nomenclatureId}"),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "Склад: " + (warehouse?.let { "${it.code} — ${it.name}" } ?: "#${reservation.warehouseId}"),
+                    text = "Склад: " + (warehouse?.let { "${it.code} · ${it.name}" } ?: "#${reservation.warehouseId}"),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
@@ -1659,7 +1659,7 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                     ) {
                         ErpIcon(ErpIconGlyph.CheckCircle, tint = Brand.Teal, modifier = Modifier.size(16.dp))
                         Text(
-                            text = "${nom.code} — ${nom.name}",
+                            text = "${nom.code} · ${nom.name}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
@@ -1668,7 +1668,7 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                             Text(
                                 text = nom.unit,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Brand.Teal,
+                                color = org.example.project.ui.theme.readableAccent(Brand.Teal),
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
@@ -1697,7 +1697,7 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                             text = "${filteredMovements.size}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = Brand.Indigo,
+                            color = org.example.project.ui.theme.readableAccent(Brand.Indigo),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                         )
                     }
