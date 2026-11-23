@@ -61,6 +61,7 @@ import org.example.project.ui.theme.PillBadge
 import org.example.project.ui.theme.SectionHeader
 import org.example.project.ui.theme.SkeletonLine
 import org.example.project.ui.theme.SoftButton
+import org.example.project.ui.theme.TextButton
 
 @Composable
 fun HomeScreen(
@@ -344,7 +345,12 @@ private fun HeroCard(
             }
         }
         val actions: @Composable () -> Unit = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // FlowRow переносит кнопки на новую строку на узком экране вместо обрезки справа.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 SoftButton(
                     text = if (unreadCount > 0) "Уведомления: $unreadCount" else "Уведомления",
                     onClick = onOpenNotifications,
@@ -476,29 +482,46 @@ private fun BrowserNotificationRow(
         contentPadding = 12.dp,
         gradient = null
     ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconBadge(ErpIconGlyph.Bell, gradient = Gradients.Sunset, size = 32.dp, iconSize = 16.dp)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Браузерные уведомления отключены",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = "Включите, чтобы не пропустить новые события и задачи",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val narrow = maxWidth < 560.dp
+            val message: @Composable (Modifier) -> Unit = { mod ->
+                Row(modifier = mod, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconBadge(ErpIconGlyph.Bell, gradient = Gradients.Sunset, size = 32.dp, iconSize = 16.dp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Браузерные уведомления отключены",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "Включите, чтобы не пропустить новые события и задачи",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                SoftButton(
-                    text = "Включить",
-                    onClick = onEnable,
-                    leadingIcon = ErpIconGlyph.Bell
-                )
-                SoftButton(
-                    text = "Скрыть",
-                    onClick = onDismiss
-                )
+            }
+            val buttons: @Composable () -> Unit = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SoftButton(
+                        text = "Включить",
+                        onClick = onEnable,
+                        leadingIcon = ErpIconGlyph.Bell
+                    )
+                    TextButton(onClick = onDismiss) { Text("Скрыть") }
+                }
+            }
+            // На узком экране кнопки уходят под текст, чтобы текст не сжимался в столбик.
+            if (narrow) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    message(Modifier.fillMaxWidth())
+                    buttons()
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    message(Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    buttons()
+                }
             }
         }
     }

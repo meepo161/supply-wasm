@@ -824,14 +824,24 @@ private fun StockKpiCard(
     accent: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
 ) {
+    // Нейтральная плитка: цвет появляется только у тревожного значения (карантин / брак).
+    val alarming = accent == Brand.Rose
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
-        color = accent.copy(alpha = 0.08f)
+        color = if (alarming) accent.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (alarming) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(text = value, style = MaterialTheme.typography.titleMedium, color = accent)
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (alarming) org.example.project.ui.theme.readableAccent(accent) else MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

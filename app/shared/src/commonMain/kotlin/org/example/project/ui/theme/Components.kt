@@ -929,10 +929,43 @@ fun PageHeader(
     actions: (@Composable RowScope.() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        // На узком экране действия уходят под заголовок, иначе кнопки сжимаются до одной буквы.
+        if (maxWidth < 600.dp && actions != null) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PageHeaderTitleRow(title, glyph, gradient, subtitle, onBack, null)
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+                }
+            }
+        } else {
+            PageHeaderTitleRow(
+                title, glyph, gradient, subtitle, onBack, actions,
+                Modifier.padding(horizontal = if (maxWidth < 600.dp) 16.dp else 24.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PageHeaderTitleRow(
+    title: String,
+    glyph: ErpIconGlyph,
+    gradient: List<Color>,
+    subtitle: String?,
+    onBack: (() -> Unit)?,
+    actions: (@Composable RowScope.() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 6.dp),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) {

@@ -348,7 +348,9 @@ private fun SummaryMetricTile(
                 text = value,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = accent
+                // Число окрашивается только при тревоге (критичные риски); иначе цвет ничего не значит.
+                color = if (accent == Brand.Rose) org.example.project.ui.theme.readableAccent(accent)
+                else MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = subtitle,

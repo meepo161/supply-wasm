@@ -400,37 +400,42 @@ private fun TaskCardMeta(
 ) {
     val scheme = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
-        PriorityTag(task.priority)
-        Spacer(Modifier.width(12.dp))
-        if (assignee != null) {
-            Avatar(name = assignee.fullName, size = 22.dp)
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text = if (assignee.id == currentUserId) "Вы" else assignee.fullName,
-                style = MaterialTheme.typography.labelSmall,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        } else {
-            Text(
-                text = "Без исполнителя",
-                style = MaterialTheme.typography.labelSmall,
-                color = scheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-        }
-        task.projectId?.let { projectId ->
-            val project = projects.find { it.id == projectId }
+        // Левая часть занимает остаток ширины; дата снаружи и поэтому никогда не сжимается.
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            PriorityTag(task.priority)
             Spacer(Modifier.width(12.dp))
-            Text(
-                text = project?.let { "${it.number} · ${it.name}" } ?: "Проект #$projectId",
-                style = MaterialTheme.typography.labelSmall,
-                color = scheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (assignee != null) {
+                Avatar(name = assignee.fullName, size = 22.dp)
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    text = if (assignee.id == currentUserId) "Вы" else assignee.fullName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            } else {
+                Text(
+                    text = "Без исполнителя",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+            task.projectId?.let { projectId ->
+                val project = projects.find { it.id == projectId }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = project?.let { "${it.number} · ${it.name}" } ?: "Проект #$projectId",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(12.dp))
         if (!task.dueDate.isNullOrBlank()) {
             ErpIcon(
                 ErpIconGlyph.Clock,
@@ -442,7 +447,9 @@ private fun TaskCardMeta(
                 text = task.dueDate.toShortDate(),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = scheme.onSurfaceVariant
+                color = scheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }
