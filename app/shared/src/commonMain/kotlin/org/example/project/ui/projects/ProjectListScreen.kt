@@ -74,10 +74,12 @@ fun ProjectListScreen(
             .fillMaxSize()
             .padding(horizontal = 24.dp)
     ) {
-        Row(
+        // FlowRow: на узком экране кнопки переносятся под заголовок, а не уходят за край.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(ErpIconGlyph.Projects, gradient = Gradients.Aurora, size = 40.dp, iconSize = 20.dp)
@@ -139,9 +141,11 @@ fun ProjectListScreen(
                     }
                 }
                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilterChip(
                             selected = statusFilter == "ALL",

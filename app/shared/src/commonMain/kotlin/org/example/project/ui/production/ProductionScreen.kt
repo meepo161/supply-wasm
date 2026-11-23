@@ -34,6 +34,7 @@ import org.example.project.dto.ProductionOrderStatus
 import org.example.project.dto.ProductionStageStatus
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpSplitRow
 import org.example.project.ui.theme.DetailRow
 import org.example.project.ui.theme.EmptyState
 import org.example.project.ui.theme.ErpIcon
@@ -74,23 +75,22 @@ fun ProductionScreen(
             }
         )
         Spacer(Modifier.height(8.dp))
-        Row(
+        ErpSplitRow(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(bottom = 20.dp)
         ) {
             OrdersPane(
                 state = state,
                 viewModel = viewModel,
-                modifier = Modifier.weight(0.42f).fillMaxHeight()
+                modifier = Modifier.pane(0.42f)
             )
             OrderDetailPane(
                 state = state,
                 viewModel = viewModel,
                 canManage = canManage,
-                modifier = Modifier.weight(0.58f).fillMaxHeight()
+                modifier = Modifier.pane(0.58f, narrowHeight = 640.dp)
             )
         }
     }

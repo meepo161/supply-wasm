@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import org.example.project.ui.theme.Tab
+import org.example.project.ui.theme.ErpSplitRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -117,11 +118,8 @@ fun SupplierScreen(viewModel: SupplierViewModel, modifier: Modifier = Modifier) 
 
 @Composable
 private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
-    Row(
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        GlassCard(modifier = Modifier.weight(0.6f).fillMaxHeight(), contentPadding = 14.dp) {
+    ErpSplitRow {
+        GlassCard(modifier = Modifier.pane(0.6f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Список",
                 count = state.suppliers.size,
@@ -177,7 +175,7 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
                 )
             }
         }
-        SupplierCardPane(state, viewModel, Modifier.weight(0.4f).fillMaxHeight())
+        SupplierCardPane(state, viewModel, Modifier.pane(0.4f, narrowHeight = 640.dp))
     }
 }
 
@@ -401,11 +399,8 @@ private fun SupplierCardPane(
 
 @Composable
 private fun OffersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
-    Row(
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        GlassCard(modifier = Modifier.weight(0.46f).fillMaxHeight(), contentPadding = 14.dp) {
+    ErpSplitRow {
+        GlassCard(modifier = Modifier.pane(0.46f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Предложения",
                 count = state.offers.size,
@@ -450,7 +445,7 @@ private fun OffersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                 )
             }
         }
-        ComparisonPane(state, viewModel, Modifier.weight(0.54f).fillMaxHeight())
+        ComparisonPane(state, viewModel, Modifier.pane(0.54f, narrowHeight = 640.dp))
     }
 }
 

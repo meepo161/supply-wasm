@@ -96,11 +96,12 @@ fun TaskListScreen(
             .fillMaxSize()
             .padding(horizontal = if (compact) 12.dp else 24.dp)
     ) {
-        // Шапка
-        if (!compact) Row(
+        // Шапка. FlowRow переносит кнопки под заголовок на узком экране, а не сжимает их.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        if (!compact) androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(ErpIconGlyph.Tasks, gradient = Gradients.Ocean, size = 40.dp, iconSize = 20.dp)

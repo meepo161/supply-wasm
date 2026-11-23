@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import org.example.project.ui.theme.Tab
+import org.example.project.ui.theme.ErpSplitRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -112,8 +113,8 @@ private fun OrdersPane(
     viewModel: PurchaseOrderViewModel,
     invoiceViewModel: SupplierInvoiceViewModel?
 ) {
-    Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        GlassCard(modifier = Modifier.weight(0.42f).fillMaxHeight(), contentPadding = 14.dp) {
+    ErpSplitRow {
+        GlassCard(modifier = Modifier.pane(0.42f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Заказы",
                 count = state.orders.size,
@@ -146,7 +147,7 @@ private fun OrdersPane(
                 )
             }
         }
-        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.weight(0.58f).fillMaxHeight())
+        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.pane(0.58f, narrowHeight = 640.dp))
     }
 }
 

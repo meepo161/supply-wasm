@@ -116,10 +116,12 @@ private fun DocumentListPage(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
+        // FlowRow: на узком экране кнопки переносятся, а не уходят за край.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val extrasRepo: org.example.project.data.ErpExtrasRepository = koinInject()
             val tplScope = rememberCoroutineScope()

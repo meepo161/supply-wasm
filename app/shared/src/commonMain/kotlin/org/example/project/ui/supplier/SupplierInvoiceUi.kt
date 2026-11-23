@@ -36,6 +36,7 @@ import org.example.project.dto.SupplierInvoiceDto
 import org.example.project.dto.SupplierInvoiceStatus
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpSplitRow
 import org.example.project.ui.theme.DetailRow
 import org.example.project.ui.theme.EmptyState
 import org.example.project.ui.theme.ErpDialog
@@ -114,8 +115,8 @@ fun SupplierInvoicesPane(viewModel: SupplierInvoiceViewModel) {
             }
         }
         if (state.dialog == null) state.error?.let { ErrorMessageCard(error = it, modifier = Modifier.padding(bottom = 8.dp)) }
-        Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            GlassCard(modifier = Modifier.weight(0.4f).fillMaxHeight(), contentPadding = 14.dp) {
+        ErpSplitRow {
+            GlassCard(modifier = Modifier.pane(0.4f), contentPadding = 14.dp) {
                 SectionHeader(
                     title = "Счета поставщиков",
                     count = state.invoices.size,
@@ -146,7 +147,7 @@ fun SupplierInvoicesPane(viewModel: SupplierInvoiceViewModel) {
                     }
                 }
             }
-            InvoiceCard(state, viewModel, Modifier.weight(0.6f).fillMaxHeight())
+            InvoiceCard(state, viewModel, Modifier.pane(0.6f, narrowHeight = 640.dp))
         }
     }
 }

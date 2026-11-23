@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -1208,5 +1209,43 @@ fun ErpIconButton(
             tint = if (enabled) tint else tint.copy(alpha = 0.4f),
             modifier = Modifier.size(18.dp)
         )
+    }
+}
+
+/**
+ * Область «список и карточка». Панели помечаются `Modifier.pane(вес)`.
+ * Широкий экран: панели рядом, доли ширины по весу.
+ * Узкий экран (меньше [breakpoint]): панели друг под другом на всю ширину,
+ * каждая фиксированной высоты, страница прокручивается. Так таблица и карточка
+ * не сжимаются до столбика из букв.
+ */
+class ErpSplitScope internal constructor(
+    private val wide: Boolean,
+    private val rowScope: RowScope?
+) {
+    fun Modifier.pane(weight: Float, narrowHeight: Dp = 520.dp): Modifier =
+        if (wide && rowScope != null) with(rowScope) { this@pane.weight(weight).fillMaxHeight() }
+        else this.fillMaxWidth().height(narrowHeight)
+}
+
+@Composable
+fun ErpSplitRow(
+    modifier: Modifier = Modifier,
+    breakpoint: Dp = 760.dp,
+    content: @Composable ErpSplitScope.() -> Unit
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        if (maxWidth >= breakpoint) {
+            Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ErpSplitScope(wide = true, rowScope = this).content()
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ErpSplitScope(wide = false, rowScope = null).content()
+            }
+        }
     }
 }

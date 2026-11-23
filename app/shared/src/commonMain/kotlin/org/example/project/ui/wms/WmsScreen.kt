@@ -730,10 +730,11 @@ private fun StockTab(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = "Остатки на складе", style = MaterialTheme.typography.headlineSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -752,10 +753,15 @@ private fun StockTab(
             }
         }
 
-        // Сводка по остаткам (KPI — кликабельная быстрая фильтрация)
-        Row(
+        // Сводка по остаткам: плитки «Позиций», «Доступно» и «Карантин» включают быструю фильтрацию.
+        // На узком экране плитки идут по две в ряд, а не сжимаются в столбики.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            maxItemsInEachRow = if (maxWidth < 600.dp) 2 else 5
         ) {
             StockKpiCard("Позиций", "${filteredStock.size}", Brand.Blue, Modifier.weight(1f).clickable {
                 filterOnlyAvailable = false
@@ -769,6 +775,7 @@ private fun StockTab(
             StockKpiCard("Карантин / брак", "$quarantineCount", if (quarantineCount > 0) Brand.Rose else Brand.Graphite, Modifier.weight(1f).clickable {
                 filterQuarantineOnly = !filterQuarantineOnly
             })
+        }
         }
 
         Row(
