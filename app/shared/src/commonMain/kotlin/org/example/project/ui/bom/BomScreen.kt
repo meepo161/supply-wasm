@@ -374,29 +374,25 @@ private fun RevisionInfoCard(
                         "REPLACE" -> "Заменить действующую ревизию?" to "Ревизия ${revision.revisionNumber} будет переведена в статус заменённой."
                         else -> "Отменить ревизию?" to "Черновик ревизии ${revision.revisionNumber} будет отменён без возможности редактирования."
                     }
-                    AlertDialog(
-                        onDismissRequest = { confirmRevisionAction = null },
-                        title = { Text(title) },
-                        text = { Text(body) },
-                        confirmButton = {
-                            GradientButton(
-                                text = "Подтвердить",
-                                onClick = {
-                                    confirmRevisionAction = null
-                                    when (action) {
-                                        "ACTIVATE" -> viewModel.activateRevision()
-                                        "REPLACE" -> viewModel.replaceRevision()
-                                        else -> viewModel.cancelRevision()
-                                    }
-                                },
-                                gradient = Gradients.Ocean,
-                                compact = true
-                            )
+                    org.example.project.ui.theme.ErpDialog(
+                        title = title,
+                        glyph = ErpIconGlyph.Layers,
+                        gradient = Gradients.Ocean,
+                        width = 500.dp,
+                        confirmText = "Подтвердить",
+                        onConfirm = {
+                            confirmRevisionAction = null
+                            when (action) {
+                                "ACTIVATE" -> viewModel.activateRevision()
+                                "REPLACE" -> viewModel.replaceRevision()
+                                else -> viewModel.cancelRevision()
+                            }
                         },
-                        dismissButton = {
-                            SoftButton(text = "Отмена", onClick = { confirmRevisionAction = null })
-                        }
-                    )
+                        confirmGradient = Gradients.Ocean,
+                        onDismiss = { confirmRevisionAction = null }
+                    ) {
+                        Text(body)
+                    }
                 }
                 if (viewModel.hasPermission("bom", "explode")) {
                     SoftButton(text = "Разузлование", onClick = { viewModel.showDialog(BomDialog.Explode) }, tint = Brand.Indigo)
@@ -514,57 +510,55 @@ private fun BomRevisionDiffDialog(
     val others = state.revisions.filter { it.id != current?.id }
     var expanded by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Сравнение ревизии ${current?.revisionNumber ?: ""}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (others.isEmpty()) {
-                    Text("Нет других ревизий для сравнения.")
-                } else {
-                    Box {
-                        val selectedTarget = others.firstOrNull { it.id == state.diffTargetRevisionId } ?: others.first()
-                        OutlinedButton(onClick = { expanded = true }) {
-                            Text("Сравнить с: ${selectedTarget.revisionNumber} (${selectedTarget.status.localizedName()})")
-                        }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            others.forEach { rev ->
-                                DropdownMenuItem(
-                                    text = { Text("${rev.revisionNumber} (${rev.status.localizedName()})") },
-                                    onClick = {
-                                        expanded = false
-                                        onSelectTarget(rev.id)
-                                    }
-                                )
+    org.example.project.ui.theme.ErpDialog(
+        title = "Сравнение ревизии ${current?.revisionNumber ?: ""}",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 680.dp,
+        dismissText = "Закрыть",
+        onDismiss = onDismiss
+    ) {
+        if (others.isEmpty()) {
+            Text("Нет других ревизий для сравнения.")
+        } else {
+            Box {
+                val selectedTarget = others.firstOrNull { it.id == state.diffTargetRevisionId } ?: others.first()
+                OutlinedButton(onClick = { expanded = true }) {
+                    Text("Сравнить с: ${selectedTarget.revisionNumber} (${selectedTarget.status.localizedName()})")
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    others.forEach { rev ->
+                        DropdownMenuItem(
+                            text = { Text("${rev.revisionNumber} (${rev.status.localizedName()})") },
+                            onClick = {
+                                expanded = false
+                                onSelectTarget(rev.id)
                             }
-                        }
+                        )
                     }
-                    state.operationError?.let { ErrorMessageCard(error = it) }
-                    val diff = state.revisionDiff
-                    if (diff != null) {
-                        if (diff.items.isEmpty()) {
-                            Text("Различий между ревизиями не найдено.")
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                items(diff.items) { item ->
-                                    Text(
-                                        text = "[${item.kind.name}] ${item.code} — ${item.name} (${item.unit}): было ${item.leftQuantity ?: "—"}, стало ${item.rightQuantity ?: "—"}",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }
+                }
+            }
+            state.operationError?.let { ErrorMessageCard(error = it) }
+            val diff = state.revisionDiff
+            if (diff != null) {
+                if (diff.items.isEmpty()) {
+                    Text("Различий между ревизиями не найдено.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(diff.items) { item ->
+                            Text(
+                                text = "[${item.kind.name}] ${item.code} — ${item.name} (${item.unit}): было ${item.leftQuantity ?: "—"}, стало ${item.rightQuantity ?: "—"}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Закрыть") }
         }
-    )
+    }
 }
 
 @Composable
@@ -577,62 +571,60 @@ private fun BomWhereUsedDialog(
     var expanded by remember { mutableStateOf(false) }
     val selectedNom = state.nomenclature.firstOrNull { it.id == state.whereUsedNomenclatureId }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Применяемость компонента (Where-Used)") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (state.nomenclature.isEmpty()) {
-                    Text("Справочник номенклатуры пуст.")
-                } else {
-                    Box {
-                        OutlinedButton(onClick = { expanded = true }) {
-                            Text(selectedNom?.let { "${it.code} — ${it.name}" } ?: "Выберите компонент")
-                        }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            state.nomenclature.take(40).forEach { nom ->
-                                DropdownMenuItem(
-                                    text = { Text("${nom.code} — ${nom.name}") },
-                                    onClick = {
-                                        expanded = false
-                                        onSelectNomenclature(nom.id)
-                                    }
-                                )
+    org.example.project.ui.theme.ErpDialog(
+        title = "Применяемость компонента (Where-Used)",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 680.dp,
+        dismissText = "Закрыть",
+        onDismiss = onDismiss
+    ) {
+        if (state.nomenclature.isEmpty()) {
+            Text("Справочник номенклатуры пуст.")
+        } else {
+            Box {
+                OutlinedButton(onClick = { expanded = true }) {
+                    Text(selectedNom?.let { "${it.code} — ${it.name}" } ?: "Выберите компонент")
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    state.nomenclature.take(40).forEach { nom ->
+                        DropdownMenuItem(
+                            text = { Text("${nom.code} — ${nom.name}") },
+                            onClick = {
+                                expanded = false
+                                onSelectNomenclature(nom.id)
                             }
-                        }
+                        )
                     }
-                    state.operationError?.let { ErrorMessageCard(error = it) }
-                    if (state.whereUsedItems.isEmpty()) {
-                        Text("Компонент не используется ни в одной ревизии BOM.")
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                }
+            }
+            state.operationError?.let { ErrorMessageCard(error = it) }
+            if (state.whereUsedItems.isEmpty()) {
+                Text("Компонент не используется ни в одной ревизии BOM.")
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(state.whereUsedItems) { item ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            items(state.whereUsedItems) { item ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${item.modelCode} (${item.revisionNumber}) • кол-во ${item.quantity} ${item.unit}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    TextButton(onClick = { onOpenRevision(item.revisionId) }) {
-                                        Text("Открыть")
-                                    }
-                                }
+                            Text(
+                                text = "${item.modelCode} (${item.revisionNumber}) • кол-во ${item.quantity} ${item.unit}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { onOpenRevision(item.revisionId) }) {
+                                Text("Открыть")
                             }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Закрыть") }
         }
-    )
+    }
 }
 

@@ -699,18 +699,21 @@ private fun ConversationMessageItem(
         }
     }
     if (revoking) {
-        AlertDialog(
-            onDismissRequest = { revoking = false },
-            title = { Text("Удалить сообщение?") },
-            text = { Text("Текст будет скрыт, а системный след сохранится.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel?.revokeMessage(message)
-                    revoking = false
-                }) { Text("Удалить") }
+        org.example.project.ui.theme.ErpDialog(
+            title = "Удалить сообщение?",
+            glyph = ErpIconGlyph.Send,
+            gradient = org.example.project.ui.theme.Gradients.Sunset,
+            width = 460.dp,
+            confirmText = "Удалить",
+            onConfirm = {
+                viewModel?.revokeMessage(message)
+                revoking = false
             },
-            dismissButton = { TextButton(onClick = { revoking = false }) { Text("Отмена") } }
-        )
+            confirmGradient = org.example.project.ui.theme.Gradients.Sunset,
+            onDismiss = { revoking = false }
+        ) {
+            Text("Текст будет скрыт, а системный след сохранится.")
+        }
     }
     if (forwarding) {
         ForwardConversationDialog(message, forwardTargets, currentUserId, onDismiss = { forwarding = false }) { target ->
@@ -741,15 +744,20 @@ private fun ForwardConversationDialog(
         "${target.kind}:${target.id}" == selectedKey
     }?.first
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Кому переслать?") },
-        text = {
-            Column(Modifier.fillMaxWidth()) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Кому переслать?",
+        glyph = ErpIconGlyph.Send,
+        gradient = org.example.project.ui.theme.Gradients.Primary,
+        width = 580.dp,
+        confirmText = "Переслать",
+        onConfirm = { selectedTarget?.let(onForward) },
+        confirmEnabled = selectedTarget != null,
+        onDismiss = onDismiss
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Text(
                             text = "Пересылаемое сообщение",
@@ -842,18 +850,7 @@ private fun ForwardConversationDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = { selectedTarget?.let(onForward) },
-                enabled = selectedTarget != null
-            ) {
-                Text("Переслать")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
-}
+    }
 
 @Composable
 private fun ConversationSystemEvent(message: ConversationMessageDto) {

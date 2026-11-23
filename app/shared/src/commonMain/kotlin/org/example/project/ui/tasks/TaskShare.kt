@@ -97,27 +97,35 @@ private fun TaskShareDialog(
         query.isBlank() || it.fullName.contains(query.trim(), ignoreCase = true)
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Отправить задачу в личные сообщения") },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text(task.number, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Text(task.title, style = MaterialTheme.typography.titleSmall)
-                    }
-                }
-                if (sent) {
-                    Text(
-                        "Задача отправлена. Получатель сможет открыть её по ссылке в сообщении.",
-                        color = MaterialTheme.colorScheme.primary,
+    org.example.project.ui.theme.ErpDialog(
+        title = "Отправить задачу в личные сообщения",
+        glyph = org.example.project.ui.theme.ErpIconGlyph.Send,
+        gradient = org.example.project.ui.theme.Gradients.Primary,
+        width = 580.dp,
+        confirmText = if (sent) "Готово" else if (state.isSharingTask) "Отправка…" else "Отправить",
+        onConfirm = {
+            if (sent) {
+                onDismiss()
+            } else {
+                selectedUserId?.let { viewModel.shareTask(task, it) }
+            }
+        },
+        confirmEnabled = sent || (selectedUserId != null && !state.isSharingTask),
+        onDismiss = { if (!state.isSharingTask) onDismiss() }
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                Text(task.number, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(task.title, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+        if (sent) {
+            Text(
+                "Задача отправлена. Получатель сможет открыть её по ссылке в сообщении.",
+                color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {
@@ -173,24 +181,7 @@ private fun TaskShareDialog(
                     state.shareError?.let { ErrorMessageCard(it) }
                 }
             }
-        },
-        confirmButton = {
-            if (sent) {
-                Button(onClick = onDismiss) { Text("Готово") }
-            } else {
-                Button(
-                    onClick = { selectedUserId?.let { viewModel.shareTask(task, it) } },
-                    enabled = selectedUserId != null && !state.isSharingTask
-                ) {
-                    Text(if (state.isSharingTask) "Отправка…" else "Отправить")
-                }
-            }
-        },
-        dismissButton = {
-            if (!sent) TextButton(onClick = onDismiss, enabled = !state.isSharingTask) { Text("Отмена") }
-        }
-    )
-}
+    }
 
 
 @Composable

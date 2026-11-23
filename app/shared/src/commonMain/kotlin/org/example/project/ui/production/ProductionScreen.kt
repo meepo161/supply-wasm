@@ -105,58 +105,52 @@ fun ProductionScreen(
         }
         var description by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
         var measures by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = viewModel::dismissDialog,
-            title = { Text("Новое несоответствие (NCR)") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.operationError?.let { ErrorMessageCard(error = it) }
-                    org.example.project.ui.components.SearchableDropdown(
-                        items = nonconformityCategories,
-                        selected = nonconformityCategories.firstOrNull { it.first == category },
-                        onSelect = { category = it.first },
-                        label = "Объект несоответствия",
-                        itemText = { it.second },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    org.example.project.ui.components.SearchableDropdown(
-                        items = org.example.project.dto.NonconformitySeverity.entries,
-                        selected = severity,
-                        onSelect = { severity = it },
-                        label = "Критичность",
-                        itemText = { it.localizedName() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    org.example.project.ui.theme.ErpTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = "Что обнаружено *",
-                        singleLine = false,
-                        minLines = 2,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    org.example.project.ui.theme.ErpTextField(
-                        value = measures,
-                        onValueChange = { measures = it },
-                        label = "Временные меры",
-                        singleLine = false,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                GradientButton(
-                    text = "Зарегистрировать",
-                    onClick = { viewModel.createNonconformity(category, description, severity, measures) },
-                    gradient = Gradients.Aurora,
-                    compact = true,
-                    enabled = description.isNotBlank() && !state.isActionRunning
+        org.example.project.ui.theme.ErpDialog(
+            title = "Новое несоответствие (NCR)",
+            glyph = ErpIconGlyph.Layers,
+            gradient = Gradients.Aurora,
+            width = 640.dp,
+            confirmText = "Зарегистрировать",
+            onConfirm = { viewModel.createNonconformity(category, description, severity, measures) },
+            confirmEnabled = description.isNotBlank() && !state.isActionRunning,
+            confirmGradient = Gradients.Aurora,
+            onDismiss = viewModel::dismissDialog
+        ) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                org.example.project.ui.components.SearchableDropdown(
+                    items = nonconformityCategories,
+                    selected = nonconformityCategories.firstOrNull { it.first == category },
+                    onSelect = { category = it.first },
+                    label = "Объект несоответствия",
+                    itemText = { it.second },
+                    modifier = Modifier.weight(1f)
                 )
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = viewModel::dismissDialog) { Text("Отмена") }
+                org.example.project.ui.components.SearchableDropdown(
+                    items = org.example.project.dto.NonconformitySeverity.entries,
+                    selected = severity,
+                    onSelect = { severity = it },
+                    label = "Критичность",
+                    itemText = { it.localizedName() },
+                    modifier = Modifier.weight(1f)
+                )
             }
-        )
+            org.example.project.ui.theme.ErpTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = "Что обнаружено *",
+                singleLine = false,
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth()
+            )
+            org.example.project.ui.theme.ErpTextField(
+                value = measures,
+                onValueChange = { measures = it },
+                label = "Временные меры",
+                singleLine = false,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

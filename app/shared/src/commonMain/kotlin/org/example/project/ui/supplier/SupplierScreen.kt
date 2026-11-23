@@ -24,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -240,137 +242,156 @@ private fun SupplierCardPane(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            var cardSection by remember(supplier.id) { mutableStateOf(0) }
+            val sectionTitles = listOf("Реквизиты", "Контакты (${card.contacts.size + card.addresses.size})", "Документы (${card.documents.size})")
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                sectionTitles.forEachIndexed { idx, label ->
+                    SoftButton(
+                        text = label,
+                        onClick = { cardSection = idx },
+                        tint = if (cardSection == idx) Brand.Orange else Brand.Slate
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
             Column(
                 modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
             ) {
-                SectionHeader(title = "Реквизиты", accent = Brand.Orange)
-                DetailRow("Полное наименование", supplier.fullName ?: "—")
-                DetailRow("ИНН", supplier.inn ?: "—")
-                DetailRow("КПП", supplier.kpp ?: "—")
-                DetailRow("ОГРН", supplier.ogrn ?: "—")
-                DetailRow("Страна", supplier.country ?: "—")
-                DetailRow("Юридический адрес", supplier.legalAddress ?: "—")
-                DetailRow("Телефон", supplier.phone ?: "—")
-                DetailRow("Почта", supplier.email ?: "—")
-                DetailRow("Сайт", supplier.site ?: "—")
-                DetailRow(
-                    "Ответственный",
-                    state.users.firstOrNull { it.id == supplier.responsibleId }?.fullName
-                        ?: supplier.responsibleId?.toString() ?: "—"
-                )
-                supplier.verificationNote?.takeIf { it.isNotBlank() }?.let { note ->
-                    DetailRow("Примечание проверки", note)
-                }
+                when (cardSection) {
+                    0 -> {
+                        SectionHeader(title = "Реквизиты", accent = Brand.Orange)
+                        DetailRow("Полное наименование", supplier.fullName ?: "—")
+                        DetailRow("ИНН", supplier.inn ?: "—")
+                        DetailRow("КПП", supplier.kpp ?: "—")
+                        DetailRow("ОГРН", supplier.ogrn ?: "—")
+                        DetailRow("Страна", supplier.country ?: "—")
+                        DetailRow("Юридический адрес", supplier.legalAddress ?: "—")
+                        DetailRow("Телефон", supplier.phone ?: "—")
+                        DetailRow("Почта", supplier.email ?: "—")
+                        DetailRow("Сайт", supplier.site ?: "—")
+                        DetailRow(
+                            "Ответственный",
+                            state.users.firstOrNull { it.id == supplier.responsibleId }?.fullName
+                                ?: supplier.responsibleId?.toString() ?: "—"
+                        )
+                        supplier.verificationNote?.takeIf { it.isNotBlank() }?.let { note ->
+                            DetailRow("Примечание проверки", note)
+                        }
 
-                Spacer(Modifier.height(12.dp))
-                SectionHeader(
-                    title = "Контакты",
-                    count = card.contacts.size,
-                    accent = Brand.Blue,
-                    action = {
-                        if (viewModel.canManage()) {
-                            SoftButton(
-                                text = "Добавить",
-                                onClick = { viewModel.showDialog(SupplierDialog.AddContact) }
+                        Spacer(Modifier.height(12.dp))
+                        SectionHeader(
+                            title = "Категории",
+                            count = card.categories.size,
+                            accent = Brand.Violet,
+                            action = {
+                                if (viewModel.canManage()) {
+                                    SoftButton(
+                                        text = "Изменить",
+                                        onClick = { viewModel.showDialog(SupplierDialog.EditCategories) }
+                                    )
+                                }
+                            }
+                        )
+                        if (card.categories.isEmpty()) {
+                            Text(
+                                "Категории не назначены",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                card.categories.forEach { category ->
+                                    PillBadge(text = category.name, accent = Brand.Violet)
+                                }
+                            }
+                        }
+                    }
+                    1 -> {
+                        SectionHeader(
+                            title = "Контакты",
+                            count = card.contacts.size,
+                            accent = Brand.Blue,
+                            action = {
+                                if (viewModel.canManage()) {
+                                    SoftButton(
+                                        text = "Добавить",
+                                        onClick = { viewModel.showDialog(SupplierDialog.AddContact) }
+                                    )
+                                }
+                            }
+                        )
+                        if (card.contacts.isEmpty()) {
+                            Text(
+                                "Контакты не заведены",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            SupplierContactsGrid(
+                                contacts = card.contacts,
+                                modifier = Modifier.fillMaxWidth().height(180.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        SectionHeader(
+                            title = "Адреса",
+                            count = card.addresses.size,
+                            accent = Brand.Indigo,
+                            action = {
+                                if (viewModel.canManage()) {
+                                    SoftButton(
+                                        text = "Добавить",
+                                        onClick = { viewModel.showDialog(SupplierDialog.AddAddress) }
+                                    )
+                                }
+                            }
+                        )
+                        if (card.addresses.isEmpty()) {
+                            Text(
+                                "Адреса не заведены",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            card.addresses.forEach { address ->
+                                DetailRow(address.kind.name, address.address)
+                            }
+                        }
+                    }
+                    2 -> {
+                        SectionHeader(
+                            title = "Документы",
+                            count = card.documents.size,
+                            accent = Brand.Teal,
+                            action = {
+                                if (viewModel.canManage()) {
+                                    SoftButton(
+                                        text = "Добавить",
+                                        onClick = { viewModel.showDialog(SupplierDialog.AddDocument) }
+                                    )
+                                }
+                            }
+                        )
+                        if (card.documents.isEmpty()) {
+                            Text(
+                                "Договоры и сертификаты не заведены",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            SupplierDocumentsGrid(
+                                documents = card.documents,
+                                modifier = Modifier.fillMaxWidth().height(240.dp)
                             )
                         }
                     }
-                )
-                if (card.contacts.isEmpty()) {
-                    Text(
-                        "Контакты не заведены",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    SupplierContactsGrid(
-                        contacts = card.contacts,
-                        modifier = Modifier.fillMaxWidth().height(140.dp)
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-                SectionHeader(
-                    title = "Адреса",
-                    count = card.addresses.size,
-                    accent = Brand.Indigo,
-                    action = {
-                        if (viewModel.canManage()) {
-                            SoftButton(
-                                text = "Добавить",
-                                onClick = { viewModel.showDialog(SupplierDialog.AddAddress) }
-                            )
-                        }
-                    }
-                )
-                if (card.addresses.isEmpty()) {
-                    Text(
-                        "Адреса не заведены",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    card.addresses.forEach { address ->
-                        DetailRow(address.kind.name, address.address)
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                SectionHeader(
-                    title = "Категории",
-                    count = card.categories.size,
-                    accent = Brand.Violet,
-                    action = {
-                        if (viewModel.canManage()) {
-                            SoftButton(
-                                text = "Изменить",
-                                onClick = { viewModel.showDialog(SupplierDialog.EditCategories) }
-                            )
-                        }
-                    }
-                )
-                if (card.categories.isEmpty()) {
-                    Text(
-                        "Категории не назначены",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        card.categories.forEach { category ->
-                            PillBadge(text = category.name, accent = Brand.Violet)
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                SectionHeader(
-                    title = "Документы",
-                    count = card.documents.size,
-                    accent = Brand.Teal,
-                    action = {
-                        if (viewModel.canManage()) {
-                            SoftButton(
-                                text = "Добавить",
-                                onClick = { viewModel.showDialog(SupplierDialog.AddDocument) }
-                            )
-                        }
-                    }
-                )
-                if (card.documents.isEmpty()) {
-                    Text(
-                        "Договоры и сертификаты не заведены",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    SupplierDocumentsGrid(
-                        documents = card.documents,
-                        modifier = Modifier.fillMaxWidth().height(150.dp)
-                    )
                 }
                 Spacer(Modifier.height(12.dp))
             }
@@ -685,56 +706,49 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
     }
 
     if (state.activeDialog == SupplierDialog.CreateClaim) {
-        var supplierExpanded by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+        var supplierExpanded by remember { mutableStateOf(false) }
         val selectedSupplier = state.suppliers.firstOrNull { it.id == state.claimForm.supplierId }
             ?: state.suppliers.firstOrNull()
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = viewModel::dismissDialog,
-            title = { Text("Новая рекламация") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box {
-                        androidx.compose.material3.OutlinedButton(onClick = { supplierExpanded = true }) {
-                            Text(selectedSupplier?.name ?: "Выберите поставщика")
-                        }
-                        androidx.compose.material3.DropdownMenu(
-                            expanded = supplierExpanded,
-                            onDismissRequest = { supplierExpanded = false }
-                        ) {
-                            state.suppliers.forEach { s ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(s.name) },
-                                    onClick = {
-                                        supplierExpanded = false
-                                        viewModel.updateClaimForm(state.claimForm.copy(supplierId = s.id))
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    org.example.project.ui.theme.ErpTextField(
-                        value = state.claimForm.description,
-                        onValueChange = { viewModel.updateClaimForm(state.claimForm.copy(description = it)) },
-                        label = "Описание претензии"
-                    )
-                    org.example.project.ui.theme.ErpTextField(
-                        value = state.claimForm.claimAmount,
-                        onValueChange = { viewModel.updateClaimForm(state.claimForm.copy(claimAmount = it)) },
-                        label = "Сумма претензии (RUB)"
-                    )
+        org.example.project.ui.theme.ErpDialog(
+            title = "Новая рекламация",
+            glyph = ErpIconGlyph.Cart,
+            gradient = Gradients.Sunset,
+            width = 580.dp,
+            confirmText = "Создать",
+            onConfirm = viewModel::createClaim,
+            confirmGradient = Gradients.Sunset,
+            onDismiss = viewModel::dismissDialog
+        ) {
+            Box {
+                androidx.compose.material3.OutlinedButton(onClick = { supplierExpanded = true }) {
+                    Text(selectedSupplier?.name ?: "Выберите поставщика")
                 }
-            },
-            confirmButton = {
-                GradientButton(
-                    text = "Создать",
-                    onClick = viewModel::createClaim,
-                    gradient = Gradients.Sunset,
-                    compact = true
-                )
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = viewModel::dismissDialog) { Text("Отмена") }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = supplierExpanded,
+                    onDismissRequest = { supplierExpanded = false }
+                ) {
+                    state.suppliers.forEach { s ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(s.name) },
+                            onClick = {
+                                supplierExpanded = false
+                                viewModel.updateClaimForm(state.claimForm.copy(supplierId = s.id))
+                            }
+                        )
+                    }
+                }
             }
-        )
+            org.example.project.ui.theme.ErpTextField(
+                value = state.claimForm.description,
+                onValueChange = { viewModel.updateClaimForm(state.claimForm.copy(description = it)) },
+                label = "Описание претензии",
+                singleLine = false
+            )
+            org.example.project.ui.theme.ErpTextField(
+                value = state.claimForm.claimAmount,
+                onValueChange = { viewModel.updateClaimForm(state.claimForm.copy(claimAmount = it)) },
+                label = "Сумма претензии (RUB)"
+            )
+        }
     }
 }

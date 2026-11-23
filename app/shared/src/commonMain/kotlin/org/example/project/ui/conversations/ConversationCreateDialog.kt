@@ -60,16 +60,24 @@ fun ConversationCreateDialog(
         else -> false
     }
 
-    AlertDialog(
-        onDismissRequest = { if (!isCreating) onDismiss() },
-        modifier = modifier,
-        title = { Text("Новый чат") },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Новый чат",
+        glyph = org.example.project.ui.theme.ErpIconGlyph.Send,
+        gradient = org.example.project.ui.theme.Gradients.Primary,
+        width = 600.dp,
+        confirmText = if (isCreating) "Создание…" else "Создать",
+        onConfirm = {
+            when (kind) {
+                ConversationKind.DIRECT -> selectedMembers.firstOrNull()?.let(onCreateDirect)
+                ConversationKind.GROUP -> onCreateGroup(title.trim(), selectedMembers.toList())
+                else -> Unit
+            }
+        },
+        confirmEnabled = canCreate,
+        onDismiss = { if (!isCreating) onDismiss() },
+        modifier = modifier
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = kind == ConversationKind.DIRECT,
                         onClick = {
@@ -195,26 +203,5 @@ fun ConversationCreateDialog(
                         )
                     }
                 }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    when (kind) {
-                        ConversationKind.DIRECT -> selectedMembers.firstOrNull()?.let(onCreateDirect)
-                        ConversationKind.GROUP -> onCreateGroup(title.trim(), selectedMembers.toList())
-                        else -> Unit
-                    }
-                },
-                enabled = canCreate
-            ) {
-                Text(if (isCreating) "Создание…" else "Создать")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isCreating) {
-                Text("Отмена")
-            }
-        }
-    )
+    }
 }

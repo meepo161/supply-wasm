@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.IssueOrderDto
 import org.example.project.ui.theme.ErpFormat
+import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.components.SearchableDropdown
 import org.example.project.dto.IssueStatus
 import org.example.project.dto.NomenclatureDto
@@ -134,82 +135,69 @@ private fun TransferDetailDialog(
     val canCancel = transfer.status == TransferStatus.CREATED || transfer.status == TransferStatus.SHIPPED ||
         transfer.status == TransferStatus.IN_TRANSIT
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Перемещение ${transfer.number}", modifier = Modifier.weight(1f))
-                PillBadge(text = transfer.status.localizedName(), accent = transferStatusAccent(transfer.status))
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val names = LocalWmsNames.current
-                Text("Вид: ${transfer.kind.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-                Text("Позиция: ${names.item(transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Откуда: ${names.warehouse(transfer.fromWarehouseId)}, ячейка ${names.location(transfer.fromLocationId)}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    "Куда: ${names.warehouse(transfer.toWarehouseId)}, ячейка ${names.location(transfer.toLocationId)}",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text("Количество: ${names.qty(transfer.quantity, transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
-                Text("Принято: ${names.qty(transfer.receivedQuantity, transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
-                if (transfer.note != null) {
-                    Text("Примечание: ${transfer.note}", style = MaterialTheme.typography.bodyMedium)
-                }
+    org.example.project.ui.theme.ErpDialog(
+        title = "Перемещение ${transfer.number}",
+        subtitle = transfer.status.localizedName(),
+        glyph = ErpIconGlyph.Send,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 660.dp,
+        dismissText = "Закрыть",
+        onDismiss = onClose,
+        extraActions = {
+            if (canShip) Button(onClick = onShip) { Text("Отгрузить") }
+            if (canInTransit) Button(onClick = onInTransit) { Text("В путь") }
+            if (canReceive) Button(onClick = onReceive) { Text("Принять") }
+            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+        }
+    ) {
+        val names = LocalWmsNames.current
+        Text("Вид: ${transfer.kind.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+        Text("Позиция: ${names.item(transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "Откуда: ${names.warehouse(transfer.fromWarehouseId)}, ячейка ${names.location(transfer.fromLocationId)}",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            "Куда: ${names.warehouse(transfer.toWarehouseId)}, ячейка ${names.location(transfer.toLocationId)}",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text("Количество: ${names.qty(transfer.quantity, transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
+        Text("Принято: ${names.qty(transfer.receivedQuantity, transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
+        if (transfer.note != null) {
+            Text("Примечание: ${transfer.note}", style = MaterialTheme.typography.bodyMedium)
+        }
 
-                if (canReceive) {
-                    HorizontalDivider()
-                    OutlinedTextField(
-                        value = receiveQuantity,
-                        onValueChange = onReceiveQuantityChange,
-                        label = { Text("Принятое количество *") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                if (canCancel) {
-                    OutlinedTextField(
-                        value = cancelReason,
-                        onValueChange = onCancelReasonChange,
-                        label = { Text("Причина отмены (для отмены)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2
-                    )
-                }
-                if (transfer.events.isNotEmpty()) {
-                    HorizontalDivider()
-                    Text("История", style = MaterialTheme.typography.labelLarge)
-                    transfer.events.forEach { event ->
-                        Text(
-                            text = "${event.action.name} · ${event.quantity ?: "без количества"} · ${ErpFormat.dateRu(event.createdAt)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+        if (canReceive) {
+            HorizontalDivider()
+            OutlinedTextField(
+                value = receiveQuantity,
+                onValueChange = onReceiveQuantityChange,
+                label = { Text("Принятое количество *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+        if (canCancel) {
+            OutlinedTextField(
+                value = cancelReason,
+                onValueChange = onCancelReasonChange,
+                label = { Text("Причина отмены (для отмены)") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+        }
+        if (transfer.events.isNotEmpty()) {
+            HorizontalDivider()
+            Text("История", style = MaterialTheme.typography.labelLarge)
+            transfer.events.forEach { event ->
+                Text(
+                    text = "${event.action.name} · ${event.quantity ?: "без количества"} · ${ErpFormat.dateRu(event.createdAt)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canShip) Button(onClick = onShip) { Text("Отгрузить") }
-                if (canInTransit) Button(onClick = onInTransit) { Text("В путь") }
-                if (canReceive) Button(onClick = onReceive) { Text("Принять") }
-                if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
-    )
+        }
+    }
 }
 
 private fun transferStatusAccent(status: TransferStatus) = when (status) {
@@ -234,94 +222,96 @@ internal fun CreateTransferDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новое перемещение") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                if (warehouses.isEmpty()) {
-                    Text(
-                        text = "Нет доступных складов. Сначала создайте склад.",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                WarehouseDropdown(
-                    warehouses = warehouses,
-                    selected = warehouses.find { it.id == form.fromWarehouseId },
-                    onSelect = { onFromWarehouseChange(it.id) },
-                    label = "Склад-источник *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                LocationDropdown(
-                    locations = locationsFrom,
-                    selected = locationsFrom.find { it.id == form.fromLocationId },
-                    onSelect = { onFormChange(form.copy(fromLocationId = it.id)) },
-                    label = "Ячейка-источник *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                WarehouseDropdown(
-                    warehouses = warehouses,
-                    selected = warehouses.find { it.id == form.toWarehouseId },
-                    onSelect = { onToWarehouseChange(it.id) },
-                    label = "Склад-получатель *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                val availableTargetLocations = if (form.fromWarehouseId != null && form.fromWarehouseId == form.toWarehouseId) {
-                    locationsTo.filter { it.id != form.fromLocationId }
-                } else {
-                    locationsTo
-                }
-                LocationDropdown(
-                    locations = availableTargetLocations,
-                    selected = availableTargetLocations.find { it.id == form.toLocationId },
-                    onSelect = { onFormChange(form.copy(toLocationId = it.id)) },
-                    label = "Ячейка-получатель *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                NomenclatureDropdown(
-                    items = nomenclature,
-                    selected = nomenclature.find { it.id == form.nomenclatureId },
-                    onSelect = { onFormChange(form.copy(nomenclatureId = it.id, lotId = "")) },
-                    label = "Номенклатура *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = form.quantity,
-                    onValueChange = { onFormChange(form.copy(quantity = it)) },
-                    label = { Text("Количество *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                LotPicker(
-                    value = form.lotId,
-                    onChange = { onFormChange(form.copy(lotId = it)) },
-                    nomenclatureId = form.nomenclatureId,
-                    label = "Партия (если партия учитывается)",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = form.note,
-                    onValueChange = { onFormChange(form.copy(note = it)) },
-                    label = { Text("Примечание") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                Text(
-                    text = "Вид перемещения определится автоматически: внутри склада или между складами.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onCreate, enabled = warehouses.isNotEmpty()) { Text("Создать") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    org.example.project.ui.theme.ErpDialog(
+        title = "Новое перемещение",
+        glyph = ErpIconGlyph.Send,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 680.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty(),
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        if (warehouses.isEmpty()) {
+            Text(
+                text = "Нет доступных складов. Сначала создайте склад.",
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            WarehouseDropdown(
+                warehouses = warehouses,
+                selected = warehouses.find { it.id == form.fromWarehouseId },
+                onSelect = { onFromWarehouseChange(it.id) },
+                label = "Склад-источник *",
+                modifier = Modifier.weight(1f)
+            )
+            LocationDropdown(
+                locations = locationsFrom,
+                selected = locationsFrom.find { it.id == form.fromLocationId },
+                onSelect = { onFormChange(form.copy(fromLocationId = it.id)) },
+                label = "Ячейка-источник *",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        val availableTargetLocations = if (form.fromWarehouseId != null && form.fromWarehouseId == form.toWarehouseId) {
+            locationsTo.filter { it.id != form.fromLocationId }
+        } else {
+            locationsTo
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            WarehouseDropdown(
+                warehouses = warehouses,
+                selected = warehouses.find { it.id == form.toWarehouseId },
+                onSelect = { onToWarehouseChange(it.id) },
+                label = "Склад-получатель *",
+                modifier = Modifier.weight(1f)
+            )
+            LocationDropdown(
+                locations = availableTargetLocations,
+                selected = availableTargetLocations.find { it.id == form.toLocationId },
+                onSelect = { onFormChange(form.copy(toLocationId = it.id)) },
+                label = "Ячейка-получатель *",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            NomenclatureDropdown(
+                items = nomenclature,
+                selected = nomenclature.find { it.id == form.nomenclatureId },
+                onSelect = { onFormChange(form.copy(nomenclatureId = it.id, lotId = "")) },
+                label = "Номенклатура *",
+                modifier = Modifier.weight(1.3f)
+            )
+            OutlinedTextField(
+                value = form.quantity,
+                onValueChange = { onFormChange(form.copy(quantity = it)) },
+                label = { Text("Количество *") },
+                modifier = Modifier.weight(0.7f),
+                singleLine = true
+            )
+        }
+        LotPicker(
+            value = form.lotId,
+            onChange = { onFormChange(form.copy(lotId = it)) },
+            nomenclatureId = form.nomenclatureId,
+            label = "Партия (если партия учитывается)",
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = form.note,
+            onValueChange = { onFormChange(form.copy(note = it)) },
+            label = { Text("Примечание") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+        Text(
+            text = "Вид перемещения определится автоматически: внутри склада или между складами.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -418,23 +408,21 @@ private fun IssueDetailDialog(
     val canRefuse = issue.status == IssueStatus.DRAFT || issue.status == IssueStatus.ISSUED
     val canCancel = issue.status == IssueStatus.DRAFT
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Выдача ${issue.number}", modifier = Modifier.weight(1f))
-                PillBadge(text = issue.status.localizedName(), accent = issueStatusAccent(issue.status))
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Выдача ${issue.number}",
+        subtitle = issue.status.localizedName(),
+        glyph = ErpIconGlyph.ChevronRight,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 720.dp,
+        dismissText = "Закрыть",
+        onDismiss = onClose,
+        extraActions = {
+            if (canIssue) Button(onClick = onIssue) { Text("Провести выдачу") }
+            if (canConfirm) Button(onClick = onConfirm) { Text("Подтвердить получение") }
+            if (canRefuse) TextButton(onClick = onRefuse) { Text("Отказаться") }
+            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+        }
+    ) {
                 val names = LocalWmsNames.current
                 Text("Основание: ${issue.reasonType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 issue.reasonNote?.let {
@@ -535,18 +523,7 @@ private fun IssueDetailDialog(
                         minLines = 2
                     )
                 }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canIssue) Button(onClick = onIssue) { Text("Провести выдачу") }
-                if (canConfirm) Button(onClick = onConfirm) { Text("Подтвердить получение") }
-                if (canRefuse) TextButton(onClick = onRefuse) { Text("Отказаться") }
-                if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
-    )
+    }
 }
 
 private fun issueStatusAccent(status: IssueStatus) = when (status) {
@@ -572,14 +549,16 @@ internal fun CreateIssueDialog(
     onDismiss: () -> Unit,
     reservations: List<org.example.project.dto.ReservationDto> = emptyList()
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новый заказ на выдачу") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Новый заказ на выдачу",
+        glyph = ErpIconGlyph.ChevronRight,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 700.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty() && form.lines.isNotEmpty(),
+        onDismiss = onDismiss
+    ) {
                 error?.let { ErrorMessageCard(error = it) }
                 if (warehouses.isEmpty()) {
                     Text(
@@ -683,15 +662,7 @@ internal fun CreateIssueDialog(
                     }
                 }
                 Button(onClick = onAddLine) { Text("Добавить строку") }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onCreate, enabled = warehouses.isNotEmpty() && form.lines.isNotEmpty()) {
-                Text("Создать")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -775,23 +746,17 @@ private fun ReturnDetailDialog(
     val canReceive = order.status == ReturnStatus.DRAFT
     val canInspect = order.status == ReturnStatus.RECEIVED
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Возврат ${order.number}", modifier = Modifier.weight(1f))
-                PillBadge(text = order.status.localizedName(), accent = returnStatusAccent(order.status))
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Возврат ${order.number}",
+        subtitle = order.status.localizedName(),
+        glyph = ErpIconGlyph.Refresh,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 680.dp,
+        confirmText = if (canReceive) "Принять на карантин" else null,
+        onConfirm = if (canReceive) onReceive else null,
+        dismissText = "Закрыть",
+        onDismiss = onClose
+    ) {
                 val names = LocalWmsNames.current
                 val issueDetails = rememberIssueDetails(order.issueOrderId)
                 Text("Выдача: ${names.issue(order.issueOrderId)}", style = MaterialTheme.typography.bodyMedium)
@@ -865,13 +830,7 @@ private fun ReturnDetailDialog(
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            if (canReceive) Button(onClick = onReceive) { Text("Принять на карантин") }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
-    )
+    }
 }
 
 private fun returnStatusAccent(status: ReturnStatus) = when (status) {
@@ -904,14 +863,16 @@ internal fun CreateReturnDialog(
     }
     val selectedIssueId = form.issueOrderId.trim().toLongOrNull()
     val selectedIssue = rememberIssueDetails(selectedIssueId) ?: issues.find { it.id == selectedIssueId }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новый возврат") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Новый возврат",
+        glyph = ErpIconGlyph.Refresh,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 700.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty() && form.lines.isNotEmpty(),
+        onDismiss = onDismiss
+    ) {
                 error?.let { ErrorMessageCard(error = it) }
                 if (warehouses.isEmpty()) {
                     Text(
@@ -1007,15 +968,7 @@ internal fun CreateReturnDialog(
                     }
                 }
                 Button(onClick = onAddLine) { Text("Добавить строку") }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onCreate, enabled = warehouses.isNotEmpty() && form.lines.isNotEmpty()) {
-                Text("Создать")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,23 +1052,19 @@ private fun WriteOffDetailDialog(
         writeOff.status == WriteOffStatus.PENDING_APPROVAL ||
         writeOff.status == WriteOffStatus.APPROVED
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Списание ${writeOff.number}", modifier = Modifier.weight(1f))
-                PillBadge(text = writeOff.status.localizedName(), accent = writeOffStatusAccent(writeOff.status))
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Списание ${writeOff.number}",
+        subtitle = writeOff.status.localizedName(),
+        glyph = ErpIconGlyph.Alert,
+        gradient = org.example.project.ui.theme.Gradients.Sunset,
+        width = 660.dp,
+        dismissText = "Закрыть",
+        onDismiss = onClose,
+        extraActions = {
+            if (canPost) Button(onClick = onPost) { Text("Провести") }
+            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+        }
+    ) {
                 Text("Причина: ${writeOff.reasonType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 Text("Основание: ${writeOff.reasonNote}", style = MaterialTheme.typography.bodyMedium)
                 Text("Количество: ${writeOff.totalQuantity}", style = MaterialTheme.typography.bodyMedium)
@@ -1155,16 +1104,7 @@ private fun WriteOffDetailDialog(
                         minLines = 2
                     )
                 }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canPost) Button(onClick = onPost) { Text("Провести") }
-                if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
-    )
+    }
 }
 
 private fun writeOffStatusAccent(status: WriteOffStatus) = when (status) {
@@ -1193,14 +1133,17 @@ internal fun CreateWriteOffDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новое списание") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Новое списание",
+        glyph = ErpIconGlyph.Alert,
+        gradient = org.example.project.ui.theme.Gradients.Sunset,
+        width = 700.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty() && form.lines.isNotEmpty(),
+        confirmGradient = org.example.project.ui.theme.Gradients.Sunset,
+        onDismiss = onDismiss
+    ) {
                 error?.let { ErrorMessageCard(error = it) }
                 if (warehouses.isEmpty()) {
                     Text(
@@ -1307,15 +1250,7 @@ internal fun CreateWriteOffDialog(
                     }
                 }
                 Button(onClick = onAddLine) { Text("Добавить строку") }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onCreate, enabled = warehouses.isNotEmpty() && form.lines.isNotEmpty()) {
-                Text("Создать")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1417,26 +1352,22 @@ private fun InventoryDetailDialog(
     val canCancel = inventory.status != InventoryStatus.POSTED && inventory.status != InventoryStatus.CANCELLED
     val discrepancyBySnapshot = inventory.discrepancies.associateBy { it.snapshotId }
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Инвентаризация ${inventory.number}", modifier = Modifier.weight(1f))
-                PillBadge(
-                    text = inventory.status.localizedName(),
-                    accent = inventoryStatusAccent(inventory.status)
-                )
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Инвентаризация ${inventory.number}",
+        subtitle = inventory.status.localizedName(),
+        glyph = ErpIconGlyph.Documents,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 720.dp,
+        dismissText = "Закрыть",
+        onDismiss = onClose,
+        extraActions = {
+            if (canBook) Button(onClick = onBook) { Text("Зафиксировать срез") }
+            if (canCount) Button(onClick = onSubmitCounts) { Text("Сохранить подсчёт") }
+            if (canApprove) Button(onClick = onApprove) { Text("Согласовать") }
+            if (canPost) Button(onClick = onPost) { Text("Провести") }
+            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+        }
+    ) {
                 val names = LocalWmsNames.current
                 Text("Область: ${inventory.scopeType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 inventory.scopeLocationId?.let {
@@ -1518,19 +1449,7 @@ private fun InventoryDetailDialog(
                         minLines = 2
                     )
                 }
-            }
-        },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canBook) Button(onClick = onBook) { Text("Зафиксировать срез") }
-                if (canCount) Button(onClick = onSubmitCounts) { Text("Сохранить подсчёт") }
-                if (canApprove) Button(onClick = onApprove) { Text("Согласовать") }
-                if (canPost) Button(onClick = onPost) { Text("Провести") }
-                if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
-    )
+    }
 }
 
 private fun inventoryStatusAccent(status: InventoryStatus) = when (status) {
@@ -1555,14 +1474,16 @@ internal fun CreateInventoryDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая инвентаризация") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+    org.example.project.ui.theme.ErpDialog(
+        title = "Новая инвентаризация",
+        glyph = ErpIconGlyph.Documents,
+        gradient = org.example.project.ui.theme.Gradients.Emerald,
+        width = 640.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        confirmEnabled = warehouses.isNotEmpty(),
+        onDismiss = onDismiss
+    ) {
                 error?.let { ErrorMessageCard(error = it) }
                 if (warehouses.isEmpty()) {
                     Text(
@@ -1621,11 +1542,5 @@ internal fun CreateInventoryDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onCreate, enabled = warehouses.isNotEmpty()) { Text("Создать") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    }
 }

@@ -4,15 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,6 +20,9 @@ import org.example.project.dto.ProductModelDto
 import org.example.project.dto.UserOptionDto
 import org.example.project.dto.WarehouseDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpDialog
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.Gradients
 
 @Composable
 fun CreateProductModelDialog(
@@ -35,21 +33,18 @@ fun CreateProductModelDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая модель изделия") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                ModelFormFields(form, users, onFormChange)
-            }
-        },
-        confirmButton = { Button(onClick = onCreate) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Новая модель изделия",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 640.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        ModelFormFields(form, users, onFormChange)
+    }
 }
 
 @Composable
@@ -62,21 +57,18 @@ fun EditProductModelDialog(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Редактировать ${model.code}") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                ModelFormFields(form, users, onFormChange, readOnlyCode = true)
-            }
-        },
-        confirmButton = { Button(onClick = onSave) { Text("Сохранить") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Редактировать ${model.code}",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 640.dp,
+        confirmText = "Сохранить",
+        onConfirm = onSave,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        ModelFormFields(form, users, onFormChange, readOnlyCode = true)
+    }
 }
 
 @Composable
@@ -146,34 +138,31 @@ fun CreateRevisionDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая ревизия") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                OutlinedTextField(
-                    value = form.revisionNumber,
-                    onValueChange = { onFormChange(form.copy(revisionNumber = it)) },
-                    label = { Text("Номер ревизии *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.changeReason,
-                    onValueChange = { onFormChange(form.copy(changeReason = it)) },
-                    label = { Text("Причина изменения") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onCreate) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Новая ревизия",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 560.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        OutlinedTextField(
+            value = form.revisionNumber,
+            onValueChange = { onFormChange(form.copy(revisionNumber = it)) },
+            label = { Text("Номер ревизии *") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = form.changeReason,
+            onValueChange = { onFormChange(form.copy(changeReason = it)) },
+            label = { Text("Причина изменения") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+    }
 }
 
 @Composable
@@ -185,34 +174,31 @@ fun CopyRevisionDialog(
     onCopy: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Копировать ревизию ${revision.revisionNumber}") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                OutlinedTextField(
-                    value = form.revisionNumber,
-                    onValueChange = { onFormChange(form.copy(revisionNumber = it)) },
-                    label = { Text("Новый номер ревизии *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = form.reason,
-                    onValueChange = { onFormChange(form.copy(reason = it)) },
-                    label = { Text("Причина копирования *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onCopy) { Text("Копировать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Копировать ревизию ${revision.revisionNumber}",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 560.dp,
+        confirmText = "Копировать",
+        onConfirm = onCopy,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        OutlinedTextField(
+            value = form.revisionNumber,
+            onValueChange = { onFormChange(form.copy(revisionNumber = it)) },
+            label = { Text("Новый номер ревизии *") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = form.reason,
+            onValueChange = { onFormChange(form.copy(reason = it)) },
+            label = { Text("Причина копирования *") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
+    }
 }
 
 @Composable
@@ -225,49 +211,50 @@ fun CreateLineDialog(
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Новая строка BOM") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                BomLineDropdown(
-                    lines = parentLines,
-                    selectedId = form.parentLineId.toLongOrNull(),
-                    onSelect = { onFormChange(form.copy(parentLineId = it?.toString() ?: "")) },
-                    label = "Родительская строка",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                BomNomenclatureDropdown(
-                    items = nomenclature,
-                    selected = nomenclature.find { it.id == form.parentNomenclatureId },
-                    onSelect = { onFormChange(form.copy(parentNomenclatureId = it.id)) },
-                    label = "Родительская номенклатура *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                BomNomenclatureDropdown(
-                    items = nomenclature,
-                    selected = nomenclature.find { it.id == form.childNomenclatureId },
-                    onSelect = { onFormChange(form.copy(childNomenclatureId = it.id)) },
-                    label = "Дочерняя номенклатура *",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                LineQuantityFields(form, onFormChange)
-                BomLineDropdown(
-                    lines = parentLines,
-                    selectedId = form.substituteOfLineId.toLongOrNull(),
-                    onSelect = { onFormChange(form.copy(substituteOfLineId = it?.toString() ?: "")) },
-                    label = "Замена для строки",
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onCreate) { Text("Создать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Новая строка BOM",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 700.dp,
+        confirmText = "Создать",
+        onConfirm = onCreate,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BomLineDropdown(
+                lines = parentLines,
+                selectedId = form.parentLineId.toLongOrNull(),
+                onSelect = { onFormChange(form.copy(parentLineId = it?.toString() ?: "")) },
+                label = "Родительская строка",
+                modifier = Modifier.weight(1f)
+            )
+            BomLineDropdown(
+                lines = parentLines,
+                selectedId = form.substituteOfLineId.toLongOrNull(),
+                onSelect = { onFormChange(form.copy(substituteOfLineId = it?.toString() ?: "")) },
+                label = "Замена для строки",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BomNomenclatureDropdown(
+                items = nomenclature,
+                selected = nomenclature.find { it.id == form.parentNomenclatureId },
+                onSelect = { onFormChange(form.copy(parentNomenclatureId = it.id)) },
+                label = "Родительская номенклатура *",
+                modifier = Modifier.weight(1f)
+            )
+            BomNomenclatureDropdown(
+                items = nomenclature,
+                selected = nomenclature.find { it.id == form.childNomenclatureId },
+                onSelect = { onFormChange(form.copy(childNomenclatureId = it.id)) },
+                label = "Дочерняя номенклатура *",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        LineQuantityFields(form, onFormChange)
+    }
 }
 
 @Composable
@@ -279,26 +266,23 @@ fun EditLineDialog(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Редактировать строку #${line.id}") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                Text(
-                    text = "Родитель: ${line.parentNomenclatureId}, дочерняя: ${line.childNomenclatureId}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                LineQuantityFields(form, onFormChange)
-            }
-        },
-        confirmButton = { Button(onClick = onSave) { Text("Сохранить") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Редактировать строку #${line.id}",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 640.dp,
+        confirmText = "Сохранить",
+        onConfirm = onSave,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        Text(
+            text = "Родитель: ${line.parentNomenclatureId}, дочерняя: ${line.childNomenclatureId}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        LineQuantityFields(form, onFormChange)
+    }
 }
 
 @Composable
@@ -420,33 +404,30 @@ fun ExplodeDialog(
     onRun: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Разузлование") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                error?.let { ErrorMessageCard(error = it) }
-                OutlinedTextField(
-                    value = form.releaseQuantity,
-                    onValueChange = { onFormChange(form.copy(releaseQuantity = it)) },
-                    label = { Text("Количество выпуска *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                BomWarehouseDropdown(
-                    warehouses = warehouses,
-                    selected = warehouses.find { it.id == form.warehouseId },
-                    onSelect = { onFormChange(form.copy(warehouseId = it.id)) },
-                    label = "Склад",
-                    modifier = Modifier.fillMaxWidth(),
-                    allowEmpty = true
-                )
-            }
-        },
-        confirmButton = { Button(onClick = onRun) { Text("Рассчитать") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } }
-    )
+    ErpDialog(
+        title = "Разузлование",
+        glyph = ErpIconGlyph.Layers,
+        gradient = Gradients.Primary,
+        width = 560.dp,
+        confirmText = "Рассчитать",
+        onConfirm = onRun,
+        onDismiss = onDismiss
+    ) {
+        error?.let { ErrorMessageCard(error = it) }
+        OutlinedTextField(
+            value = form.releaseQuantity,
+            onValueChange = { onFormChange(form.copy(releaseQuantity = it)) },
+            label = { Text("Количество выпуска *") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        BomWarehouseDropdown(
+            warehouses = warehouses,
+            selected = warehouses.find { it.id == form.warehouseId },
+            onSelect = { onFormChange(form.copy(warehouseId = it.id)) },
+            label = "Склад",
+            modifier = Modifier.fillMaxWidth(),
+            allowEmpty = true
+        )
+    }
 }

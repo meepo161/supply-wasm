@@ -149,61 +149,58 @@ private fun DemandListPage(
             }
         }
         if (showMergeDialog) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showMergeDialog = false },
-                title = { Text("Объединение потребностей") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        mergeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        org.example.project.ui.theme.ErpTextField(
-                            value = mergeTitle,
-                            onValueChange = { mergeTitle = it },
-                            label = "Название объединённой потребности"
-                        )
-                        state.demands.filter {
-                            it.status == org.example.project.dto.DemandStatus.DRAFT ||
-                                it.status == org.example.project.dto.DemandStatus.PENDING_APPROVAL ||
-                                it.status == org.example.project.dto.DemandStatus.APPROVED
-                        }.take(15).forEach { d ->
-                            val checked = d.id in selectedToMerge
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                androidx.compose.material3.Checkbox(
-                                    checked = checked,
-                                    onCheckedChange = { isChecked ->
-                                        selectedToMerge = if (isChecked) selectedToMerge + d.id else selectedToMerge - d.id
-                                    }
+            org.example.project.ui.theme.ErpDialog(
+                title = "Объединение потребностей",
+                glyph = ErpIconGlyph.Cart,
+                gradient = Gradients.Sunset,
+                width = 600.dp,
+                confirmText = "Объединить",
+                onConfirm = {
+                    if (selectedToMerge.size < 2) {
+                        mergeError = "Выберите минимум 2 потребности"
+                    } else {
+                        mergeScope.launch {
+                            when (val res = extrasRepo.mergeDemands(
+                                org.example.project.dto.MergeDemandsRequest(
+                                    sourceDemandIds = selectedToMerge.toList(),
+                                    targetTitle = mergeTitle.ifBlank { null }
                                 )
-                                Text("${d.number} (${d.status.name})", style = MaterialTheme.typography.bodySmall)
+                            )) {
+                                is org.example.project.data.ApiResult.Success -> {
+                                    showMergeDialog = false
+                                    viewModel.loadDemands()
+                                }
+                                is org.example.project.data.ApiResult.Error -> mergeError = res.error.userText()
                             }
                         }
                     }
                 },
-                confirmButton = {
-                    SoftButton(text = "Объединить", onClick = {
-                        if (selectedToMerge.size < 2) {
-                            mergeError = "Выберите минимум 2 потребности"
-                        } else {
-                            mergeScope.launch {
-                                when (val res = extrasRepo.mergeDemands(
-                                    org.example.project.dto.MergeDemandsRequest(
-                                        sourceDemandIds = selectedToMerge.toList(),
-                                        targetTitle = mergeTitle.ifBlank { null }
-                                    )
-                                )) {
-                                    is org.example.project.data.ApiResult.Success -> {
-                                        showMergeDialog = false
-                                        viewModel.loadDemands()
-                                    }
-                                    is org.example.project.data.ApiResult.Error -> mergeError = res.error.userText()
-                                }
+                confirmGradient = Gradients.Sunset,
+                onDismiss = { showMergeDialog = false }
+            ) {
+                mergeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                org.example.project.ui.theme.ErpTextField(
+                    value = mergeTitle,
+                    onValueChange = { mergeTitle = it },
+                    label = "Название объединённой потребности"
+                )
+                state.demands.filter {
+                    it.status == org.example.project.dto.DemandStatus.DRAFT ||
+                        it.status == org.example.project.dto.DemandStatus.PENDING_APPROVAL ||
+                        it.status == org.example.project.dto.DemandStatus.APPROVED
+                }.take(15).forEach { d ->
+                    val checked = d.id in selectedToMerge
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(
+                            checked = checked,
+                            onCheckedChange = { isChecked ->
+                                selectedToMerge = if (isChecked) selectedToMerge + d.id else selectedToMerge - d.id
                             }
-                        }
-                    })
-                },
-                dismissButton = {
-                    TextButton(onClick = { showMergeDialog = false }) { Text("Отмена") }
+                        )
+                        Text("${d.number} (${d.status.name})", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
-            )
+            }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.demands.isEmpty()) {
