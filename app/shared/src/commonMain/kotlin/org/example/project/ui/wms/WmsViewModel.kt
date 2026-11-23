@@ -116,6 +116,12 @@ class WmsViewModel(
 
     fun showDialog(dialog: WmsDialog) {
         _uiState.value = _uiState.value.copy(activeDialog = dialog, operationError = null)
+        // Формы выбирают документы-основания из списков, поэтому подгружаем их при открытии.
+        when (dialog) {
+            WmsDialog.CreateReturn -> if (_uiState.value.issues.isEmpty()) loadIssues()
+            WmsDialog.CreateIssue -> if (_uiState.value.reservations.isEmpty()) loadReservations()
+            else -> Unit
+        }
     }
 
     fun dismissDialog() {
@@ -559,13 +565,18 @@ class WmsViewModel(
         viewModelScope.launch {
             when (val result = repository.listExpectedReceipts(purchaseOrderId)) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    expectedReceipts = result.data
+                    expectedReceipts = result.data,
+                    expectedReceiptsLoaded = true
                 )
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     operationError = result.error
                 )
             }
         }
+    }
+
+    fun hideExpectedReceipts() {
+        _uiState.value = _uiState.value.copy(expectedReceipts = emptyList(), expectedReceiptsLoaded = false)
     }
 
     fun updateReceiptLinkOrderId(value: String) {
@@ -2021,6 +2032,7 @@ class WmsViewModel(
 
     fun updateReservationFilters(filters: ReservationFilters) {
         _uiState.value = _uiState.value.copy(reservationFilters = filters)
+        loadReservations()
     }
 
     fun updateLocationFilterWarehouse(warehouseId: Long?) {
@@ -2076,6 +2088,7 @@ data class WmsUiState(
     val loadReceiptId: String = "",
     val receiptFilters: ReceiptFilters = ReceiptFilters(),
     val expectedReceipts: List<org.example.project.dto.ExpectedReceiptLineDto> = emptyList(),
+    val expectedReceiptsLoaded: Boolean = false,
     val receiptLinkOrderId: String = "",
     val receiptLinkDocumentNo: String = "",
     val receiptLinkReason: String = "",
@@ -2085,7 +2098,7 @@ data class WmsUiState(
     val nomenclatureDetails: org.example.project.dto.NomenclatureDetailsDto? = null,
     val nomenclatureDetailsLoading: Boolean = false,
     val nomenclatureSearch: String = "",
-    val selectedTab: WmsTab = WmsTab.WAREHOUSES,
+    val selectedTab: WmsTab = WmsTab.STOCK,
     val isLoading: Boolean = false,
     val operationError: ApiError? = null,
     val createWarehouseForm: CreateWarehouseForm = CreateWarehouseForm(),

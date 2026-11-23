@@ -3,6 +3,7 @@ package org.example.project.ui.wms
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.IssueOrderDto
+import org.example.project.ui.theme.ErpFormat
+import org.example.project.ui.components.SearchableDropdown
 import org.example.project.dto.IssueStatus
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReturnInspection
@@ -68,9 +71,8 @@ internal fun TransfersTab(
             TransferStatusDropdown(
                 selected = state.transferStatusFilter,
                 onSelect = viewModel::updateTransferStatusFilter,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.width(320.dp)
             )
-            Button(onClick = viewModel::loadTransfers) { Text("Применить") }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.transfersLoading && state.transfers.isEmpty()) {
@@ -329,9 +331,8 @@ internal fun IssuesTab(
             IssueStatusDropdown(
                 selected = state.issueStatusFilter,
                 onSelect = viewModel::updateIssueStatusFilter,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.width(320.dp)
             )
-            Button(onClick = viewModel::loadIssues) { Text("Применить") }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.issuesLoading && state.issues.isEmpty()) {
@@ -526,7 +527,8 @@ internal fun CreateIssueDialog(
     onUpdateLine: (Int, CreateIssueLineForm) -> Unit,
     onRemoveLine: (Int) -> Unit,
     onCreate: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    reservations: List<org.example.project.dto.ReservationDto> = emptyList()
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -555,19 +557,16 @@ internal fun CreateIssueDialog(
                     onSelect = { onFormChange(form.copy(reasonType = it)) },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                ProjectPicker(
                     value = form.projectId,
-                    onValueChange = { onFormChange(form.copy(projectId = it)) },
-                    label = { Text("ID проекта") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(projectId = it, taskId = "")) },
+                    modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                TaskPicker(
                     value = form.taskId,
-                    onValueChange = { onFormChange(form.copy(taskId = it)) },
-                    label = { Text("ID задачи") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(taskId = it)) },
+                    projectId = form.projectId,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = form.reasonNote,
@@ -576,12 +575,12 @@ internal fun CreateIssueDialog(
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )
-                OutlinedTextField(
+                UserPicker(
                     value = form.recipientId,
-                    onValueChange = { onFormChange(form.copy(recipientId = it)) },
-                    label = { Text("ID получателя (по умолчанию — вы)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(recipientId = it)) },
+                    label = "Получатель",
+                    clearText = "Я (по умолчанию)",
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = form.note,
@@ -623,12 +622,21 @@ internal fun CreateIssueDialog(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
-                        OutlinedTextField(
-                            value = line.reservationId,
-                            onValueChange = { onUpdateLine(index, line.copy(reservationId = it)) },
-                            label = { Text("ID резерва (необязательно)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                        val lineReservations = reservations.filter {
+                            it.status == org.example.project.dto.ReservationStatus.ACTIVE &&
+                                (line.nomenclatureId == null || it.nomenclatureId == line.nomenclatureId) &&
+                                (form.warehouseId == null || it.warehouseId == form.warehouseId)
+                        }
+                        SearchableDropdown(
+                            items = lineReservations,
+                            selected = reservations.find { it.id.toString() == line.reservationId.trim() },
+                            onSelect = { onUpdateLine(index, line.copy(reservationId = it.id.toString())) },
+                            label = "Резерв (необязательно)",
+                            itemText = { r -> "${r.number} · ${ErpFormat.qty(r.quantity)} · ${r.reasonType.localizedName()}" },
+                            emptyText = "Активных резервов по позиции нет",
+                            onClear = { onUpdateLine(index, line.copy(reservationId = "")) },
+                            clearText = "Без резерва",
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -671,9 +679,8 @@ internal fun ReturnsTab(
             ReturnStatusDropdown(
                 selected = state.returnStatusFilter,
                 onSelect = viewModel::updateReturnStatusFilter,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.width(320.dp)
             )
-            Button(onClick = viewModel::loadReturns) { Text("Применить") }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.returnsLoading && state.returns.isEmpty()) {
@@ -828,8 +835,16 @@ internal fun CreateReturnDialog(
     onUpdateLine: (Int, CreateReturnLineForm) -> Unit,
     onRemoveLine: (Int) -> Unit,
     onCreate: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    issues: List<IssueOrderDto> = emptyList(),
+    nomenclature: List<NomenclatureDto> = emptyList()
 ) {
+    // Вернуть можно только то, что фактически выдано с выбранного склада.
+    val returnableIssues = issues.filter {
+        (form.warehouseId == null || it.warehouseId == form.warehouseId) &&
+            it.status in setOf(IssueStatus.ISSUED, IssueStatus.RECEIVED, IssueStatus.SHORTAGE)
+    }
+    val selectedIssue = issues.find { it.id.toString() == form.issueOrderId.trim() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Новый возврат") },
@@ -852,12 +867,23 @@ internal fun CreateReturnDialog(
                     label = "Склад *",
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = form.issueOrderId,
-                    onValueChange = { onFormChange(form.copy(issueOrderId = it)) },
-                    label = { Text("ID заказа на выдачу *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                SearchableDropdown(
+                    items = returnableIssues,
+                    selected = selectedIssue,
+                    onSelect = { issue ->
+                        onFormChange(
+                            form.copy(
+                                issueOrderId = issue.id.toString(),
+                                lines = form.lines.map { it.copy(issueLineId = "") }
+                            )
+                        )
+                    },
+                    label = "Заказ на выдачу *",
+                    itemText = { issue ->
+                        "${issue.number} · ${issue.reasonType.localizedName()} · ${ErpFormat.dateRu(issue.issuedAt)}"
+                    },
+                    emptyText = "Нет выданных заказов по выбранному складу",
+                    modifier = Modifier.fillMaxWidth()
                 )
                 LocationDropdown(
                     locations = locations,
@@ -892,12 +918,19 @@ internal fun CreateReturnDialog(
                             )
                             TextButton(onClick = { onRemoveLine(index) }) { Text("Удалить") }
                         }
-                        OutlinedTextField(
-                            value = line.issueLineId,
-                            onValueChange = { onUpdateLine(index, line.copy(issueLineId = it)) },
-                            label = { Text("ID строки выдачи *") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                        val issueLines = selectedIssue?.lines.orEmpty()
+                        SearchableDropdown(
+                            items = issueLines,
+                            selected = issueLines.find { it.id.toString() == line.issueLineId.trim() },
+                            onSelect = { onUpdateLine(index, line.copy(issueLineId = it.id.toString())) },
+                            label = "Строка выдачи *",
+                            itemText = { issueLine ->
+                                val item = nomenclature.find { it.id == issueLine.nomenclatureId }
+                                "№${issueLine.lineNo} · ${item?.let { "${it.code} — ${it.name}" } ?: "Поз. #${issueLine.nomenclatureId}"}" +
+                                    " · выдано ${ErpFormat.qty(issueLine.issuedQuantity)} ${item?.unit.orEmpty()}"
+                            },
+                            emptyText = if (selectedIssue == null) "Сначала выберите заказ на выдачу" else "В заказе нет строк",
+                            modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
                             value = line.quantity,
@@ -954,9 +987,8 @@ internal fun WriteOffsTab(
             WriteOffStatusDropdown(
                 selected = state.writeOffStatusFilter,
                 onSelect = viewModel::updateWriteOffStatusFilter,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.width(320.dp)
             )
-            Button(onClick = viewModel::loadWriteOffs) { Text("Применить") }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.writeOffsLoading && state.writeOffs.isEmpty()) {
@@ -1244,9 +1276,8 @@ internal fun InventoriesTab(
             InventoryStatusDropdown(
                 selected = state.inventoryStatusFilter,
                 onSelect = viewModel::updateInventoryStatusFilter,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.width(320.dp)
             )
-            Button(onClick = viewModel::loadInventories) { Text("Применить") }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.inventoriesLoading && state.inventories.isEmpty()) {

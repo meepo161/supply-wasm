@@ -3,7 +3,6 @@ package org.example.project.ui.tables
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.unchil.un7datagrid.Un7KCMPDataGrid
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import kotlinx.serialization.json.Json
 
@@ -27,6 +26,8 @@ fun PersistentDataGrid(
     modifier: Modifier = Modifier,
     config: Un7KCMPDataGridConfig = Un7KCMPDataGridConfig(),
     tableKey: String = data.keys.joinToString("|"),
+    compact: Boolean = false,
+    showSearch: Boolean = true,
     onClick: ((List<Pair<Int, List<Any?>>>) -> Unit)? = null,
     onLongClick: ((List<Pair<Int, List<Any?>>>) -> Unit)? = null
 ) {
@@ -39,10 +40,12 @@ fun PersistentDataGrid(
             }
         )
     }
-    Un7KCMPDataGrid(
+    ErpDataGrid(
         data = data,
         modifier = modifier,
         config = persistentConfig,
+        compact = compact,
+        showSearch = showSearch,
         onClick = onClick,
         onLongClick = onLongClick
     )

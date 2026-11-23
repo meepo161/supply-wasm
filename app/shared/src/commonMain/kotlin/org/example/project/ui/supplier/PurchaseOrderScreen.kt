@@ -313,8 +313,7 @@ private fun OrderHeader(order: PurchaseOrderDto) {
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "${order.supplierName ?: "поставщик #${order.supplierId}"} · ${order.currency}" +
-                    " · версия ${order.version}",
+                text = "${order.supplierName ?: "поставщик #${order.supplierId}"} · ${org.example.project.ui.theme.ErpFormat.currencySymbol(order.currency)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

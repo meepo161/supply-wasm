@@ -2,7 +2,8 @@ package org.example.project.ui.production
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid
+import org.example.project.ui.theme.ErpFormat
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.ProductInstanceDto
 import org.example.project.dto.ProductionOrderDto
@@ -10,7 +11,7 @@ import org.example.project.dto.ProductionOrderStageDto
 
 private val gridConfig = Un7KCMPDataGridConfig(
     isUsableHaptic = false,
-    pageSizeList = listOf("10", "20", "50", "100"),
+    pageSizeList = listOf("20", "50", "100"),
     defaultPageSizeListIndex = 0
 )
 
@@ -21,21 +22,22 @@ fun ProductionOrdersGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to orders.map { it.id.toString() },
         "Номер" to orders.map { it.number },
         "Статус" to orders.map { it.status.localizedName() },
-        "План" to orders.map { it.plannedQuantity.toString() },
-        "Факт" to orders.map { it.actualQuantity.toString() },
-        "Начало" to orders.map { it.plannedStartAt.toDisplayDateTime() },
-        "Окончание" to orders.map { it.plannedEndAt.toDisplayDateTime() }
+        "План" to orders.map { ErpFormat.qty(it.plannedQuantity) },
+        "Факт" to orders.map { ErpFormat.qty(it.actualQuantity) },
+        "Начало" to orders.map { ErpFormat.dateRu(it.plannedStartAt) },
+        "Окончание" to orders.map { ErpFormat.dateRu(it.plannedEndAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "production-orders",
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            orders.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                orders.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -50,20 +52,22 @@ fun ProductionStagesGrid(
     val data = mapOf(
         "№" to sorted.map { it.sequence.toString() },
         "Этап" to sorted.map { it.name },
-        "Тип" to sorted.map { it.stageType.localizedName() },
         "Статус" to sorted.map { it.status.localizedName() },
-        "План старт" to sorted.map { it.plannedStartAt.toDisplayDateTime() },
-        "Факт старт" to sorted.map { it.actualStartAt.toDisplayDateTime() },
-        "Факт финиш" to sorted.map { it.actualEndAt.toDisplayDateTime() },
+        "План старт" to sorted.map { ErpFormat.dateRu(it.plannedStartAt) },
+        "Факт старт" to sorted.map { ErpFormat.dateRu(it.actualStartAt) },
+        "Факт финиш" to sorted.map { ErpFormat.dateRu(it.actualEndAt) },
         "Основание" to sorted.map { it.skipReason ?: "—" }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "production-stages",
+        compact = true,
         config = gridConfig,
         onClick = { selected ->
-            val sequence = selected.firstOrNull()?.second?.firstOrNull() as? String
-            sorted.firstOrNull { it.sequence.toString() == sequence }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                sorted.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -75,18 +79,20 @@ fun ProductInstancesGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to instances.map { it.id.toString() },
         "Серийный номер" to instances.map { it.serialNumber },
         "Статус" to instances.map { it.status },
-        "Изготовлен" to instances.map { it.manufacturedAt.toDisplayDateTime() }
+        "Изготовлен" to instances.map { ErpFormat.dateRu(it.manufacturedAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "production-instances",
+        compact = true,
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            instances.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                instances.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }

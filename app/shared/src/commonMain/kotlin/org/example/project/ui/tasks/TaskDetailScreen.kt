@@ -55,10 +55,10 @@ fun TaskDetailScreen(
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         PageHeader(
-            title = "Задача",
+            title = "${task.number} · ${task.title}",
             glyph = ErpIconGlyph.Tasks,
             gradient = Gradients.Ocean,
-            subtitle = task.title,
+            subtitle = "${task.area.localizedName()} · ${task.type.localizedName()}",
             onBack = onBack,
             actions = { TaskShareAction(task, state, viewModel) }
         )
@@ -159,6 +159,17 @@ private fun TaskDescription(
 
     TaskSummary(task, state.users)
 
+    val waitingHint = when (task.status) {
+        TaskStatus.ASSIGNED -> "Ожидает исполнителя: ${task.assigneeId?.let { userName(state.users, it) } ?: "не назначен"} — взять в работу"
+        TaskStatus.ON_REVIEW -> "Ожидает проверки: ${task.reviewerId?.let { userName(state.users, it) } ?: "инициатор"} — принять или вернуть на доработку"
+        TaskStatus.NEW -> "Новая задача — требуется назначить исполнителя"
+        TaskStatus.BLOCKED -> "Заблокирована${task.unblockResponsibleId?.let { " · снимает ${userName(state.users, it)}" } ?: ""}"
+        else -> null
+    }
+    if (waitingHint != null) {
+        PillBadge(text = waitingHint, accent = task.status.accentColor())
+    }
+
     task.description?.takeIf { it.isNotBlank() }?.let {
         TaskTextSection(title = "Описание", text = it)
     }
@@ -219,11 +230,10 @@ private fun TaskDescription(
             }
 
             TaskSectionLabel("Сроки и история")
-            TaskDetailRow("Плановое начало", task.plannedStartAt.toShortDate())
-            TaskDetailRow("Срок выполнения", task.dueDate.toShortDate())
-            TaskDetailRow("Создана", task.createdAt.toShortDateTime())
-            task.closedAt?.let { TaskDetailRow("Завершена", it.toShortDateTime()) }
-            TaskDetailRow("Версия", task.version.toString())
+            TaskDetailRow("Плановое начало", org.example.project.ui.theme.ErpFormat.dateRu(task.plannedStartAt))
+            TaskDetailRow("Срок выполнения", org.example.project.ui.theme.ErpFormat.dateRu(task.dueDate))
+            TaskDetailRow("Создана", org.example.project.ui.theme.ErpFormat.dateTimeRu(task.createdAt))
+            task.closedAt?.let { TaskDetailRow("Завершена", org.example.project.ui.theme.ErpFormat.dateTimeRu(it)) }
         }
     }
 

@@ -110,7 +110,8 @@ fun LoginScreen(
                         else
                             "Войдите, чтобы продолжить работу с системой предприятия",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     Spacer(Modifier.height(24.dp))
 
@@ -294,7 +295,10 @@ private fun BrandPanel(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            GradientRing(modifier = Modifier.size(44.dp))
+            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                GradientRing(modifier = Modifier.size(44.dp))
+                ErpIcon(ErpIconGlyph.Shield, Color.White.copy(alpha = 0.85f), Modifier.size(18.dp))
+            }
             Spacer(Modifier.width(14.dp))
             Text(
                 text = "Безопасный доступ по ролям и правам",
@@ -348,6 +352,7 @@ private fun AppTextField(
 ) {
     val scheme = MaterialTheme.colorScheme
     val palette = LocalBrandPalette.current
+    var passwordVisible by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -357,7 +362,21 @@ private fun AppTextField(
         leadingIcon = {
             ErpIcon(glyph, scheme.onSurfaceVariant, Modifier.size(18.dp))
         },
-        visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        trailingIcon = if (isPassword) {
+            {
+                androidx.compose.material3.TextButton(
+                    onClick = { passwordVisible = !passwordVisible },
+                    enabled = enabled
+                ) {
+                    Text(
+                        text = if (passwordVisible) "Скрыть" else "Показать",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.primary
+                    )
+                }
+            }
+        } else null,
+        visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         shape = RoundedCornerShape(14.dp),

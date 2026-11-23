@@ -3,6 +3,7 @@ package org.example.project.ui.wms
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import org.example.project.ui.userText
@@ -27,10 +28,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
@@ -52,10 +54,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.example.project.dto.LowStockItemDto
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReceiptStatus
+import org.example.project.dto.StockMovementDto
+import org.example.project.dto.StockMovementType
 import org.example.project.dto.WarehouseDto
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
@@ -63,6 +69,7 @@ import org.example.project.dto.StorageLocationPurpose
 import org.example.project.ui.components.SearchableDropdown
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpFormat
 import org.example.project.ui.theme.ErpIcon
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.GlassCard
@@ -214,7 +221,8 @@ fun WmsScreen(
             onUpdateLine = viewModel::updateIssueLine,
             onRemoveLine = viewModel::removeIssueLine,
             onCreate = viewModel::createIssue,
-            onDismiss = viewModel::dismissDialog
+            onDismiss = viewModel::dismissDialog,
+            reservations = state.reservations
         )
         WmsDialog.CreateInventory -> CreateInventoryDialog(
             form = state.createInventoryForm,
@@ -255,7 +263,9 @@ fun WmsScreen(
             onUpdateLine = viewModel::updateReturnLine,
             onRemoveLine = viewModel::removeReturnLine,
             onCreate = viewModel::createReturn,
-            onDismiss = viewModel::dismissDialog
+            onDismiss = viewModel::dismissDialog,
+            issues = state.issues,
+            nomenclature = state.nomenclature
         )
         null -> { }
     }
@@ -408,7 +418,8 @@ private fun NomenclatureTab(
             NomenclatureGrid(
                 items = visibleItems,
                 onClick = { viewModel.selectNomenclature(it) },
-                modifier = Modifier.fillMaxWidth().weight(1f)
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                showSearch = false
             )
         }
         if (state.selectedNomenclature != null) {
@@ -420,7 +431,8 @@ private fun NomenclatureTab(
                 warehouses = state.warehouses,
                 onArchive = { viewModel.archiveNomenclature(state.selectedNomenclature!!) },
                 onRetry = { viewModel.selectNomenclature(state.selectedNomenclature!!) },
-                onClose = { viewModel.selectNomenclature(null) }
+                onClose = { viewModel.selectNomenclature(null) },
+                allNomenclature = state.nomenclature
             )
         }
     }
@@ -435,9 +447,11 @@ private fun NomenclatureDetailDialog(
     warehouses: List<WarehouseDto>,
     onArchive: () -> Unit,
     onRetry: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    allNomenclature: List<NomenclatureDto> = emptyList()
 ) {
     val wmsRepo: org.example.project.data.WmsRepository = koinInject()
+    var confirmArchive by remember(item.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var minStock by remember(item.id) { mutableStateOf(item.minStock) }
     var safetyStock by remember(item.id) { mutableStateOf(item.safetyStock) }
@@ -500,6 +514,14 @@ private fun NomenclatureDetailDialog(
                         }
                     }
                 }) { Text("Сохранить пороги") }
+                HorizontalDivider()
+                Text("Штрихкоды (${item.barcodes.size})", style = MaterialTheme.typography.titleSmall)
+                item.barcodes.forEach { barcode ->
+                    Text(
+                        text = "${barcode.barcode} · ${barcode.packageType.localizedName()} · ${ErpFormat.qty(barcode.quantityInPackage)} ${item.unit}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -529,21 +551,12 @@ private fun NomenclatureDetailDialog(
                                 }
                             }
                         }
-                    }) { Text("Добавить") }
-                }
-                if (item.barcodes.isNotEmpty()) {
-                    Text("Штрихкоды", style = MaterialTheme.typography.titleSmall)
-                    item.barcodes.forEach { barcode ->
-                        Text(
-                            text = "${barcode.barcode} · ${barcode.packageType.localizedName()} · ${barcode.quantityInPackage} ${item.unit}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    }, enabled = newBarcode.isNotBlank()) { Text("Добавить") }
                 }
                 var analogs by remember(item.id) {
                     mutableStateOf<List<org.example.project.dto.NomenclatureAnalogDto>>(emptyList())
                 }
-                var analogIdInput by remember(item.id) { mutableStateOf("") }
+                var analogSelected by remember(item.id) { mutableStateOf<NomenclatureDto?>(null) }
                 androidx.compose.runtime.LaunchedEffect(item.id) {
                     val res = wmsRepo.listAnalogs(item.id)
                     if (res is org.example.project.data.ApiResult.Success<*>) {
@@ -554,7 +567,7 @@ private fun NomenclatureDetailDialog(
                 Text("Аналоги (${analogs.size})", style = MaterialTheme.typography.titleSmall)
                 analogs.forEach { a ->
                     Text(
-                        text = "${a.analogCode} — ${a.analogName} (коэф. ${a.conversionFactor})",
+                        text = "${a.analogCode} — ${a.analogName} (коэф. ${ErpFormat.qty(a.conversionFactor)})",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -563,15 +576,19 @@ private fun NomenclatureDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = analogIdInput,
-                        onValueChange = { analogIdInput = it },
-                        label = { Text("ID аналога") },
-                        singleLine = true,
+                    NomenclatureDropdown(
+                        items = allNomenclature.filter { candidate ->
+                            candidate.id != item.id && !candidate.archived &&
+                                analogs.none { it.analogNomenclatureId == candidate.id }
+                        },
+                        selected = analogSelected,
+                        onSelect = { analogSelected = it },
+                        label = "Позиция-аналог",
                         modifier = Modifier.weight(1f)
                     )
-                    Button(onClick = {
-                        val aId = analogIdInput.trim().toLongOrNull()
+                    Button(enabled = analogSelected != null, onClick = {
+                        val chosen = analogSelected
+                        val aId = chosen?.id
                         if (aId != null) {
                             scope.launch {
                                 val res = wmsRepo.createAnalog(
@@ -581,14 +598,14 @@ private fun NomenclatureDetailDialog(
                                 when (res) {
                                     is org.example.project.data.ApiResult.Success<*> -> {
                                         analogs = (res as org.example.project.data.ApiResult.Success<List<org.example.project.dto.NomenclatureAnalogDto>>).data
-                                        analogIdInput = ""
-                                        localStatus = "Аналог #$aId добавлен"
+                                        analogSelected = null
+                                        localStatus = "Аналог ${chosen.code} добавлен"
                                     }
                                     is org.example.project.data.ApiResult.Error -> localStatus = "Ошибка: ${res.error.userText()}"
                                 }
                             }
                         }
-                    }) { Text("Аналог") }
+                    }) { Text("Добавить аналог") }
                 }
                 if (loading) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -604,15 +621,15 @@ private fun NomenclatureDetailDialog(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Физически", style = MaterialTheme.typography.labelMedium)
-                            Text("${details.physicalQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                            Text("${ErpFormat.qty(details.physicalQty)} ${item.unit}", style = MaterialTheme.typography.titleSmall)
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Резерв", style = MaterialTheme.typography.labelMedium)
-                            Text("${details.reservedQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                            Text("${ErpFormat.qty(details.reservedQty)} ${item.unit}", style = MaterialTheme.typography.titleSmall)
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Доступно", style = MaterialTheme.typography.labelMedium)
-                            Text("${details.availableQty} ${item.unit}", style = MaterialTheme.typography.titleSmall)
+                            Text("${ErpFormat.qty(details.availableQty)} ${item.unit}", style = MaterialTheme.typography.titleSmall)
                         }
                     }
                     if (details.stock.isEmpty()) {
@@ -622,7 +639,7 @@ private fun NomenclatureDetailDialog(
                             val warehouse = warehouses.find { it.id == stock.warehouseId }
                             Text(
                                 text = "${warehouse?.name ?: "Склад ${stock.warehouseId}"} · ${stock.locationCode} · ${stock.locationPurpose.localizedName()}\n" +
-                                    "Физ. ${stock.physicalQty}, резерв ${stock.reservedQty}, доступно ${stock.availableQty} ${item.unit}" +
+                                    "Физ. ${ErpFormat.qty(stock.physicalQty)}, резерв ${ErpFormat.qty(stock.reservedQty)}, доступно ${ErpFormat.qty(stock.availableQty)} ${item.unit}" +
                                     (stock.lotNumber?.let { "\nПартия: $it" } ?: "") +
                                     (stock.serialNumber?.let { "\nСерия: $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall
@@ -634,8 +651,8 @@ private fun NomenclatureDetailDialog(
                     details.lots.forEach { lot ->
                         Text(
                             text = lot.lotNumber +
-                                (lot.manufactureDate?.let { " · изготовлена $it" } ?: "") +
-                                (lot.expiryDate?.let { " · годна до $it" } ?: ""),
+                                (lot.manufactureDate?.let { " · изготовлена ${ErpFormat.dateRu(it)}" } ?: "") +
+                                (lot.expiryDate?.let { " · годна до ${ErpFormat.dateRu(it)}" } ?: ""),
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -666,10 +683,10 @@ private fun NomenclatureDetailDialog(
                                 else -> ""
                             }
                             Text(
-                                text = "${movement.createdAt.toShortDate()} · ${movement.type.localizedName()} · ${movement.quantity} ${item.unit}\n" +
+                                text = "${movement.createdAt.toShortDate()} · ${movement.type.localizedName()} · ${ErpFormat.qty(movement.quantity)} ${item.unit}\n" +
                                     listOf(
                                         direction,
-                                        "${movement.documentType} #${movement.documentId}",
+                                        "${movementDocTypeLabel(movement.documentType)} #${movement.documentId}",
                                         movement.createdByName,
                                         movement.note.orEmpty()
                                     ).filter { it.isNotBlank() }.joinToString(" · "),
@@ -682,11 +699,34 @@ private fun NomenclatureDetailDialog(
         },
         confirmButton = {
             if (!item.archived) {
-                Button(onClick = onArchive, enabled = !loading) { Text("Архивировать") }
+                OutlinedButton(
+                    onClick = { confirmArchive = true },
+                    enabled = !loading,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Архивировать") }
             }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
     )
+    if (confirmArchive) {
+        AlertDialog(
+            onDismissRequest = { confirmArchive = false },
+            title = { Text("Архивировать позицию?") },
+            text = {
+                Text("${item.code} — ${item.name} перестанет предлагаться в новых документах. История и остатки сохранятся.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmArchive = false
+                        onArchive()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Архивировать") }
+            },
+            dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Отмена") } }
+        )
+    }
 }
 
 @Composable
@@ -740,50 +780,23 @@ private fun StockTab(
             }
         }
 
-        // Сводка по остаткам (KPI)
+        // Сводка по остаткам (KPI — кликабельная быстрая фильтрация)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            StockKpiCard("Позиций", "${filteredStock.size}", Brand.Blue, Modifier.weight(1f))
-            StockKpiCard("Физически", formatQtyShort(totalPhysical), Brand.Indigo, Modifier.weight(1f))
-            StockKpiCard("В резерве", formatQtyShort(totalReserved), Brand.Amber, Modifier.weight(1f))
-            StockKpiCard("Доступно", formatQtyShort(totalAvailable), Brand.Teal, Modifier.weight(1f))
-            StockKpiCard("Карантин / брак", "$quarantineCount", if (quarantineCount > 0) Brand.Rose else Brand.Graphite, Modifier.weight(1f))
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            WarehouseDropdown(
-                warehouses = state.warehouses,
-                selected = state.warehouses.find { it.id == state.stockFilters.warehouseId },
-                onSelect = {
-                    viewModel.updateStockFilters(state.stockFilters.copy(warehouseId = it.id))
-                    viewModel.loadStock()
-                },
-                label = "Склад",
-                modifier = Modifier.weight(1f)
-            )
-            NomenclatureDropdown(
-                items = state.nomenclature,
-                selected = state.nomenclature.find { it.id == state.stockFilters.nomenclatureId },
-                onSelect = {
-                    viewModel.updateStockFilters(state.stockFilters.copy(nomenclatureId = it.id))
-                    viewModel.loadStock()
-                },
-                label = "Номенклатура",
-                modifier = Modifier.weight(1f)
-            )
-            Button(onClick = viewModel::loadStock) { Text("Обновить") }
-            OutlinedButton(onClick = {
+            StockKpiCard("Позиций", "${filteredStock.size}", Brand.Blue, Modifier.weight(1f).clickable {
                 filterOnlyAvailable = false
                 filterQuarantineOnly = false
-                viewModel.updateStockFilters(StockFilters())
-                viewModel.loadStock()
-            }) { Text("Сбросить") }
+            })
+            StockKpiCard("Физически", formatQtyShort(totalPhysical), Brand.Indigo, Modifier.weight(1f))
+            StockKpiCard("В резерве", formatQtyShort(totalReserved), Brand.Amber, Modifier.weight(1f))
+            StockKpiCard("Доступно", formatQtyShort(totalAvailable), Brand.Teal, Modifier.weight(1f).clickable {
+                filterOnlyAvailable = !filterOnlyAvailable
+            })
+            StockKpiCard("Карантин / брак", "$quarantineCount", if (quarantineCount > 0) Brand.Rose else Brand.Graphite, Modifier.weight(1f).clickable {
+                filterQuarantineOnly = !filterQuarantineOnly
+            })
         }
 
         Row(
@@ -806,16 +819,26 @@ private fun StockTab(
                     Text("Ниже минимума: ${state.lowStock.size}", color = Brand.Rose)
                 }
             }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = viewModel::loadStock) { Text("Обновить") }
+            OutlinedButton(onClick = {
+                filterOnlyAvailable = false
+                filterQuarantineOnly = false
+                viewModel.updateStockFilters(StockFilters())
+                viewModel.loadStock()
+            }) { Text("Сбросить") }
         }
 
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.stock.isEmpty()) {
             LoadingOverlay()
         } else if (filteredStock.isEmpty()) {
-            EmptyState("Остатки не найдены. Выберите фильтры или сбросьте ограничения.")
+            EmptyState("Остатки не найдены. Сбросьте фильтры или воспользуйтесь поиском по таблице.")
         } else {
             StockGrid(
                 stock = filteredStock,
+                warehouses = state.warehouses,
+                nomenclature = state.nomenclature,
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
@@ -904,49 +927,20 @@ private fun ReceiptsTab(
                 modifier = Modifier.weight(1f)
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ReceiptDropdown(
-                receipts = state.receipts,
-                selected = null,
-                onSelect = viewModel::selectReceipt,
-                label = "Открыть приёмку",
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(onClick = viewModel::loadReceipts) { Text("Обновить") }
-        }
         if (state.isLoading && state.receipts.isEmpty()) {
             CircularProgressIndicator()
-        } else if (state.receipts.isEmpty()) {
-            Text(
-                text = "Приёмки по выбранным фильтрам не найдены.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = state.loadReceiptId,
-                onValueChange = viewModel::updateLoadReceiptId,
-                label = { Text("ID приёмки") },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
-            Button(onClick = viewModel::loadReceiptById) { Text("Открыть") }
-            TextButton(onClick = { viewModel.loadExpectedReceipts() }) {
-                Text("Ожидаемые поставки")
+        TextButton(
+            onClick = {
+                if (state.expectedReceiptsLoaded) viewModel.hideExpectedReceipts() else viewModel.loadExpectedReceipts()
             }
+        ) {
+            Text(if (state.expectedReceiptsLoaded) "Скрыть ожидаемые поставки" else "Показать ожидаемые поставки по заказам")
         }
 
-        if (state.expectedReceipts.isNotEmpty()) {
+        if (state.expectedReceiptsLoaded) {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
@@ -956,13 +950,27 @@ private fun ReceiptsTab(
                     modifier = Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text("Ожидается к приёмке", style = MaterialTheme.typography.titleSmall)
+                    Text("Ожидается к приёмке по заказам поставщикам", style = MaterialTheme.typography.titleSmall)
+                    if (state.expectedReceipts.isEmpty()) {
+                        Text(
+                            "Непринятых позиций по заказам нет.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     state.expectedReceipts.take(20).forEach { line ->
                         Text(
                             text = "${line.orderNumber} · позиция ${line.lineNo}: " +
-                                "заказано ${line.orderedQuantity}, поставлено ${line.deliveredQuantity}, " +
-                                "принято ${line.acceptedQuantity}, осталось ${line.notAcceptedQuantity}",
+                                "заказано ${ErpFormat.qty(line.orderedQuantity)}, поставлено ${ErpFormat.qty(line.deliveredQuantity)}, " +
+                                "принято ${ErpFormat.qty(line.acceptedQuantity)}, осталось ${ErpFormat.qty(line.notAcceptedQuantity)}",
                             style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (state.expectedReceipts.size > 20) {
+                        Text(
+                            "Показаны первые 20 из ${state.expectedReceipts.size}.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -971,7 +979,13 @@ private fun ReceiptsTab(
 
         if (state.currentReceipt == null) {
             if (state.receipts.isEmpty()) {
-                EmptyState("Приёмок ещё не было. Создайте документ с основанием.")
+                if (!state.isLoading) {
+                    val filtered = state.receiptFilters.warehouseId != null || state.receiptFilters.status != null
+                    EmptyState(
+                        if (filtered) "Приёмки по выбранным фильтрам не найдены."
+                        else "Приёмок ещё не было. Создайте документ с основанием."
+                    )
+                }
             } else {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -1017,7 +1031,13 @@ private fun ReceiptsTab(
                                 Text(
                                     text = receipt.status.localizedName(),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = when (receipt.status) {
+                                        ReceiptStatus.DRAFT -> Brand.Amber
+                                        ReceiptStatus.POSTED -> Brand.Teal
+                                        ReceiptStatus.IN_PROGRESS -> Brand.Blue
+                                        ReceiptStatus.CANCELLED -> Brand.Graphite
+                                    }
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 TextButton(onClick = { viewModel.openReceipt(receipt.id) }) {
@@ -1079,14 +1099,13 @@ private fun ReceiptDetailCard(
             )
             warehouse?.let { Text(text = "Склад: ${it.code} — ${it.name}", style = MaterialTheme.typography.bodyMedium) }
             receipt.sourceRef?.let { Text(text = "Основание: $it", style = MaterialTheme.typography.bodyMedium) }
-            receipt.expectedAt?.let { Text(text = "Ожидается: $it", style = MaterialTheme.typography.bodyMedium) }
+            receipt.expectedAt?.let { Text(text = "Ожидается: ${ErpFormat.dateRu(it)}", style = MaterialTheme.typography.bodyMedium) }
             receipt.purchaseOrderNumber?.let { orderNumber ->
                 Text(text = "Заказ поставщику: $orderNumber", style = MaterialTheme.typography.bodyMedium)
             }
             receipt.purchaseDeliveryNumber?.let { deliveryNumber ->
                 Text(text = "Поставка: $deliveryNumber", style = MaterialTheme.typography.bodyMedium)
             }
-            Text(text = "Версия: ${receipt.version}", style = MaterialTheme.typography.bodyMedium)
             if (receipt.hasDiscrepancies) {
                 Text(
                     text = "По документу есть расхождения «ожидалось / принято»",
@@ -1101,13 +1120,13 @@ private fun ReceiptDetailCard(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = "№${line.lineNo}: ${item?.let { "${it.code} — ${it.name}" } ?: (line.nomenclatureCode ?: "Номенклатура ${line.nomenclatureId}")}\n" +
-                            "Ожидалось ${line.expectedQuantity} ${item?.unit.orEmpty()}, принято ${line.receivedQuantity} ${item?.unit.orEmpty()}",
+                            "Ожидалось ${ErpFormat.qty(line.expectedQuantity)} ${item?.unit.orEmpty()}, принято ${ErpFormat.qty(line.receivedQuantity)} ${item?.unit.orEmpty()}",
                         style = MaterialTheme.typography.bodySmall
                     )
                     line.discrepancyKind?.let { kind ->
                         Text(
                             text = (if (kind.name == "SHORTAGE") "Недопоставка " else "Излишек ") +
-                                "${line.discrepancyQuantity}: ${line.discrepancyReason ?: "без обоснования"}",
+                                "${ErpFormat.qty(line.discrepancyQuantity)}: ${line.discrepancyReason ?: "без обоснования"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -1131,7 +1150,7 @@ private fun ReceiptDetailCard(
                 }
             }
             if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
-                ReceiptAcceptance(receipt = receipt, onSave = onAccept)
+                ReceiptAcceptance(receipt = receipt, nomenclature = nomenclature, onSave = onAccept)
             }
             val wmsRepoForQc: org.example.project.data.WmsRepository = koinInject()
             val qcScope = rememberCoroutineScope()
@@ -1159,6 +1178,15 @@ private fun ReceiptDetailCard(
                 }
                 TextButton(onClick = onClose) { Text("К списку") }
             }
+            if ((receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) &&
+                receipt.lines.any { it.locationId == null }
+            ) {
+                Text(
+                    "Провести можно после сохранения факта приёмки с ячейкой для каждой строки.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (showQcDialog) {
                 var qcComment by remember { mutableStateOf("") }
                 AlertDialog(
@@ -1167,7 +1195,7 @@ private fun ReceiptDetailCard(
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             qcInfo?.let { qc ->
-                                Text("Статус ОТК: ${qc.status.name}")
+                                Text("Статус ОТК: ${qc.status.qcLabel()}")
                             }
                             qcStatusMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                             OutlinedTextField(
@@ -1198,7 +1226,7 @@ private fun ReceiptDetailCard(
                                 when (res) {
                                     is org.example.project.data.ApiResult.Success -> {
                                         qcInfo = res.data
-                                        qcStatusMsg = "ОТК проведён: ${res.data.status.name}"
+                                        qcStatusMsg = "ОТК проведён: ${res.data.status.qcLabel()}"
                                     }
                                     is org.example.project.data.ApiResult.Error -> qcStatusMsg = res.error.userText()
                                 }
@@ -1224,12 +1252,10 @@ private fun ReceiptDetailCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
-                        value = linkOrderId,
-                        onValueChange = onLinkOrderIdChange,
-                        label = { Text("ID заказа") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
+                    PurchaseOrderPicker(
+                        value = linkOrderId.trim().toLongOrNull(),
+                        onChange = { onLinkOrderIdChange(it?.toString().orEmpty()) },
+                        modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = linkDocumentNo,
@@ -1277,6 +1303,7 @@ private fun ReservationsTab(
                 selected = state.warehouses.find { it.id == state.reservationFilters.warehouseId },
                 onSelect = { viewModel.updateReservationFilters(state.reservationFilters.copy(warehouseId = it.id)) },
                 label = "Склад",
+                placeholder = "Все склады",
                 modifier = Modifier.weight(1f)
             )
             NomenclatureDropdown(
@@ -1291,7 +1318,10 @@ private fun ReservationsTab(
                 onSelect = { viewModel.updateReservationFilters(state.reservationFilters.copy(status = it)) },
                 modifier = Modifier.weight(1f)
             )
-            Button(onClick = viewModel::loadReservations) { Text("Применить") }
+            OutlinedButton(
+                onClick = { viewModel.updateReservationFilters(ReservationFilters()) },
+                enabled = state.reservationFilters != ReservationFilters()
+            ) { Text("Сбросить") }
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.reservations.isEmpty()) {
@@ -1301,6 +1331,8 @@ private fun ReservationsTab(
         } else {
             ReservationsGrid(
                 reservations = state.reservations,
+                warehouses = state.warehouses,
+                nomenclature = state.nomenclature,
                 onClick = { viewModel.selectReservation(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
@@ -1311,7 +1343,11 @@ private fun ReservationsTab(
                 releaseReason = state.releaseReason,
                 onReasonChange = viewModel::updateReleaseReason,
                 onRelease = viewModel::releaseReservation,
-                onClose = viewModel::clearCurrentReservation
+                onClose = viewModel::clearCurrentReservation,
+                nomenclature = state.nomenclature.find { it.id == state.currentReservation!!.nomenclatureId },
+                warehouse = state.warehouses.find { it.id == state.currentReservation!!.warehouseId },
+                error = state.operationError,
+                busy = state.isLoading
             )
         }
     }
@@ -1323,18 +1359,41 @@ private fun ReservationDetailDialog(
     releaseReason: String,
     onReasonChange: (String) -> Unit,
     onRelease: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    nomenclature: NomenclatureDto? = null,
+    warehouse: WarehouseDto? = null,
+    error: org.example.project.dto.ApiError? = null,
+    busy: Boolean = false
 ) {
+    val unit = nomenclature?.unit?.let { " $it" }.orEmpty()
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("Резерв ${reservation.number}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(text = "Основание: ${reservation.reasonType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Количество: ${reservation.quantity}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Списано: ${reservation.issuedQuantity}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "Позиция: " + (nomenclature?.let { "${it.code} — ${it.name}" } ?: "#${reservation.nomenclatureId}"),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "Склад: " + (warehouse?.let { "${it.code} — ${it.name}" } ?: "#${reservation.warehouseId}"),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "Основание: ${reservation.reasonType.localizedName()}" +
+                        (reservation.reasonNote?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(text = "Количество: ${ErpFormat.qty(reservation.quantity)}$unit", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Выдано по резерву: ${ErpFormat.qty(reservation.issuedQuantity)}$unit", style = MaterialTheme.typography.bodyMedium)
                 Text(text = "Статус: ${reservation.status.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Версия: ${reservation.version}", style = MaterialTheme.typography.bodyMedium)
+                reservation.expiresAt?.let {
+                    Text(text = "Действует до: ${ErpFormat.dateRu(it)}", style = MaterialTheme.typography.bodyMedium)
+                }
+                reservation.createdAt?.let {
+                    Text(text = "Создан: ${ErpFormat.dateTimeRu(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                error?.let { ErrorMessageCard(error = it) }
                 if (reservation.status == ReservationStatus.ACTIVE) {
                     HorizontalDivider()
                     OutlinedTextField(
@@ -1349,7 +1408,7 @@ private fun ReservationDetailDialog(
         },
         confirmButton = {
             if (reservation.status == ReservationStatus.ACTIVE) {
-                Button(onClick = onRelease) { Text("Снять резерв") }
+                Button(onClick = onRelease, enabled = !busy) { Text("Снять резерв") }
             }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Закрыть") } }
@@ -1370,7 +1429,8 @@ internal fun EmptyState(text: String, modifier: Modifier = Modifier) {
             ) {
                 org.example.project.ui.theme.ErpIcon(
                     glyph = ErpIconGlyph.Warehouse,
-                    tint = Brand.Teal
+                    tint = Brand.Teal,
+                    modifier = Modifier.size(32.dp)
                 )
                 Text(
                     text = text,
@@ -1384,8 +1444,99 @@ internal fun EmptyState(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
+    var selectedType by remember { mutableStateOf<StockMovementType?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var lowStockQuery by remember { mutableStateOf("") }
+
+    val nomById = remember(state.nomenclature) { state.nomenclature.associateBy { it.id } }
+
+    val inboundCount = remember(state.movements) {
+        state.movements.count {
+            it.type == StockMovementType.RECEIPT ||
+                it.type == StockMovementType.RETURN ||
+                it.type == StockMovementType.ADJUSTMENT_IN
+        }
+    }
+    val outboundCount = remember(state.movements) {
+        state.movements.count {
+            it.type == StockMovementType.ISSUE ||
+                it.type == StockMovementType.WRITE_OFF ||
+                it.type == StockMovementType.ADJUSTMENT_OUT
+        }
+    }
+    val transferCount = remember(state.movements) {
+        state.movements.count { it.type == StockMovementType.TRANSFER }
+    }
+
+    val filteredMovements = remember(state.movements, selectedType, searchQuery, nomById) {
+        val q = searchQuery.trim().lowercase()
+        state.movements.filter { m ->
+            val typeOk = selectedType == null || m.type == selectedType
+            if (!typeOk) return@filter false
+            if (q.isEmpty()) return@filter true
+            val nom = nomById[m.nomenclatureId]
+            (nom?.name?.lowercase()?.contains(q) == true) ||
+                (nom?.code?.lowercase()?.contains(q) == true) ||
+                m.nomenclatureId.toString().contains(q) ||
+                m.documentType.lowercase().contains(q) ||
+                m.documentId.toString().contains(q) ||
+                (m.lotNumber?.lowercase()?.contains(q) == true) ||
+                (m.serialNumber?.lowercase()?.contains(q) == true) ||
+                (m.fromLocationCode?.lowercase()?.contains(q) == true) ||
+                (m.toLocationCode?.lowercase()?.contains(q) == true) ||
+                m.createdByName.lowercase().contains(q) ||
+                (m.note?.lowercase()?.contains(q) == true)
+        }
+    }
+
+    val filteredLowStock = remember(state.lowStock, lowStockQuery) {
+        val q = lowStockQuery.trim().lowercase()
+        if (q.isEmpty()) state.lowStock
+        else state.lowStock.filter {
+            it.code.lowercase().contains(q) || it.name.lowercase().contains(q)
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         state.operationError?.let { ErrorMessageCard(it) }
+
+        // Верхняя строка KPI
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MovementKpiTile(
+                title = "Всего движений",
+                value = "${state.movements.size}",
+                subtitle = "Перемещений: $transferCount",
+                accent = Brand.Indigo,
+                glyph = ErpIconGlyph.TrendUp,
+                modifier = Modifier.weight(1f)
+            )
+            MovementKpiTile(
+                title = "Приход и возврат",
+                value = "$inboundCount",
+                subtitle = "Пополнения остатков",
+                accent = Brand.Teal,
+                glyph = ErpIconGlyph.CheckCircle,
+                modifier = Modifier.weight(1f)
+            )
+            MovementKpiTile(
+                title = "Расход и списание",
+                value = "$outboundCount",
+                subtitle = "Выдачи и списания",
+                accent = Brand.Amber,
+                glyph = ErpIconGlyph.Layers,
+                modifier = Modifier.weight(1f)
+            )
+            MovementKpiTile(
+                title = "Дефицит позиций",
+                value = "${state.lowStock.size}",
+                subtitle = if (state.lowStock.isEmpty()) "Запас в норме" else "Ниже минимума",
+                accent = if (state.lowStock.isEmpty()) Brand.Mint else Brand.Rose,
+                glyph = if (state.lowStock.isEmpty()) ErpIconGlyph.CheckCircle else ErpIconGlyph.Alert,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Панель поиска по штрихкоду / артикулу
         GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 12.dp) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1395,58 +1546,493 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                 OutlinedTextField(
                     value = state.barcodeQuery,
                     onValueChange = viewModel::updateBarcodeQuery,
-                    label = { Text("Поиск по штрихкоду / артикулу") },
+                    label = { Text("Поиск номенклатуры по штрихкоду или артикулу") },
+                    leadingIcon = {
+                        ErpIcon(
+                            glyph = ErpIconGlyph.Search,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
                 Button(onClick = viewModel::lookupBarcode) { Text("Найти") }
-                TextButton(onClick = viewModel::loadMovementsAndLowStock) { Text("Обновить") }
+                OutlinedButton(onClick = viewModel::loadMovementsAndLowStock) {
+                    ErpIcon(
+                        glyph = ErpIconGlyph.Refresh,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Обновить")
+                }
             }
             state.barcodeResult?.let { nom ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Найдено: ${nom.code} — ${nom.name} (${nom.unit})",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-        Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight(), contentPadding = 12.dp) {
-                Text("Журнал движений (${state.movements.size})", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                if (state.movements.isEmpty()) {
-                    Text("Движений пока нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    androidx.compose.foundation.lazy.LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(state.movements.size) { i ->
-                            val m = state.movements[i]
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Brand.Teal.copy(alpha = 0.10f),
+                    modifier = Modifier.fillMaxWidth().border(1.dp, Brand.Teal.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ErpIcon(ErpIconGlyph.CheckCircle, tint = Brand.Teal, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "${nom.code} — ${nom.name}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Surface(shape = RoundedCornerShape(999.dp), color = Brand.Teal.copy(alpha = 0.16f)) {
                             Text(
-                                text = "${m.type.name} • ном. #${m.nomenclatureId} • кол-во ${m.quantity} (${m.documentType} #${m.documentId})",
-                                style = MaterialTheme.typography.bodySmall
+                                text = nom.unit,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Brand.Teal,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
                     }
                 }
             }
-            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight(), contentPadding = 12.dp) {
-                Text("Ниже минимума / дефицит (${state.lowStock.size})", style = MaterialTheme.typography.titleMedium)
+        }
+
+        // Основная рабочая область: Журнал движений + Дефицит
+        Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GlassCard(modifier = Modifier.weight(1.35f).fillMaxHeight(), contentPadding = 14.dp) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ErpIcon(ErpIconGlyph.TrendUp, tint = Brand.Indigo, modifier = Modifier.size(18.dp))
+                    Text(
+                        text = "Журнал движений",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Surface(shape = RoundedCornerShape(999.dp), color = Brand.Indigo.copy(alpha = 0.14f)) {
+                        Text(
+                            text = "${filteredMovements.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Brand.Indigo,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (state.movementsLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Фильтры по типу и быстрый поиск
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Поиск по номенклатуре, ячейке, документу...", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(8.dp))
-                if (state.lowStock.isEmpty()) {
-                    Text("Дефицита не выявлено.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    androidx.compose.foundation.lazy.LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(state.lowStock.size) { i ->
-                            val l = state.lowStock[i]
-                            Text(
-                                text = "${l.code} ${l.name}: остаток ${l.availableQty} ${l.unit}, мин. ${l.minStock}, дефицит ${l.deficitQty}",
-                                style = MaterialTheme.typography.bodySmall
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedType == null,
+                        onClick = { selectedType = null },
+                        label = { Text("Все (${state.movements.size})") }
+                    )
+                    StockMovementType.entries.forEach { t ->
+                        val (label, _, _) = movementTypeMeta(t)
+                        val count = state.movements.count { it.type == t }
+                        if (count > 0 || selectedType == t) {
+                            FilterChip(
+                                selected = selectedType == t,
+                                onClick = { selectedType = if (selectedType == t) null else t },
+                                label = { Text("$label ($count)") }
                             )
                         }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                Spacer(Modifier.height(10.dp))
+
+                if (filteredMovements.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ErpIcon(ErpIconGlyph.TrendUp, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
+                            Text(
+                                text = if (state.movements.isEmpty()) "Движений пока нет." else "По выбранным фильтрам движений не найдено.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    org.example.project.ui.tables.PaginatedCardList(
+                        items = filteredMovements,
+                        modifier = Modifier.fillMaxSize()
+                    ) { _, m ->
+                        MovementLogCard(m = m, nomenclature = nomById[m.nomenclatureId])
+                    }
+                }
+            }
+
+            GlassCard(modifier = Modifier.weight(1f).fillMaxHeight(), contentPadding = 14.dp) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val alertColor = if (state.lowStock.isEmpty()) Brand.Teal else Brand.Rose
+                    ErpIcon(
+                        glyph = if (state.lowStock.isEmpty()) ErpIconGlyph.CheckCircle else ErpIconGlyph.Alert,
+                        tint = alertColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Ниже минимума / дефицит",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Surface(shape = RoundedCornerShape(999.dp), color = alertColor.copy(alpha = 0.14f)) {
+                        Text(
+                            text = "${filteredLowStock.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = alertColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = lowStockQuery,
+                    onValueChange = { lowStockQuery = it },
+                    placeholder = { Text("Поиск по коду или названию...") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                Spacer(Modifier.height(10.dp))
+
+                if (filteredLowStock.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ErpIcon(ErpIconGlyph.CheckCircle, tint = Brand.Teal, modifier = Modifier.size(28.dp))
+                            Text(
+                                text = if (state.lowStock.isEmpty()) "Дефицита не выявлено." else "Позиции по фильтру не найдены.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    org.example.project.ui.tables.PaginatedCardList(
+                        items = filteredLowStock,
+                        modifier = Modifier.fillMaxSize()
+                    ) { _, item ->
+                        LowStockItemCard(item = item)
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun MovementKpiTile(
+    title: String,
+    value: String,
+    subtitle: String,
+    accent: Color,
+    glyph: ErpIconGlyph,
+    modifier: Modifier = Modifier
+) {
+    GlassCard(modifier = modifier, contentPadding = 12.dp) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                ErpIcon(glyph = glyph, tint = accent, modifier = Modifier.size(18.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = accent
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MovementLogCard(m: StockMovementDto, nomenclature: NomenclatureDto?) {
+    val scheme = MaterialTheme.colorScheme
+    val (typeLabel, typeColor, signPrefix) = movementTypeMeta(m.type)
+    val docLabel = movementDocTypeLabel(m.documentType)
+    // Сервер пишет служебное примечание вида «Receipt RCP-2026-00006»: номер документа
+    // переносим в подпись, а английский дубль не показываем.
+    val serviceNote = m.note?.trim()?.let { Regex("^(Receipt|Issue|Transfer|Return|Write[- ]?off|Inventory|Initial stock) +([^ ]+)$", RegexOption.IGNORE_CASE).find(it) }
+    val docNumber = serviceNote?.groupValues?.get(2)
+    val visibleNote = if (serviceNote != null) null else m.note
+    val shape = RoundedCornerShape(12.dp)
+
+    Surface(
+        shape = shape,
+        color = Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.50f), shape)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(shape = RoundedCornerShape(999.dp), color = typeColor.copy(alpha = 0.16f)) {
+                    Text(
+                        text = typeLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = typeColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = nomenclature?.name ?: "Номенклатура #${m.nomenclatureId}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (nomenclature != null) {
+                        Text(
+                            text = nomenclature.code,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(shape = RoundedCornerShape(8.dp), color = typeColor.copy(alpha = 0.12f)) {
+                    val unitSuffix = nomenclature?.unit?.let { " $it" } ?: ""
+                    Text(
+                        text = "$signPrefix${ErpFormat.qty(m.quantity)}$unitSuffix",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = typeColor,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Маршрут, документ, партия и автор
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val routeText = when {
+                    !m.fromLocationCode.isNullOrBlank() && !m.toLocationCode.isNullOrBlank() ->
+                        "${m.fromLocationCode} → ${m.toLocationCode}"
+                    !m.toLocationCode.isNullOrBlank() -> "→ ${m.toLocationCode}"
+                    !m.fromLocationCode.isNullOrBlank() -> "${m.fromLocationCode} →"
+                    else -> null
+                }
+                if (routeText != null) {
+                    Text(
+                        text = "Ячейка: $routeText",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurface
+                    )
+                }
+                Text(
+                    text = "$docLabel ${docNumber ?: "#${m.documentId}"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant
+                )
+                if (!m.lotNumber.isNullOrBlank()) {
+                    Text(
+                        text = "Партия: ${m.lotNumber}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+                if (!m.serialNumber.isNullOrBlank()) {
+                    Text(
+                        text = "S/N: ${m.serialNumber}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                val dateText = m.createdAt?.let { ErpFormat.dateTimeRu(it) }?.takeIf { it != "—" } ?: ""
+                Text(
+                    text = if (dateText.isNotEmpty()) "${m.createdByName} • $dateText" else m.createdByName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+
+            if (!visibleNote.isNullOrBlank()) {
+                Text(
+                    text = visibleNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LowStockItemCard(item: LowStockItemDto) {
+    val scheme = MaterialTheme.colorScheme
+    val avail = item.availableQty.toDoubleOrNull() ?: 0.0
+    val minS = item.minStock.toDoubleOrNull() ?: 0.0
+    val ratio = if (minS > 0.0) (avail / minS).toFloat().coerceIn(0f, 1f) else 0f
+    val barColor = if (ratio < 0.35f) Brand.Rose else Brand.Amber
+    val shape = RoundedCornerShape(12.dp)
+
+    Surface(
+        shape = shape,
+        color = Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, barColor.copy(alpha = 0.35f), shape)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = item.code,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant
+                    )
+                }
+                Surface(shape = RoundedCornerShape(999.dp), color = Brand.Rose.copy(alpha = 0.15f)) {
+                    Text(
+                        text = "Дефицит ${item.deficitQty} ${item.unit}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Brand.Rose,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            // Полоса обеспеченности минимального запаса
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(scheme.onSurface.copy(alpha = 0.08f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(ratio.coerceAtLeast(0.04f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(barColor)
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Доступно: ${item.availableQty} ${item.unit}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurface
+                )
+                Text(
+                    text = "Мин.: ${item.minStock} • Страх.: ${item.safetyStock}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private fun movementTypeMeta(type: StockMovementType): Triple<String, Color, String> = when (type) {
+    StockMovementType.RECEIPT -> Triple("Приход", Brand.Teal, "+")
+    StockMovementType.RETURN -> Triple("Возврат", Brand.Cyan, "+")
+    StockMovementType.ADJUSTMENT_IN -> Triple("Корр. +", Brand.Mint, "+")
+    StockMovementType.ISSUE -> Triple("Выдача", Brand.Amber, "-")
+    StockMovementType.WRITE_OFF -> Triple("Списание", Brand.Rose, "-")
+    StockMovementType.ADJUSTMENT_OUT -> Triple("Корр. -", Brand.Orange, "-")
+    StockMovementType.TRANSFER -> Triple("Перемещение", Brand.Indigo, "")
+}
+
+private fun movementDocTypeLabel(docType: String): String = when (docType.uppercase()) {
+    "INITIAL_STOCK" -> "Начальные остатки"
+    "RECEIPT" -> "Приёмка"
+    "ISSUE" -> "Выдача"
+    "TRANSFER" -> "Перемещение"
+    "RETURN" -> "Возврат"
+    "WRITE_OFF" -> "Списание"
+    "INVENTORY" -> "Инвентаризация"
+    else -> docType
 }
 
 @Composable
@@ -1499,25 +2085,29 @@ private fun WmsVerticalNav(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             WmsNavSection(
-                title = "Учёт и остатки",
+                title = "Основное",
                 items = listOf(
                     WmsNavEntry(WmsTab.STOCK, ErpIconGlyph.CheckCircle, Brand.Teal),
-                    WmsNavEntry(WmsTab.RESERVATIONS, ErpIconGlyph.Clock, Brand.Amber),
-                    WmsNavEntry(WmsTab.MOVEMENTS, ErpIconGlyph.TrendUp, Brand.Indigo)
+                    WmsNavEntry(WmsTab.RECEIPTS, ErpIconGlyph.Plus, Brand.Blue),
+                    WmsNavEntry(WmsTab.ISSUES, ErpIconGlyph.ChevronRight, Brand.Teal),
+                    WmsNavEntry(WmsTab.MOVEMENTS, ErpIconGlyph.TrendUp, Brand.Indigo),
+                    WmsNavEntry(WmsTab.NOMENCLATURE, ErpIconGlyph.Layers, Brand.Amber)
                 ),
                 selectedTab = state.selectedTab,
                 state = state,
                 onSelect = onSelectTab
             )
+
+            // Раньше раздел был свёрнут и раскрывался по клику; раскрытие не срабатывало,
+            // а семь операций оставались скрытыми. Места в панели достаточно — показываем всегда.
             WmsNavSection(
-                title = "Операции",
+                title = "Прочие операции",
                 items = listOf(
-                    WmsNavEntry(WmsTab.RECEIPTS, ErpIconGlyph.Plus, Brand.Blue),
+                    WmsNavEntry(WmsTab.RESERVATIONS, ErpIconGlyph.Clock, Brand.Amber),
                     WmsNavEntry(WmsTab.TRANSFERS, ErpIconGlyph.Send, Brand.Indigo),
-                    WmsNavEntry(WmsTab.ISSUES, ErpIconGlyph.ChevronRight, Brand.Teal),
                     WmsNavEntry(WmsTab.RETURNS, ErpIconGlyph.Refresh, Brand.Violet),
                     WmsNavEntry(WmsTab.WRITE_OFFS, ErpIconGlyph.Alert, Brand.Rose),
                     WmsNavEntry(WmsTab.INVENTORIES, ErpIconGlyph.Documents, Brand.Blue)
@@ -1530,8 +2120,7 @@ private fun WmsVerticalNav(
                 title = "Справочники",
                 items = listOf(
                     WmsNavEntry(WmsTab.WAREHOUSES, ErpIconGlyph.Warehouse, Brand.Teal),
-                    WmsNavEntry(WmsTab.LOCATIONS, ErpIconGlyph.Grid, Brand.Blue),
-                    WmsNavEntry(WmsTab.NOMENCLATURE, ErpIconGlyph.Layers, Brand.Amber)
+                    WmsNavEntry(WmsTab.LOCATIONS, ErpIconGlyph.Grid, Brand.Blue)
                 ),
                 selectedTab = state.selectedTab,
                 state = state,
@@ -1644,4 +2233,11 @@ private fun WmsNavItemRow(
             }
         }
     }
+}
+
+private fun org.example.project.dto.ReceiptQcStatus.qcLabel(): String = when (this) {
+    org.example.project.dto.ReceiptQcStatus.PENDING -> "ожидает контроля"
+    org.example.project.dto.ReceiptQcStatus.PASSED -> "принято"
+    org.example.project.dto.ReceiptQcStatus.PARTIAL -> "принято частично"
+    org.example.project.dto.ReceiptQcStatus.FAILED -> "не принято"
 }

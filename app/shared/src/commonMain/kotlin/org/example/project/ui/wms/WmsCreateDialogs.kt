@@ -339,17 +339,22 @@ fun CreateReceiptDialog(
                     form.sourceType == ReceiptSourceType.DELIVERY_NOTE ||
                     form.sourceType == ReceiptSourceType.INVOICE
                 ) {
-                    OutlinedTextField(
-                        value = form.purchaseOrderId?.toString().orEmpty(),
-                        onValueChange = { value ->
-                            onFormChange(form.copy(purchaseOrderId = value.trim().toLongOrNull()))
+                    PurchaseOrderPicker(
+                        value = form.purchaseOrderId,
+                        onChange = { orderId ->
+                            onFormChange(
+                                form.copy(
+                                    purchaseOrderId = orderId,
+                                    lines = form.lines.map { it.copy(purchaseOrderLineId = null) }
+                                )
+                            )
                         },
-                        label = { Text("ID заказа поставщику") },
-                        supportingText = {
-                            Text("Заказ уменьшает ожидаемый остаток; приёмка может быть частичной")
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Заказ уменьшает ожидаемый остаток; приёмка может быть частичной",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 OutlinedTextField(
@@ -393,12 +398,14 @@ fun CreateReceiptDialog(
                 if (form.lines.isEmpty()) {
                     Text("Строки не добавлены.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                val orderLines = rememberPurchaseOrderLines(form.purchaseOrderId)
                 form.lines.forEachIndexed { index, line ->
                     ReceiptLineRow(
                         line = line,
                         locations = locations,
                         nomenclature = nomenclature.filterNot { it.archived },
                         showPurchaseOrderLine = form.purchaseOrderId != null,
+                        orderLines = orderLines,
                         onChange = { onUpdateLine(index, it) },
                         onRemove = { onRemoveLine(index) }
                     )
@@ -419,6 +426,7 @@ private fun ReceiptLineRow(
     locations: List<StorageLocationDto>,
     nomenclature: List<NomenclatureDto>,
     showPurchaseOrderLine: Boolean,
+    orderLines: List<org.example.project.dto.PurchaseOrderLineDto> = emptyList(),
     onChange: (CreateReceiptLineForm) -> Unit,
     onRemove: () -> Unit
 ) {
@@ -449,15 +457,31 @@ private fun ReceiptLineRow(
             singleLine = true
         )
         if (showPurchaseOrderLine) {
-            OutlinedTextField(
-                value = line.purchaseOrderLineId?.toString().orEmpty(),
-                onValueChange = { value ->
-                    onChange(line.copy(purchaseOrderLineId = value.trim().toLongOrNull()))
+            org.example.project.ui.components.SearchableDropdown(
+                items = orderLines,
+                selected = orderLines.find { it.id == line.purchaseOrderLineId },
+                onSelect = { orderLine ->
+                    onChange(
+                        line.copy(
+                            purchaseOrderLineId = orderLine.id,
+                            nomenclatureId = line.nomenclatureId ?: orderLine.nomenclatureId
+                        )
+                    )
                 },
-                label = { Text("ID позиции заказа") },
-                supportingText = { Text("Обязателен для заказа с несколькими позициями") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                label = "Позиция заказа",
+                itemText = { orderLine ->
+                    "№${orderLine.lineNo} · ${listOfNotNull(orderLine.nomenclatureCode, orderLine.nomenclatureName).joinToString(" — ")}" +
+                        " · ${org.example.project.ui.theme.ErpFormat.qty(orderLine.quantity)} ${orderLine.unit}"
+                },
+                emptyText = "Позиции заказа не загружены",
+                onClear = { onChange(line.copy(purchaseOrderLineId = null)) },
+                clearText = "Не указана",
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "Обязательна для заказа с несколькими позициями",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         OutlinedTextField(
@@ -526,19 +550,16 @@ fun CreateReservationDialog(
                     onSelect = { onFormChange(form.copy(reasonType = it)) },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                ProjectPicker(
                     value = form.projectId,
-                    onValueChange = { onFormChange(form.copy(projectId = it)) },
-                    label = { Text("ID проекта") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(projectId = it, taskId = "")) },
+                    modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                TaskPicker(
                     value = form.taskId,
-                    onValueChange = { onFormChange(form.copy(taskId = it)) },
-                    label = { Text("ID задачи") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(taskId = it)) },
+                    projectId = form.projectId,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = form.reasonNote,

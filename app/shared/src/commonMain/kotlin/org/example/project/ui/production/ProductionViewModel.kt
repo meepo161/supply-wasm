@@ -72,10 +72,15 @@ class ProductionViewModel(
                 projectId = _uiState.value.projectFilter,
                 status = _uiState.value.statusFilter
             )) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    orders = result.data,
-                    isOrdersLoading = false
-                )
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        orders = result.data,
+                        isOrdersLoading = false
+                    )
+                    if (_uiState.value.selectedOrder == null && result.data.isNotEmpty()) {
+                        selectOrder(result.data.first())
+                    }
+                }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isOrdersLoading = false,
                     operationError = result.error

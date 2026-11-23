@@ -2,16 +2,16 @@ package org.example.project.ui.home
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid
+import org.example.project.ui.theme.ErpFormat
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.NotificationDto
 import org.example.project.dto.TaskDto
 import org.example.project.ui.tasks.localizedName
-import org.example.project.ui.wms.toShortDate
 
 private val gridConfig = Un7KCMPDataGridConfig(
     isUsableHaptic = false,
-    pageSizeList = listOf("10", "20", "50", "100"),
+    pageSizeList = listOf("20", "50", "100"),
     defaultPageSizeListIndex = 0
 )
 
@@ -21,20 +21,24 @@ fun HomeTaskGrid(
     onClick: (TaskDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val todayIso = currentIsoDate()
     val data = mapOf(
         "Номер" to tasks.map { it.number },
         "Название" to tasks.map { it.title },
         "Статус" to tasks.map { it.status.localizedName() },
-        "Приоритет" to tasks.map { it.priority.localizedName() },
-        "Срок" to tasks.map { it.dueDate.toShortDate() }
+        "Приоритет" to tasks.map { if (it.priority.name == "NORMAL") "—" else it.priority.localizedName() },
+        "Срок" to tasks.map { ErpFormat.deadlineLabel(it.dueDate, todayIso) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "home-tasks",
+        compact = true,
         config = gridConfig,
         onClick = { selected ->
-            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
-            tasks.firstOrNull { it.number == number }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                tasks.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -46,20 +50,22 @@ fun HomeNotificationGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to notifications.map { it.id.toString() },
         "Тип" to notifications.map { it.type },
-        "Объект" to notifications.map { "${it.entityType} ${it.entityId}" },
+        "Объект" to notifications.map { "${it.entityType} #${it.entityId}" },
         "Заголовок" to notifications.map { it.title },
         "Прочитано" to notifications.map { if (it.isRead) "Да" else "Нет" },
-        "Дата" to notifications.map { it.createdAt.toShortDate() }
+        "Дата" to notifications.map { ErpFormat.dateTimeRu(it.createdAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "home-notifications",
+        compact = true,
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            notifications.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                notifications.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }

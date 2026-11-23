@@ -2,7 +2,8 @@ package org.example.project.ui.wms
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid
+import org.example.project.ui.theme.ErpFormat
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.StockBalanceDto
@@ -28,19 +29,20 @@ fun WarehousesGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to warehouses.map { it.id.toString() },
         "Код" to warehouses.map { it.code },
         "Название" to warehouses.map { it.name },
         "Адрес" to warehouses.map { it.address ?: "—" },
         "Активен" to warehouses.map { if (it.active) "Да" else "Нет" }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-warehouses",
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            warehouses.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                warehouses.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -52,20 +54,21 @@ fun LocationsGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to locations.map { it.id.toString() },
         "Код" to locations.map { it.code },
         "Название" to locations.map { it.name },
         "Тип" to locations.map { it.kind.localizedName() },
         "Назначение" to locations.map { it.purpose.localizedName() },
         "Ёмкость" to locations.map { it.capacity ?: "—" }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-locations",
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            locations.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                locations.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -74,23 +77,27 @@ fun LocationsGrid(
 fun NomenclatureGrid(
     items: List<NomenclatureDto>,
     onClick: (NomenclatureDto) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showSearch: Boolean = true
 ) {
-    val data = mapOf(
-        "ID" to items.map { it.id.toString() },
-        "Код" to items.map { it.code },
-        "Название" to items.map { it.name },
-        "Тип" to items.map { it.type.localizedName() },
-        "Ед.изм." to items.map { it.unit },
-        "Архив" to items.map { if (it.archived) "Да" else "Нет" }
-    )
-    Un7KCMPDataGrid(
+    val data = buildMap<String, List<Any?>> {
+        put("Код", items.map { it.code })
+        put("Название", items.map { it.name })
+        put("Тип", items.map { it.type.localizedName() })
+        put("Ед.изм.", items.map { it.unit })
+        // Колонка «Архив» нужна, только когда в списке есть архивные позиции.
+        if (items.any { it.archived }) put("Архив", items.map { if (it.archived) "Да" else "Нет" })
+    }
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-nomenclature",
         config = gridConfig,
+        showSearch = showSearch,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            items.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                items.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -98,22 +105,29 @@ fun NomenclatureGrid(
 @Composable
 fun StockGrid(
     stock: List<StockBalanceDto>,
+    warehouses: List<WarehouseDto> = emptyList(),
+    nomenclature: List<NomenclatureDto> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    val data = mapOf(
-        "ID" to stock.map { it.id.toString() },
-        "Склад ID" to stock.map { it.warehouseId.toString() },
-        "Ячейка" to stock.map { it.locationCode },
-        "Номенклатура ID" to stock.map { it.nomenclatureId.toString() },
-        "Партия" to stock.map { it.lotNumber ?: "—" },
-        "Серия" to stock.map { it.serialNumber ?: "—" },
-        "Физ." to stock.map { it.physicalQty },
-        "Резерв" to stock.map { it.reservedQty },
-        "Доступно" to stock.map { it.availableQty }
-    )
-    Un7KCMPDataGrid(
+    val hasLot = stock.any { !it.lotNumber.isNullOrBlank() }
+    val hasSerial = stock.any { !it.serialNumber.isNullOrBlank() }
+    val data = buildMap<String, List<Any?>> {
+        put("Склад", stock.map { s -> warehouses.find { it.id == s.warehouseId }?.name ?: "Склад #${s.warehouseId}" })
+        put("Ячейка", stock.map { it.locationCode })
+        put("Номенклатура", stock.map { s ->
+            nomenclature.find { it.id == s.nomenclatureId }?.let { "${it.code} · ${it.name}" } ?: "Поз. #${s.nomenclatureId}"
+        })
+        put("Ед.", stock.map { s -> nomenclature.find { it.id == s.nomenclatureId }?.unit ?: "—" })
+        if (hasLot) put("Партия", stock.map { it.lotNumber ?: "—" })
+        if (hasSerial) put("Серия", stock.map { it.serialNumber ?: "—" })
+        put("Физ.", stock.map { ErpFormat.qty(it.physicalQty) })
+        put("Резерв", stock.map { ErpFormat.qty(it.reservedQty) })
+        put("Доступно", stock.map { ErpFormat.qty(it.availableQty) })
+    }
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-stock",
         config = gridConfig,
         onClick = { }
     )
@@ -123,23 +137,30 @@ fun StockGrid(
 fun ReservationsGrid(
     reservations: List<ReservationDto>,
     onClick: (ReservationDto) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    warehouses: List<WarehouseDto> = emptyList(),
+    nomenclature: List<NomenclatureDto> = emptyList()
 ) {
     val data = mapOf(
-        "ID" to reservations.map { it.id.toString() },
         "Номер" to reservations.map { it.number },
+        "Номенклатура" to reservations.map { r ->
+            nomenclature.find { it.id == r.nomenclatureId }?.let { "${it.code} · ${it.name}" } ?: "Поз. #${r.nomenclatureId}"
+        },
+        "Склад" to reservations.map { r -> warehouses.find { it.id == r.warehouseId }?.name ?: "Склад #${r.warehouseId}" },
         "Основание" to reservations.map { it.reasonType.localizedName() },
-        "Кол-во" to reservations.map { it.quantity },
-        "Списано" to reservations.map { it.issuedQuantity },
+        "Кол-во" to reservations.map { ErpFormat.qty(it.quantity) },
+        "Выдано" to reservations.map { ErpFormat.qty(it.issuedQuantity) },
         "Статус" to reservations.map { it.status.localizedName() }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-reservations",
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            reservations.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                reservations.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -153,21 +174,20 @@ fun TransfersGrid(
     val data = mapOf(
         "Номер" to transfers.map { it.number },
         "Вид" to transfers.map { it.kind.localizedName() },
-        "Из ячейки" to transfers.map { it.fromLocationId.toString() },
-        "В ячейку" to transfers.map { it.toLocationId.toString() },
-        "Номенклатура" to transfers.map { it.nomenclatureId.toString() },
-        "Кол-во" to transfers.map { it.quantity },
-        "Принято" to transfers.map { it.receivedQuantity ?: "—" },
-        "Расхождение" to transfers.map { it.discrepancyQuantity ?: "—" },
+        "Кол-во" to transfers.map { ErpFormat.qty(it.quantity) },
+        "Принято" to transfers.map { ErpFormat.qty(it.receivedQuantity) },
+        "Расхождение" to transfers.map { ErpFormat.qty(it.discrepancyQuantity) },
         "Статус" to transfers.map { it.status.localizedName() }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-transfers",
         config = gridConfig,
         onClick = { selected ->
-            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
-            transfers.firstOrNull { it.number == number }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                transfers.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -180,20 +200,20 @@ fun IssuesGrid(
 ) {
     val data = mapOf(
         "Номер" to issues.map { it.number },
-        "Склад ID" to issues.map { it.warehouseId.toString() },
         "Основание" to issues.map { it.reasonType.localizedName() },
         "Строк" to issues.map { it.lines.size.toString() },
         "Статус" to issues.map { it.status.localizedName() },
-        "Выдано" to issues.map { it.issuedAt.toShortDate() },
-        "Получатель" to issues.map { it.recipientId.toString() }
+        "Выдано" to issues.map { ErpFormat.dateRu(it.issuedAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-issues",
         config = gridConfig,
         onClick = { selected ->
-            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
-            issues.firstOrNull { it.number == number }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                issues.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -206,21 +226,20 @@ fun ReturnsGrid(
 ) {
     val data = mapOf(
         "Номер" to returns.map { it.number },
-        "Заказ выдачи ID" to returns.map { it.issueOrderId.toString() },
-        "Склад ID" to returns.map { it.warehouseId.toString() },
-        "Карантин ID" to returns.map { it.quarantineLocationId.toString() },
         "Строк" to returns.map { it.lines.size.toString() },
         "Причина" to returns.map { it.reason },
         "Статус" to returns.map { it.status.localizedName() },
-        "Принято" to returns.map { it.receivedAt.toShortDate() }
+        "Принято" to returns.map { ErpFormat.dateRu(it.receivedAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-returns",
         config = gridConfig,
         onClick = { selected ->
-            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
-            returns.firstOrNull { it.number == number }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                returns.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -233,20 +252,21 @@ fun WriteOffsGrid(
 ) {
     val data = mapOf(
         "Номер" to writeOffs.map { it.number },
-        "Склад ID" to writeOffs.map { it.warehouseId.toString() },
         "Причина" to writeOffs.map { it.reasonType.localizedName() },
-        "Количество" to writeOffs.map { it.totalQuantity },
+        "Количество" to writeOffs.map { ErpFormat.qty(it.totalQuantity) },
         "Сверх лимита" to writeOffs.map { if (it.overLimit) "Да" else "Нет" },
         "Статус" to writeOffs.map { it.status.localizedName() },
-        "Проведено" to writeOffs.map { it.postedAt.toShortDate() }
+        "Проведено" to writeOffs.map { ErpFormat.dateRu(it.postedAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-writeoffs",
         config = gridConfig,
         onClick = { selected ->
-            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
-            writeOffs.firstOrNull { it.number == number }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                writeOffs.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -259,19 +279,20 @@ fun InventoriesGrid(
 ) {
     val data = mapOf(
         "Номер" to inventories.map { it.number },
-        "Склад ID" to inventories.map { it.warehouseId.toString() },
         "Область" to inventories.map { it.scopeType.localizedName() },
         "Статус" to inventories.map { it.status.localizedName() },
-        "Срез" to inventories.map { it.bookedAt.toShortDate() },
-        "Проведено" to inventories.map { it.postedAt.toShortDate() }
+        "Срез" to inventories.map { ErpFormat.dateRu(it.bookedAt) },
+        "Проведено" to inventories.map { ErpFormat.dateRu(it.postedAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "wms-inventories",
         config = gridConfig,
         onClick = { selected ->
-            val number = selected.firstOrNull()?.second?.firstOrNull() as? String
-            inventories.firstOrNull { it.number == number }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                inventories.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }

@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -158,63 +161,87 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
             when (selectedTab) {
                 AnalyticsTab.SUMMARY -> {
                     val s = summary
-                    if (s != null) {
-                        GlassCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Показатели предприятия", style = MaterialTheme.typography.titleMedium)
-                                DetailRow("Задачи (всего / открыто / просрочено)", "${s.totalTasks} / ${s.openTasks} / ${s.overdueTasks}")
-                                DetailRow("Проекты (всего / в работе)", "${s.totalProjects} / ${s.activeProjects}")
-                                DetailRow("Потребности (всего / в работе)", "${s.totalDemands} / ${s.pendingDemands}")
-                                DetailRow("Заказы поставщикам", "${s.totalPurchaseOrders}")
-                                DetailRow("Производственные заказы (активные)", "${s.activeProductionOrders}")
-                                DetailRow("Позиций ниже минимального остатка", "${s.lowStockCount}")
+                    Column(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (s != null) {
+                            Text("Показатели предприятия", style = MaterialTheme.typography.titleMedium)
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                AnalyticsKpiCard("Открытых задач", "${s.openTasks}", "Всего задач: ${s.totalTasks}", Modifier.weight(1f))
+                                AnalyticsKpiCard("Просрочено задач", "${s.overdueTasks}", "Требуют внимания", Modifier.weight(1f))
+                                AnalyticsKpiCard("Проекты в работе", "${s.activeProjects}", "Всего: ${s.totalProjects}", Modifier.weight(1f))
+                                AnalyticsKpiCard("Потребности в работе", "${s.pendingDemands}", "Всего: ${s.totalDemands}", Modifier.weight(1f))
                             }
-                        }
-                        var execQueues by remember { mutableStateOf<List<org.example.project.dto.DepartmentQueueDto>>(emptyList()) }
-                        LaunchedEffect(Unit) {
-                            val qRes = extrasRepository.getExecutiveQueues()
-                            if (qRes is ApiResult.Success) execQueues = qRes.data
-                        }
-                        if (execQueues.isNotEmpty()) {
-                            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("Панель руководителя: очереди подразделений", style = MaterialTheme.typography.titleSmall)
-                                    execQueues.forEach { q ->
-                                        DetailRow(
-                                            q.departmentName,
-                                            "Открыто: ${q.openTasks} · Просрочено: ${q.overdueTasks} · Производство: ${q.inProgressOrders}"
-                                        )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                AnalyticsKpiCard("Заказы поставщикам", "${s.totalPurchaseOrders}", "Активные поставки", Modifier.weight(1f))
+                                AnalyticsKpiCard("Производство (акт.)", "${s.activeProductionOrders}", "Заказы в цехе", Modifier.weight(1f))
+                                AnalyticsKpiCard("Позиций в дефиците", "${s.lowStockCount}", "Ниже минимума", Modifier.weight(1f))
+                            }
+                            var execQueues by remember { mutableStateOf<List<org.example.project.dto.DepartmentQueueDto>>(emptyList()) }
+                            LaunchedEffect(Unit) {
+                                val qRes = extrasRepository.getExecutiveQueues()
+                                if (qRes is ApiResult.Success) execQueues = qRes.data
+                            }
+                            if (execQueues.isNotEmpty()) {
+                                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("Панель руководителя: очереди подразделений", style = MaterialTheme.typography.titleSmall)
+                                        execQueues.forEach { q ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(q.departmentName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    PillBadge(text = "Открыто: ${q.openTasks}")
+                                                    PillBadge(text = "Просрочено: ${q.overdueTasks}")
+                                                    PillBadge(text = "Производство: ${q.inProgressOrders}")
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        }
-                        GlassCard(modifier = Modifier.fillMaxWidth()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Экспорт таблиц (CSV)", style = MaterialTheme.typography.titleSmall)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SoftButton(
-                                        text = "Задачи (CSV)",
-                                        onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/tasks.csv") }
-                                    )
-                                    SoftButton(
-                                        text = "Проекты (CSV)",
-                                        onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/projects.csv") }
-                                    )
-                                    SoftButton(
-                                        text = "Остатки склада (CSV)",
-                                        onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/stock.csv") }
-                                    )
-                                    SoftButton(
-                                        text = "Импорт CSV",
-                                        onClick = { showCsvImport = true }
-                                    )
-                                    SoftButton(
-                                        text = "OpenAPI (JSON)",
-                                        onClick = { uriHandler.openUri("http://localhost:8080/api/openapi.json") }
-                                    )
-                                }
-                                infoMessage?.let {
-                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text("Экспорт таблиц (CSV)", style = MaterialTheme.typography.titleSmall)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        SoftButton(
+                                            text = "Задачи (CSV)",
+                                            onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/tasks.csv") }
+                                        )
+                                        SoftButton(
+                                            text = "Проекты (CSV)",
+                                            onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/projects.csv") }
+                                        )
+                                        SoftButton(
+                                            text = "Остатки склада (CSV)",
+                                            onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/stock.csv") }
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        SoftButton(
+                                            text = "Импорт номенклатуры (CSV)",
+                                            onClick = { showCsvImport = true }
+                                        )
+                                        Text(
+                                            "Массовое добавление позиций в справочник номенклатуры",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    infoMessage?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                    }
                                 }
                             }
                         }
@@ -254,33 +281,30 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                     if (calendar.isEmpty()) {
                         Text("Предстоящих сроков нет.", style = MaterialTheme.typography.bodyMedium)
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(calendar.size) { index ->
-                                val item = calendar[index]
-                                val progress = ((index + 1).toFloat() / calendar.size.coerceAtLeast(1).toFloat()).coerceIn(0.15f, 1f)
-                                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text("${item.number} · ${item.title}", style = MaterialTheme.typography.titleSmall)
-                                                Spacer(Modifier.height(2.dp))
-                                                Text("Срок: ${item.date}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
-                                            PillBadge(text = item.status)
+                        org.example.project.ui.tables.PaginatedCardList(
+                            items = calendar,
+                            modifier = Modifier.fillMaxSize()
+                        ) { index, item ->
+                            val progress = ((index + 1).toFloat() / calendar.size.coerceAtLeast(1).toFloat()).coerceIn(0.15f, 1f)
+                            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("${item.number} · ${item.title}", style = MaterialTheme.typography.titleSmall)
+                                            Spacer(Modifier.height(2.dp))
+                                            Text("Срок: ${item.date}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                        // Шкала Ганта по последовательности сроков
-                                        LinearProgressIndicator(
-                                            progress = { progress },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+                                        PillBadge(text = item.status)
                                     }
+                                    // Шкала Ганта по последовательности сроков
+                                    LinearProgressIndicator(
+                                        progress = { progress },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
                             }
                         }
@@ -316,24 +340,18 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                             infoMessage?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                             }
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(lowStock.size) { index ->
-                                    val item = lowStock[index]
-                                    GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("${item.code} · ${item.name}", style = MaterialTheme.typography.titleSmall)
-                                            Text(
-                                                "Доступно: ${item.availableQty} ${item.unit} · Минимум: ${item.minStock} · Дефицит: ${item.deficitQty}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                            org.example.project.ui.tables.PersistentDataGrid(
+                                data = mapOf(
+                                    "Код" to lowStock.map { it.code },
+                                    "Название" to lowStock.map { it.name },
+                                    "Доступно" to lowStock.map { "${it.availableQty} ${it.unit}" },
+                                    "Минимум" to lowStock.map { it.minStock },
+                                    "Страх. запас" to lowStock.map { it.safetyStock },
+                                    "Дефицит" to lowStock.map { "${it.deficitQty} ${it.unit}" }
+                                ),
+                                tableKey = "analytics-low-stock",
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
                 }
@@ -341,28 +359,20 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                     if (procurementPlan.isEmpty()) {
                         Text("Позиций к плановой закупке нет.", style = MaterialTheme.typography.bodyMedium)
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(procurementPlan.size) { index ->
-                                val item = procurementPlan[index]
-                                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("${item.code} · ${item.name}", style = MaterialTheme.typography.titleSmall)
-                                        Text(
-                                            "Потребность: ${item.requiredQty} · Склад: ${item.availableQty} · В пути: ${item.inTransitQty} · Заказано: ${item.openPoQty}",
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                        Text(
-                                            "Чистый дефицит: ${item.netDeficitQty} ${item.unit} · Рекомендуем заказать: ${item.recommendedOrderQty} ${item.unit} (кратность ${item.orderMultiple}, срок ${item.leadTimeDays} дн.)",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        org.example.project.ui.tables.PersistentDataGrid(
+                            data = mapOf(
+                                "Код" to procurementPlan.map { it.code },
+                                "Название" to procurementPlan.map { it.name },
+                                "Потребность" to procurementPlan.map { "${it.requiredQty} ${it.unit}" },
+                                "На складе" to procurementPlan.map { it.availableQty },
+                                "В пути / Заказ" to procurementPlan.map { "${it.inTransitQty} / ${it.openPoQty}" },
+                                "Чистый дефицит" to procurementPlan.map { it.netDeficitQty },
+                                "К заказу" to procurementPlan.map { "${it.recommendedOrderQty} ${it.unit}" },
+                                "Срок (дн.)" to procurementPlan.map { "${it.leadTimeDays}" }
+                            ),
+                            tableKey = "analytics-procurement-plan",
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
                 }
                 AnalyticsTab.CRM -> {
@@ -371,27 +381,24 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                         if (counterparties.isEmpty()) {
                             Text("Контрагентов пока нет.", style = MaterialTheme.typography.bodyMedium)
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(counterparties.size) { index ->
-                                    val cp = counterparties[index]
-                                    GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Text("${cp.name} (${cp.kind.name})", style = MaterialTheme.typography.titleSmall)
-                                                cp.inn?.let { PillBadge(text = "ИНН $it") }
-                                            }
-                                            Text(
-                                                listOfNotNull(cp.email, cp.phone, cp.address).joinToString(" · ").ifBlank { "Контакты не указаны" },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                            org.example.project.ui.tables.PaginatedCardList(
+                                items = counterparties,
+                                modifier = Modifier.fillMaxSize()
+                            ) { _, cp ->
+                                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("${cp.name} (${cp.kind.name})", style = MaterialTheme.typography.titleSmall)
+                                            cp.inn?.let { PillBadge(text = "ИНН $it") }
                                         }
+                                        Text(
+                                            listOfNotNull(cp.email, cp.phone, cp.address).joinToString(" · ").ifBlank { "Контакты не указаны" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
                             }
@@ -462,8 +469,14 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("DEMAND", "WRITE_OFF", "PURCHASE_ORDER", "DOCUMENT", "PRODUCTION_ORDER").forEach { tt ->
-                                SoftButton(text = tt, onClick = { tplTargetType = tt })
+                            listOf(
+                                "DEMAND" to "Потребности",
+                                "WRITE_OFF" to "Списания",
+                                "PURCHASE_ORDER" to "Заказы поставщикам",
+                                "DOCUMENT" to "Документы",
+                                "PRODUCTION_ORDER" to "Производство"
+                            ).forEach { (tt, label) ->
+                                SoftButton(text = label, onClick = { tplTargetType = tt })
                             }
                         }
                         if (templates.isNotEmpty()) {
@@ -479,31 +492,28 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                         if (approvalQueue.isEmpty()) {
                             Text("Очередь согласований пуста.", style = MaterialTheme.typography.bodyMedium)
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(approvalQueue.size) { index ->
-                                    val route = approvalQueue[index]
-                                    GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    "${route.targetType} #${route.targetId} · маршрут #${route.id}",
-                                                    style = MaterialTheme.typography.titleSmall
-                                                )
-                                                Text(
-                                                    "Этап ${route.currentStageNo} · ${route.status.name}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            PillBadge(text = route.status.name)
+                            org.example.project.ui.tables.PaginatedCardList(
+                                items = approvalQueue,
+                                modifier = Modifier.fillMaxSize()
+                            ) { _, route ->
+                                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                "${route.targetType} #${route.targetId} · маршрут #${route.id}",
+                                                style = MaterialTheme.typography.titleSmall
+                                            )
+                                            Text(
+                                                "Этап ${route.currentStageNo} · ${route.status.name}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
+                                        PillBadge(text = route.status.name)
                                     }
                                 }
                             }
@@ -511,6 +521,34 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AnalyticsKpiCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    modifier: Modifier = Modifier
+) {
+    GlassCard(modifier = modifier, contentPadding = 14.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

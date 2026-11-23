@@ -164,11 +164,6 @@ fun GlassCard(
     Box(
         modifier = modifier
             .scale(pressScale)
-            .shadow(
-                elevation = if (elevated) (6 + 8 * lift).dp else 0.dp,
-                shape = shape,
-                clip = false
-            )
             .clip(shape)
             .background(backgroundBrush, shape)
             .border(

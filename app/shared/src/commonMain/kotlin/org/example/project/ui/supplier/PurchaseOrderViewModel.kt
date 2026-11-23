@@ -55,8 +55,11 @@ class PurchaseOrderViewModel(
         update { it.copy(isOrdersLoading = true, operationError = null) }
         viewModelScope.launch {
             when (val result = purchaseOrderRepository.listOrders(status = _uiState.value.statusFilter)) {
-                is ApiResult.Success -> update {
-                    it.copy(orders = result.data, isOrdersLoading = false)
+                is ApiResult.Success -> {
+                    update { it.copy(orders = result.data, isOrdersLoading = false) }
+                    if (_uiState.value.selectedOrder == null && result.data.isNotEmpty()) {
+                        selectOrder(result.data.first().id)
+                    }
                 }
                 is ApiResult.Error -> failWith(result.error)
             }

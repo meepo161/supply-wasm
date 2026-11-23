@@ -2,17 +2,19 @@ package org.example.project.ui.bom
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid
+import org.example.project.ui.theme.ErpFormat
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.BomExplodeLineDto
 import org.example.project.dto.BomLineDto
 import org.example.project.dto.BomMaterialSummaryDto
 import org.example.project.dto.BomRevisionSummaryDto
+import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ProductModelDto
 
 private val gridConfig = Un7KCMPDataGridConfig(
     isUsableHaptic = false,
-    pageSizeList = listOf("10", "20", "50", "100"),
+    pageSizeList = listOf("20", "50", "100"),
     defaultPageSizeListIndex = 0
 )
 
@@ -23,19 +25,19 @@ fun ProductModelsGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to models.map { it.id.toString() },
         "Код" to models.map { it.code },
         "Название" to models.map { it.name },
-        "Статус" to models.map { it.status.localizedName() },
-        "Версия" to models.map { it.version.toString() }
+        "Статус" to models.map { it.status.localizedName() }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "bom-models",
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            models.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                models.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -47,19 +49,19 @@ fun BomRevisionsGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to revisions.map { it.id.toString() },
-        "Номер" to revisions.map { it.revisionNumber },
-        "Статус" to revisions.map { it.status.localizedName() },
-        "Утвердил" to revisions.map { it.approvedBy?.toString() ?: "—" },
-        "Версия" to revisions.map { it.version.toString() }
+        "Ревизия" to revisions.map { it.revisionNumber },
+        "Статус" to revisions.map { it.status.localizedName() }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "bom-revisions",
+        compact = true,
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            revisions.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                revisions.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -68,29 +70,39 @@ fun BomRevisionsGrid(
 fun BomLinesGrid(
     lines: List<BomLineDto>,
     onClick: (BomLineDto) -> Unit,
+    nomenclature: List<NomenclatureDto> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    val data = mapOf(
-        "ID" to lines.map { it.id.toString() },
-        "Родитель" to lines.map { it.parentLineId?.toString() ?: "—" },
-        "Род.ном." to lines.map { it.parentNomenclatureId.toString() },
-        "Доч.ном." to lines.map { it.childNomenclatureId.toString() },
-        "Кол-во" to lines.map { it.quantity },
-        "Ед." to lines.map { it.unit },
-        "Поз." to lines.map { it.position ?: "—" },
-        "Ур." to lines.map { it.level.toString() },
-        "Обяз." to lines.map { if (it.mandatory) "Да" else "Нет" },
-        "Замена" to lines.map { it.substituteOfLineId?.toString() ?: "—" },
-        "Расход" to lines.map { it.consumptionRate ?: "—" },
-        "Потери %" to lines.map { it.lossPct }
-    )
-    Un7KCMPDataGrid(
+    val nomById = nomenclature.associateBy { it.id }
+    val hasSubstitutes = lines.any { it.substituteOfLineId != null }
+    val data = buildMap<String, List<Any?>> {
+        put("Поз.", lines.map { it.position ?: "—" })
+        put("Ур.", lines.map { it.level.toString() })
+        put("Компонент", lines.map { line ->
+            val prefix = "  ".repeat((line.level - 1).coerceAtLeast(0))
+            val nom = nomById[line.childNomenclatureId]
+            val title = nom?.let { "${it.code} · ${it.name}" } ?: "Номенклатура #${line.childNomenclatureId}"
+            "$prefix$title"
+        })
+        put("Узел (куда входит)", lines.map { line ->
+            val nom = nomById[line.parentNomenclatureId]
+            nom?.let { "${it.code} · ${it.name}" } ?: "Изделие #${line.parentNomenclatureId}"
+        })
+        put("Кол-во", lines.map { ErpFormat.qty(it.quantity) })
+        put("Ед.", lines.map { it.unit })
+        put("Обяз.", lines.map { if (it.mandatory) "Да" else "Нет" })
+        if (hasSubstitutes) put("Замена", lines.map { it.substituteOfLineId?.toString() ?: "—" })
+        put("Потери %", lines.map { ErpFormat.percent(it.lossPct) })
+    }
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "bom-lines",
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            lines.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                lines.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -101,20 +113,17 @@ fun BomExplodeLinesGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to lines.map { it.id.toString() },
-        "Строка" to lines.map { it.lineId.toString() },
-        "Родитель" to lines.map { it.parentLineId?.toString() ?: "—" },
         "Ур." to lines.map { it.level.toString() },
-        "Ном." to lines.map { it.nomenclatureId.toString() },
         "Код" to lines.map { it.code },
-        "Название" to lines.map { it.name },
+        "Название" to lines.map { "${"  ".repeat((it.level - 1).coerceAtLeast(0))}${it.name}" },
         "Ед." to lines.map { it.unit },
-        "На ед." to lines.map { it.quantityPerParent },
-        "Требуется" to lines.map { it.requiredQuantity }
+        "На ед." to lines.map { ErpFormat.qty(it.quantityPerParent) },
+        "Требуется" to lines.map { ErpFormat.qty(it.requiredQuantity) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "bom-explode",
         config = gridConfig,
         onClick = { }
     )
@@ -126,20 +135,20 @@ fun BomMaterialSummaryGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to summary.map { it.nomenclatureId.toString() },
         "Код" to summary.map { it.code },
         "Название" to summary.map { it.name },
         "Ед." to summary.map { it.unit },
-        "Требуется" to summary.map { it.totalRequired },
-        "Доступно" to summary.map { it.stockAvailable },
-        "Резерв" to summary.map { it.stockReserved },
-        "Ожидается" to summary.map { it.expectedReceipt },
-        "Дефицит" to summary.map { it.deficit },
-        "Закупка" to summary.map { it.recommendedPurchase }
+        "Требуется" to summary.map { ErpFormat.qty(it.totalRequired) },
+        "Доступно" to summary.map { ErpFormat.qty(it.stockAvailable) },
+        "Резерв" to summary.map { ErpFormat.qty(it.stockReserved) },
+        "Ожидается" to summary.map { ErpFormat.qty(it.expectedReceipt) },
+        "Дефицит" to summary.map { ErpFormat.qty(it.deficit) },
+        "Закупка" to summary.map { ErpFormat.qty(it.recommendedPurchase) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "bom-material-summary",
         config = gridConfig,
         onClick = { }
     )

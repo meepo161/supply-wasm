@@ -2,7 +2,8 @@ package org.example.project.ui.supplier
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid
+import org.example.project.ui.theme.ErpFormat
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.PurchaseDeliveryDto
 import org.example.project.dto.PurchaseOrderDto
@@ -10,7 +11,7 @@ import org.example.project.dto.PurchaseOrderHistoryDto
 
 private val ordersGridConfig = Un7KCMPDataGridConfig(
     isUsableHaptic = false,
-    pageSizeList = listOf("10", "20", "50", "100"),
+    pageSizeList = listOf("20", "50", "100"),
     defaultPageSizeListIndex = 0
 )
 
@@ -21,22 +22,23 @@ fun PurchaseOrdersGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to orders.map { it.id.toString() },
         "Номер" to orders.map { it.number },
-        "Поставщик" to orders.map { it.supplierName ?: it.supplierId.toString() },
+        "Поставщик" to orders.map { it.supplierName ?: "Поставщик #${it.supplierId}" },
         "Статус" to orders.map { it.status.localizedName() },
-        "Сумма с НДС" to orders.map { it.totals?.grossTotal.asMoney(it.currency) },
-        "Заказано" to orders.map { it.totals?.orderedQuantity ?: "—" },
-        "Поставлено" to orders.map { it.totals?.deliveredQuantity ?: "—" },
-        "Ожидается" to orders.map { it.expectedAt.asDate() }
+        "Сумма с НДС" to orders.map { ErpFormat.money(it.totals?.grossTotal, it.currency) },
+        "Заказано" to orders.map { ErpFormat.qty(it.totals?.orderedQuantity) },
+        "Поставлено" to orders.map { ErpFormat.qty(it.totals?.deliveredQuantity) },
+        "Ожидается" to orders.map { ErpFormat.dateRu(it.expectedAt) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "purchase-orders",
         config = ordersGridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            orders.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                orders.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -49,16 +51,16 @@ fun PurchaseOrderLinesGrid(
     val lines = order.lines
     val data = mapOf(
         "№" to lines.map { it.lineNo.toString() },
-        "Код" to lines.map { it.nomenclatureCode ?: it.nomenclatureId.toString() },
+        "Код" to lines.map { it.nomenclatureCode ?: "—" },
         "Наименование" to lines.map { it.nomenclatureName ?: "—" },
-        "Заказано" to lines.map { "${it.quantity} ${it.unit}" },
-        "Поставлено" to lines.map { "${it.deliveredQuantity} ${it.unit}" },
-        "Осталось" to lines.map { "${it.remainingQuantity} ${it.unit}" },
-        "Цена" to lines.map { it.unitPrice.asMoney(order.currency) },
-        "НДС" to lines.map { "${it.vatRate.trimEnd('0').trimEnd('.')}%" },
-        "Сумма" to lines.map { it.lineTotal.asMoney(order.currency) }
+        "Заказано" to lines.map { "${ErpFormat.qty(it.quantity)} ${it.unit}" },
+        "Поставлено" to lines.map { "${ErpFormat.qty(it.deliveredQuantity)} ${it.unit}" },
+        "Осталось" to lines.map { "${ErpFormat.qty(it.remainingQuantity)} ${it.unit}" },
+        "Цена" to lines.map { ErpFormat.money(it.unitPrice, order.currency) },
+        "НДС" to lines.map { ErpFormat.percent(it.vatRate) },
+        "Сумма" to lines.map { ErpFormat.money(it.lineTotal, order.currency) }
     )
-    Un7KCMPDataGrid(data = data, modifier = modifier, config = ordersGridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-lines", compact = true, config = ordersGridConfig, onClick = { })
 }
 
 @Composable
@@ -69,22 +71,23 @@ fun PurchaseDeliveriesGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to deliveries.map { it.id.toString() },
         "Номер" to deliveries.map { it.number },
-        "Заказ" to deliveries.map { it.orderNumber ?: it.orderId.toString() },
+        "Заказ" to deliveries.map { it.orderNumber ?: "Заказ #${it.orderId}" },
         "Статус заказа" to deliveries.map { statuses[it.orderId]?.localizedName() ?: "—" },
-        "Дата" to deliveries.map { it.deliveredAt.asDate() },
+        "Дата" to deliveries.map { ErpFormat.dateRu(it.deliveredAt) },
         "Статус поставки" to deliveries.map { it.status.localizedName() },
         "Позиций" to deliveries.map { it.lines.size.toString() },
         "Основание" to deliveries.map { it.sourceDocument ?: "—" }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "purchase-deliveries",
         config = ordersGridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            deliveries.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                deliveries.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -95,12 +98,11 @@ fun PurchaseDeliveryLinesGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "Позиция заказа" to delivery.lines.map { it.orderLineId.toString() },
         "Наименование" to delivery.lines.map { it.nomenclatureName ?: "—" },
-        "Количество" to delivery.lines.map { it.quantity },
+        "Количество" to delivery.lines.map { ErpFormat.qty(it.quantity) },
         "Примечание" to delivery.lines.map { it.note ?: "—" }
     )
-    Un7KCMPDataGrid(data = data, modifier = modifier, config = ordersGridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-delivery-lines", compact = true, config = ordersGridConfig, onClick = { })
 }
 
 @Composable
@@ -113,9 +115,9 @@ fun PurchaseOrderHistoryGrid(
         "Было" to history.map { it.fromStatus?.let(::statusTitle) ?: "—" },
         "Стало" to history.map { it.toStatus?.let(::statusTitle) ?: "—" },
         "Основание" to history.map { it.reason ?: "—" },
-        "Когда" to history.map { it.changedAt?.replace('T', ' ')?.take(19) ?: "—" }
+        "Когда" to history.map { ErpFormat.dateTimeRu(it.changedAt) }
     )
-    Un7KCMPDataGrid(data = data, modifier = modifier, config = ordersGridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-history", compact = true, config = ordersGridConfig, onClick = { })
 }
 
 private fun statusTitle(raw: String): String {

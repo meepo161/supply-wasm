@@ -206,13 +206,27 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
             )
             return@GlassCard
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Счёт № ${invoice.number} от ${invoice.invoiceDate.asDate()}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Счёт № ${invoice.number} от ${org.example.project.ui.theme.ErpFormat.dateRu(invoice.invoiceDate)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "${invoice.supplierName ?: "поставщик #${invoice.supplierId}"} · версия ${invoice.version}",
+                    invoice.supplierName ?: "поставщик #${invoice.supplierId}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            state.check?.let { chk ->
+                PillBadge(
+                    text = when {
+                        chk.issues.isEmpty() -> "Расхождений нет"
+                        chk.canConfirm -> "Предупреждения (${chk.issues.size})"
+                        else -> "Есть ошибки"
+                    },
+                    accent = when {
+                        chk.issues.isEmpty() -> Brand.Teal
+                        chk.canConfirm -> Brand.Amber
+                        else -> Brand.Rose
+                    }
                 )
             }
             PillBadge(text = invoice.status.localizedName(), accent = invoice.status.accentColor(), filled = invoice.status == SupplierInvoiceStatus.CHECKED)
@@ -227,10 +241,10 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
             DetailRow("ИНН / КПП поставщика", listOfNotNull(invoice.supplierInn, invoice.supplierKpp).joinToString(" / ").ifEmpty { "—" })
             DetailRow(
                 "Действует до",
-                invoice.validUntil.asDate() + if (invoice.expired) " — срок истёк" else "",
+                org.example.project.ui.theme.ErpFormat.deadlineLabel(invoice.validUntil, org.example.project.ui.home.currentIsoDate()),
                 valueColor = if (invoice.expired) Brand.Rose else MaterialTheme.colorScheme.onSurface
             )
-            DetailRow("Условия оплаты", listOfNotNull(invoice.paymentTerms, invoice.prepaymentPct?.let { "предоплата $it %" }).joinToString(", ").ifEmpty { "—" })
+            DetailRow("Условия оплаты", listOfNotNull(invoice.paymentTerms, invoice.prepaymentPct?.let { "предоплата ${org.example.project.ui.theme.ErpFormat.percent(it)}" }).joinToString(", ").ifEmpty { "—" })
             DetailRow("Срок изготовления", invoice.leadTimeDays?.let { "$it ${if (invoice.leadTimeKind == org.example.project.dto.LeadTimeKind.CALENDAR) "календ." else "рабочих"} дн." } ?: "—")
             DetailRow("Доставка", invoice.deliveryTerms ?: "—")
             DetailRow("Назначение платежа", invoice.paymentPurpose ?: "—")
@@ -457,6 +471,53 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
                 )
                 if (form.documentId == null) {
                     SoftButton(text = if (form.pendingFile == null) "Выбрать файл" else "Другой файл", onClick = viewModel::pickInvoiceFile, leadingIcon = ErpIconGlyph.Plus)
+                }
+            }
+            val showTextParser = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+            val rawInvoiceText = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SoftButton(
+                    text = if (showTextParser.value) "Скрыть автозаполнение из текста" else "Заполнить из текста счёта",
+                    onClick = { showTextParser.value = !showTextParser.value }
+                )
+                Text(
+                    "Скопируйте текст из PDF или письма поставщика — номер, дата, ИНН/КПП и строки подставятся автоматически",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (showTextParser.value) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ErpTextField(
+                        value = rawInvoiceText.value,
+                        onValueChange = { rawInvoiceText.value = it },
+                        label = "Текст счёта (из PDF или письма)",
+                        singleLine = false,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GradientButton(
+                            text = "Распознать и заполнить",
+                            onClick = {
+                                viewModel.applyParsedText(rawInvoiceText.value)
+                                if (rawInvoiceText.value.isNotBlank()) showTextParser.value = false
+                            },
+                            enabled = rawInvoiceText.value.isNotBlank(),
+                            gradient = Gradients.Ocean
+                        )
+                        SoftButton(text = "Очистить", onClick = { rawInvoiceText.value = "" })
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

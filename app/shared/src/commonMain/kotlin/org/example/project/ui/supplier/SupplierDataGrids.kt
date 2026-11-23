@@ -2,7 +2,8 @@ package org.example.project.ui.supplier
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import org.example.project.ui.tables.PersistentDataGrid as Un7KCMPDataGrid
+import org.example.project.ui.tables.PersistentDataGrid
+import org.example.project.ui.theme.ErpFormat
 import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.dto.SupplierCategoryDto
 import org.example.project.dto.SupplierContactDto
@@ -12,7 +13,7 @@ import org.example.project.dto.SupplierOfferDto
 
 private val gridConfig = Un7KCMPDataGridConfig(
     isUsableHaptic = false,
-    pageSizeList = listOf("10", "20", "50", "100"),
+    pageSizeList = listOf("20", "50", "100"),
     defaultPageSizeListIndex = 0
 )
 
@@ -23,20 +24,22 @@ fun SuppliersGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to suppliers.map { it.id.toString() },
         "Номер" to suppliers.map { it.number },
         "Наименование" to suppliers.map { it.name },
         "ИНН" to suppliers.map { it.inn ?: "—" },
         "Проверка" to suppliers.map { it.verificationStatus.localizedName() },
         "Город/адрес" to suppliers.map { it.legalAddress ?: "—" }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "suppliers-registry",
+        showSearch = false,
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            suppliers.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                suppliers.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -53,7 +56,7 @@ fun SupplierContactsGrid(
         "Почта" to contacts.map { it.email ?: "—" },
         "Основной" to contacts.map { if (it.isPrimary) "Да" else "Нет" }
     )
-    Un7KCMPDataGrid(data = data, modifier = modifier, config = gridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-contacts", compact = true, config = gridConfig, onClick = { })
 }
 
 @Composable
@@ -65,10 +68,10 @@ fun SupplierDocumentsGrid(
         "Вид" to documents.map { it.kind.name },
         "Название" to documents.map { it.title },
         "Номер" to documents.map { it.documentNo ?: "—" },
-        "Действует с" to documents.map { it.validFrom.asDate() },
-        "Действует до" to documents.map { it.validTo.asDate() }
+        "Действует с" to documents.map { ErpFormat.dateRu(it.validFrom) },
+        "Действует до" to documents.map { ErpFormat.dateRu(it.validTo) }
     )
-    Un7KCMPDataGrid(data = data, modifier = modifier, config = gridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-documents", compact = true, config = gridConfig, onClick = { })
 }
 
 @Composable
@@ -78,22 +81,23 @@ fun SupplierOffersGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "ID" to offers.map { it.id.toString() },
         "Номер" to offers.map { it.number },
-        "Поставщик" to offers.map { it.supplierName ?: it.supplierId.toString() },
+        "Поставщик" to offers.map { it.supplierName ?: "Поставщик #${it.supplierId}" },
         "Статус" to offers.map { it.status.localizedName() },
         "Соответствие" to offers.map { it.compliance.localizedName() },
         "Срок" to offers.map { (it.deliveryDays?.toString() ?: "—") + " дн." },
-        "Сумма" to offers.map { it.totals?.grossTotal.asMoney(it.currency) },
-        "Действует до" to offers.map { it.validUntil.asDate() }
+        "Сумма" to offers.map { ErpFormat.money(it.totals?.grossTotal, it.currency) },
+        "Действует до" to offers.map { ErpFormat.dateRu(it.validUntil) }
     )
-    Un7KCMPDataGrid(
+    PersistentDataGrid(
         data = data,
         modifier = modifier,
+        tableKey = "supplier-offers",
         config = gridConfig,
         onClick = { selected ->
-            val id = selected.firstOrNull()?.second?.firstOrNull() as? String
-            offers.firstOrNull { it.id.toString() == id }?.let(onClick)
+            selected.firstOrNull()?.first?.let { idx ->
+                offers.getOrNull(idx)?.let(onClick)
+            }
         }
     )
 }
@@ -109,5 +113,5 @@ fun SupplierCategoriesSummary(
         "Код" to categories.map { it.code },
         "Категория" to categories.map { it.name }
     )
-    Un7KCMPDataGrid(data = data, modifier = modifier, config = gridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-categories", compact = true, config = gridConfig, onClick = { })
 }

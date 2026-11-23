@@ -463,43 +463,69 @@ private fun AuditTab(state: AdminUiState, viewModel: AdminViewModel) {
             EmptyState("Записи аудита не найдены.")
             return@Column
         }
-        androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(state.auditLogs.size) { index ->
-                val entry = state.auditLogs[index]
-                GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "${entry.action} · ${entry.entityType} #${entry.entityId}",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = entry.createdAt,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+        org.example.project.ui.tables.PaginatedCardList(
+            items = state.auditLogs,
+            modifier = Modifier.fillMaxSize()
+        ) { _, entry ->
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = "Пользователь: ${entry.userName ?: entry.userId?.let { "ID $it" } ?: "Система"}",
+                            text = "${localizedAuditAction(entry.action)} · ${localizedAuditEntity(entry.entityType)} #${entry.entityId}",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = entry.createdAt,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "Пользователь: ${entry.userName ?: entry.userId?.let { "ID $it" } ?: "Система"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (entry.payloadJson.isNotBlank() && entry.payloadJson != "{}") {
+                        Text(
+                            text = entry.payloadJson,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (entry.payloadJson.isNotBlank() && entry.payloadJson != "{}") {
-                            Text(
-                                text = entry.payloadJson,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                 }
             }
         }
     }
+}
+
+private fun localizedAuditAction(action: String): String = when (action.uppercase()) {
+    "CREATE", "CREATED" -> "Создание"
+    "UPDATE", "UPDATED" -> "Изменение"
+    "DELETE", "DELETED" -> "Удаление"
+    "LOGIN" -> "Вход"
+    "LOGOUT" -> "Выход"
+    "APPROVE", "APPROVED" -> "Утверждение"
+    "REJECT", "REJECTED" -> "Отклонение"
+    "POST", "POSTED" -> "Проведение"
+    "ISSUE", "ISSUED" -> "Выдача"
+    else -> action
+}
+
+private fun localizedAuditEntity(entityType: String): String = when (entityType.uppercase()) {
+    "USER" -> "Пользователь"
+    "ROLE" -> "Роль"
+    "DEPARTMENT" -> "Подразделение"
+    "PROJECT" -> "Проект"
+    "TASK" -> "Задача"
+    "DEMAND" -> "Потребность"
+    "PURCHASE_ORDER" -> "Заказ поставщику"
+    "RECEIPT" -> "Приёмка"
+    "NOMENCLATURE" -> "Номенклатура"
+    "WAREHOUSE" -> "Склад"
+    "DOCUMENT" -> "Документ"
+    "PRODUCTION_ORDER" -> "Производственный заказ"
+    else -> entityType
 }

@@ -129,7 +129,11 @@ private fun DocumentListPage(
             var tplName by remember { mutableStateOf("") }
             var tplError by remember { mutableStateOf<String?>(null) }
 
-            Text(text = "Документы", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                text = "Всего документов: ${state.documents.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 GradientButton(
                     text = "Новый документ",

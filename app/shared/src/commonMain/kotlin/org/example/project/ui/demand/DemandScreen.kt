@@ -111,13 +111,6 @@ private fun DemandListPage(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        PageHeader(
-            title = "Потребности",
-            onCreate = { viewModel.showDialog(DemandDialog.CreateDemand) },
-            onRefresh = viewModel::loadDemands,
-            createLabel = "Новая потребность",
-            canCreate = viewModel.hasPermission("create")
-        )
         val extrasRepo: org.example.project.data.ErpExtrasRepository = org.koin.compose.koinInject()
         val mergeScope = androidx.compose.runtime.rememberCoroutineScope()
         var showMergeDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -125,14 +118,34 @@ private fun DemandListPage(
         var mergeTitle by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
         var mergeError by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
 
-        if (viewModel.hasPermission("create") && state.demands.size >= 2) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SoftButton(text = "Объединить потребности", onClick = {
-                    selectedToMerge = emptySet()
-                    mergeTitle = ""
-                    mergeError = null
-                    showMergeDialog = true
-                })
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Всего заявок: ${state.demands.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (viewModel.hasPermission("create") && state.demands.size >= 2) {
+                    SoftButton(text = "Объединить потребности", onClick = {
+                        selectedToMerge = emptySet()
+                        mergeTitle = ""
+                        mergeError = null
+                        showMergeDialog = true
+                    })
+                }
+                SoftButton(text = "Обновить", onClick = viewModel::loadDemands, leadingIcon = ErpIconGlyph.Refresh)
+                if (viewModel.hasPermission("create")) {
+                    org.example.project.ui.theme.GradientButton(
+                        text = "Новая потребность",
+                        onClick = { viewModel.showDialog(DemandDialog.CreateDemand) },
+                        gradient = Gradients.Sunset,
+                        leadingIcon = ErpIconGlyph.Plus
+                    )
+                }
             }
         }
         if (showMergeDialog) {

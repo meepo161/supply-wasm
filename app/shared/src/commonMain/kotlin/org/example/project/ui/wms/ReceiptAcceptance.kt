@@ -28,6 +28,7 @@ import org.example.project.data.WmsRepository
 import org.example.project.data.safeAttachmentFileName
 import org.example.project.data.saveAttachmentFile
 import org.example.project.dto.AcceptReceiptLineInput
+import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.StorageLocationDto
 import org.koin.compose.koinInject
@@ -48,6 +49,7 @@ private data class AcceptanceRow(
 @Composable
 fun ReceiptAcceptance(
     receipt: ReceiptDto,
+    nomenclature: List<NomenclatureDto> = emptyList(),
     onSave: (List<AcceptReceiptLineInput>) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -106,8 +108,12 @@ fun ReceiptAcceptance(
             val row = rows.getOrNull(index) ?: return@forEachIndexed
             val differs = row.received.replace(',', '.').toDoubleOrNull()?.let { it != line.expectedQuantity.toDoubleOrNull() } ?: false
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val item = nomenclature.firstOrNull { it.id == line.nomenclatureId }
+                val code = line.nomenclatureCode ?: item?.code
+                val name = line.nomenclatureName ?: item?.name
+                val title = listOfNotNull(code, name).joinToString(" — ").ifBlank { "Позиция ${line.nomenclatureId}" }
                 Text(
-                    "№${line.lineNo}: ${line.nomenclatureCode ?: ""} ${line.nomenclatureName ?: ""} — ожидается ${line.expectedQuantity.trimZeros()}",
+                    "№${line.lineNo}: $title — ожидается ${line.expectedQuantity.trimZeros()} ${item?.unit.orEmpty()}".trimEnd(),
                     style = MaterialTheme.typography.bodySmall
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

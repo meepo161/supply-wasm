@@ -21,6 +21,7 @@ import org.example.project.dto.CreateDocumentRequest
 import org.example.project.dto.CreateReceiptFromInvoiceRequest
 import org.example.project.dto.DocumentType
 import org.example.project.dto.InvoiceIssueSeverity
+import org.example.project.dto.InvoiceTextParser
 import org.example.project.dto.LeadTimeKind
 import org.example.project.dto.PurchaseOrderDto
 import org.example.project.dto.SupplierInvoiceActionRequest
@@ -278,6 +279,76 @@ class SupplierInvoiceViewModel(
     fun setPricesIncludeVat(value: Boolean) {
         val form = _uiState.value.form ?: return
         update { it.copy(form = withTotals(form.copy(pricesIncludeVat = value, lines = form.lines.map { l -> recalc(l, value) }))) }
+    }
+
+    fun applyParsedText(rawText: String) {
+        val form = _uiState.value.form ?: return
+        if (rawText.isBlank()) {
+            update { it.copy(error = ApiError("VALIDATION_ERROR", "Вставьте текст счёта для распознавания")) }
+            return
+        }
+        val parsed = InvoiceTextParser.parse(rawText)
+        val effectivePricesIncludeVat = parsed.pricesIncludeVat ?: form.pricesIncludeVat
+        val mappedLines = if (parsed.lines.isNotEmpty()) {
+            parsed.lines.mapIndexed { idx, pLine ->
+                val existing = form.lines.getOrNull(idx)
+                    ?: form.lines.firstOrNull {
+                        it.supplierItemName.contains(pLine.supplierItemName, ignoreCase = true) ||
+                            pLine.supplierItemName.contains(it.supplierItemName, ignoreCase = true)
+                    }
+                recalc(
+                    InvoiceLineForm(
+                        lineNo = pLine.lineNo,
+                        supplierItemCode = pLine.supplierItemCode,
+                        supplierItemName = pLine.supplierItemName,
+                        nomenclatureId = existing?.nomenclatureId,
+                        purchaseOrderLineId = existing?.purchaseOrderLineId,
+                        nomenclatureLabel = existing?.nomenclatureLabel.orEmpty(),
+                        quantity = pLine.quantity,
+                        unit = pLine.unit,
+                        unitPrice = pLine.unitPrice,
+                        vatRate = pLine.vatRate
+                    ),
+                    pricesIncludeVat = effectivePricesIncludeVat
+                )
+            }
+        } else {
+            form.lines.map { recalc(it, effectivePricesIncludeVat) }
+        }
+        val updatedForm = withTotals(
+            form.copy(
+                number = parsed.number ?: form.number,
+                invoiceDate = parsed.invoiceDate ?: form.invoiceDate,
+                validUntil = parsed.validUntil ?: form.validUntil,
+                supplierInn = parsed.supplierInn ?: form.supplierInn,
+                supplierKpp = parsed.supplierKpp ?: form.supplierKpp,
+                pricesIncludeVat = effectivePricesIncludeVat,
+                paymentTerms = parsed.paymentTerms ?: form.paymentTerms,
+                prepaymentPct = parsed.prepaymentPct ?: form.prepaymentPct,
+                leadTimeDays = parsed.leadTimeDays ?: form.leadTimeDays,
+                leadTimeWorking = parsed.leadTimeWorking ?: form.leadTimeWorking,
+                deliveryTerms = parsed.deliveryTerms ?: form.deliveryTerms,
+                supplierManager = parsed.supplierManager ?: form.supplierManager,
+                lines = mappedLines
+            )
+        )
+        val recognizedParts = buildList {
+            if (parsed.number != null) add("№ ${parsed.number}")
+            if (parsed.invoiceDate != null) add("дата ${parsed.invoiceDate}")
+            if (parsed.supplierInn != null) add("ИНН ${parsed.supplierInn}")
+            if (parsed.lines.isNotEmpty()) add("строк: ${parsed.lines.size}")
+        }
+        if (recognizedParts.isEmpty()) {
+            update { it.copy(error = ApiError("VALIDATION_ERROR", "Не удалось распознать поля счёта — проверьте формат текста")) }
+        } else {
+            update {
+                it.copy(
+                    form = updatedForm,
+                    error = null,
+                    message = "Распознано из текста: ${recognizedParts.joinToString(", ")}"
+                )
+            }
+        }
     }
 
     fun pickInvoiceFile() {

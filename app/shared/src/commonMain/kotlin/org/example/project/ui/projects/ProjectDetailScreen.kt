@@ -19,7 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -308,12 +308,13 @@ private fun ProjectOverviewTab(
         }
 
         if (canClose) {
-            OutlinedButton(
-                onClick = onCloseRequest,
-                enabled = !isClosing,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isClosing) "Завершение…" else "Завершить проект")
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(
+                    onClick = onCloseRequest,
+                    enabled = !isClosing
+                ) {
+                    Text(if (isClosing) "Завершение…" else "Завершить проект")
+                }
             }
         }
 
@@ -461,27 +462,31 @@ private fun ProjectInfoSection(project: ProjectDto, modifier: Modifier = Modifie
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            DetailRow(label = "Статус", value = project.status.localizedName())
-            DetailRow(label = "Тип", value = project.projectType?.localizedName() ?: "—")
-            DetailRow(label = "Приоритет", value = project.priority.localizedName())
-            DetailRow(label = "Руководитель", value = ownerName(project))
-            DetailRow(label = "Заказчик", value = project.customer?.takeIf { it.isNotBlank() } ?: "—")
-            DetailRow(label = "Версия", value = project.version.toString())
-            DetailRow(
-                label = "Плановое начало",
-                value = project.plannedStartAt.toShortDate()
-            )
-            DetailRow(
-                label = "Плановое окончание",
-                value = project.plannedEndAt.toShortDate()
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DetailRow(label = "Статус", value = project.status.localizedName())
+                    DetailRow(label = "Тип", value = project.projectType?.localizedName() ?: "—")
+                    DetailRow(label = "Приоритет", value = project.priority.localizedName())
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DetailRow(label = "Руководитель", value = ownerName(project))
+                    DetailRow(label = "Заказчик", value = project.customer?.takeIf { it.isNotBlank() } ?: "—")
+                    DetailRow(
+                        label = "Сроки",
+                        value = "${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedStartAt)} — ${org.example.project.ui.theme.ErpFormat.dateRu(project.plannedEndAt)}"
+                    )
+                }
+            }
             project.openingReason?.takeIf { it.isNotBlank() }?.let {
                 DetailRow(label = "Причина открытия", value = it)
             }
             project.openedAt?.let {
-                DetailRow(label = "Открыт", value = it.toShortDate())
+                DetailRow(label = "Открыт", value = org.example.project.ui.theme.ErpFormat.dateRu(it))
             }
         }
     }

@@ -1,5 +1,6 @@
 package org.example.project.ui.wms
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -40,7 +41,8 @@ fun WarehouseDropdown(
     selected: WarehouseDto?,
     onSelect: (WarehouseDto) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Склад"
+    label: String = "Склад",
+    placeholder: String = "Не выбран"
 ) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
@@ -49,12 +51,12 @@ fun WarehouseDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: "Все",
+            value = selected?.let { "${it.code} — ${it.name}" } ?: placeholder,
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -89,12 +91,12 @@ fun LocationDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: "Все",
+            value = selected?.let { "${it.code} — ${it.name}" } ?: "Не выбрана",
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -189,7 +191,7 @@ fun StorageLocationKindDropdown(
             readOnly = true,
             label = { Text("Тип ячейки") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -227,7 +229,7 @@ fun StorageLocationPurposeDropdown(
             readOnly = true,
             label = { Text("Назначение") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -265,7 +267,7 @@ fun NomenclatureTypeDropdown(
             readOnly = true,
             label = { Text("Тип номенклатуры") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -303,7 +305,7 @@ fun ReceiptSourceTypeDropdown(
             readOnly = true,
             label = { Text("Источник приёмки") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -342,7 +344,7 @@ fun ReservationReasonTypeDropdown(
             readOnly = true,
             label = { Text("Основание резерва") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -382,7 +384,7 @@ fun ReservationStatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -422,7 +424,7 @@ fun TransferStatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -462,7 +464,7 @@ fun IssueStatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -502,7 +504,7 @@ fun ReturnStatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -540,7 +542,7 @@ fun ReturnInspectionDecisionDropdown(
             readOnly = true,
             label = { Text("Решение по строке") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -578,7 +580,7 @@ fun WriteOffReasonTypeDropdown(
             readOnly = true,
             label = { Text("Причина списания") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -618,7 +620,7 @@ fun WriteOffStatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -656,7 +658,7 @@ fun InventoryScopeTypeDropdown(
             readOnly = true,
             label = { Text("Область инвентаризации") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -696,7 +698,7 @@ fun InventoryStatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,

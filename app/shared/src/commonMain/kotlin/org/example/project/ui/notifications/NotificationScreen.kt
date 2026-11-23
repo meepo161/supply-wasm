@@ -59,6 +59,10 @@ fun NotificationScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val unread = state.notifications.count { !it.isRead }
+    var unreadOnly by remember { mutableStateOf(false) }
+    val visibleNotifications = remember(state.notifications, unreadOnly) {
+        if (unreadOnly) state.notifications.filter { !it.isRead } else state.notifications
+    }
     var pushEnabled by remember { mutableStateOf(BrowserNotifications.isGranted()) }
 
     LaunchedEffect(viewModel) {
@@ -94,27 +98,23 @@ fun NotificationScreen(
                     )
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!pushEnabled) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SoftButton(
+                    text = if (unreadOnly) "Показать все (${state.notifications.size})" else "Только непрочитанные ($unread)",
+                    onClick = { unreadOnly = !unreadOnly }
+                )
+                if (!pushEnabled && BrowserNotifications.isSupported()) {
                     SoftButton(
-                        text = if (BrowserNotifications.isSupported()) "Включить push" else "Push недоступны",
+                        text = "Включить push",
                         onClick = { BrowserNotifications.enablePush { pushEnabled = it } },
-                        enabled = BrowserNotifications.isSupported(),
                         leadingIcon = ErpIconGlyph.Bell
                     )
-                    Spacer(Modifier.width(10.dp))
                 }
                 SoftButton(
                     text = "Обновить",
                     onClick = viewModel::loadNotifications,
                     enabled = !state.isLoading,
                     leadingIcon = ErpIconGlyph.Refresh
-                )
-                Spacer(Modifier.width(10.dp))
-                SoftButton(
-                    text = "На главную",
-                    onClick = onBack,
-                    leadingIcon = ErpIconGlyph.Home
                 )
             }
         }
@@ -129,10 +129,10 @@ fun NotificationScreen(
             ) {
                 repeat(5) { SkeletonLine(height = 64.dp) }
             }
-            state.notifications.isEmpty() -> GlassCard(modifier = Modifier.fillMaxWidth()) {
+            visibleNotifications.isEmpty() -> GlassCard(modifier = Modifier.fillMaxWidth()) {
                 EmptyState(
-                    title = "Уведомлений нет",
-                    text = "Здесь появятся события по задачам, проектам и документам",
+                    title = if (unreadOnly) "Непрочитанных уведомлений нет" else "Уведомлений нет",
+                    text = if (unreadOnly) "Все уведомления уже прочитаны" else "Здесь появятся события по задачам, проектам и документам",
                     glyph = ErpIconGlyph.Bell,
                     accent = Brand.Violet
                 )
@@ -142,7 +142,7 @@ fun NotificationScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
             ) {
-                items(state.notifications, key = { it.id }) { notification ->
+                items(visibleNotifications, key = { it.id }) { notification ->
                     NotificationCard(
                         notification = notification,
                         onClick = {
@@ -210,13 +210,12 @@ private fun NotificationCard(notification: NotificationDto, onClick: () -> Unit)
                 )
                 if (!notification.isRead) {
                     Spacer(Modifier.width(8.dp))
-                    PillBadge(text = "new", accent = Brand.Violet, filled = true)
+                    PillBadge(text = "Новое", accent = Brand.Violet, filled = true)
                 }
             }
             Spacer(Modifier.height(3.dp))
             Text(
-                text = notification.type + " · " + notification.entityType + " " +
-                    notification.entityId + " · " + notification.createdAt.toShortDate(),
+                text = localizedNotificationMeta(notification),
                 style = MaterialTheme.typography.labelSmall,
                 color = scheme.onSurfaceVariant,
                 maxLines = 1,
@@ -230,4 +229,24 @@ private fun NotificationCard(notification: NotificationDto, onClick: () -> Unit)
             Modifier.size(16.dp)
         )
     }
+}
+
+private fun localizedNotificationMeta(notification: NotificationDto): String {
+    val typeLabel = when (notification.type.uppercase()) {
+        "TASK_ASSIGNED" -> "Назначение задачи"
+        "TASK_COMMENT", "MENTION" -> "Комментарий / упоминание"
+        "APPROVAL_ASSIGNED" -> "Требуется согласование"
+        "APPROVAL_DECISION" -> "Решение по согласованию"
+        else -> notification.type
+    }
+    val entityLabel = when (notification.entityType.uppercase()) {
+        "TASK" -> "Задача"
+        "DEMAND" -> "Потребность"
+        "PROJECT" -> "Проект"
+        "DOCUMENT" -> "Документ"
+        "CONVERSATION" -> "Чат"
+        "PURCHASE_ORDER" -> "Заказ"
+        else -> notification.entityType
+    }
+    return "$typeLabel · $entityLabel #${notification.entityId} · ${notification.createdAt.toShortDate()}"
 }

@@ -772,7 +772,7 @@ private fun Sidebar(
                 }
             }
             NavGroup.entries.forEach { group ->
-                val items = destinations.filter { it.group == group }
+                val items = destinations.filter { it.group == group && it !in favorites }
                 if (items.isNotEmpty()) {
                     if (!collapsed) {
                         Text(
@@ -780,7 +780,7 @@ private fun Sidebar(
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White.copy(alpha = 0.38f),
-                            modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 8.dp)
+                            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 5.dp)
                         )
                     } else {
                         Spacer(Modifier.height(8.dp))
@@ -881,6 +881,10 @@ private fun SidebarItem(
                     Brush.linearGradient(
                         listOf(Brand.Blue.copy(alpha = 0.95f), Brand.Indigo.copy(alpha = 0.9f))
                     )
+                } else if (hovered) {
+                    Brush.linearGradient(
+                        listOf(Brand.Blue.copy(alpha = 0.30f), Brand.Indigo.copy(alpha = 0.24f))
+                    )
                 } else {
                     Brush.linearGradient(
                         listOf(
@@ -898,13 +902,13 @@ private fun SidebarItem(
                 }
             )
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
-                .clip(RoundedCornerShape(9.dp))
+                .size(24.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(
                     if (selected) Color.White.copy(alpha = 0.2f)
                     else Color.White.copy(alpha = 0.08f)

@@ -86,6 +86,7 @@ fun TaskListScreen(
             .filterByArea(areaFilter)
             .let { if (mineOnly) it.filterMine(currentUserId) else it }
             .filterByQuery(query)
+            .sortedBy { it.dueDate?.takeIf { d -> d.isNotBlank() } ?: "9999-12-31" }
     }
 
     Column(
@@ -138,31 +139,34 @@ fun TaskListScreen(
             SoftButton(text = "Создать", onClick = onCreateClick, leadingIcon = ErpIconGlyph.Plus)
         }
 
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text("Поиск по названию") },
-            singleLine = true,
-            leadingIcon = {
-                ErpIcon(ErpIconGlyph.Search, modifier = Modifier.size(18.dp))
-            },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }, modifier = Modifier.size(36.dp)) {
-                        ErpIcon(ErpIconGlyph.Close, modifier = Modifier.size(16.dp))
+        if (compact) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Поиск по названию") },
+                singleLine = true,
+                leadingIcon = {
+                    ErpIcon(ErpIconGlyph.Search, modifier = Modifier.size(18.dp))
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }, modifier = Modifier.size(36.dp)) {
+                            ErpIcon(ErpIconGlyph.Close, modifier = Modifier.size(16.dp))
+                        }
                     }
-                }
-            },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-        )
+                },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            )
+        }
 
-        // Быстрые фильтры
+        // Единая компактная строка фильтров (статус + область + мои + сбросить)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             TaskStatusFilter.entries.forEach { item ->
                 FilterPill(
@@ -173,22 +177,13 @@ fun TaskListScreen(
                     onClick = { statusFilter = item }
                 )
             }
-        }
-
-        // Фильтры по области и переключатель «Мои»
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(bottom = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TaskAreaFilter.entries.forEach { item ->
+            Spacer(Modifier.width(6.dp))
+            TaskAreaFilter.entries.filter { it != TaskAreaFilter.ALL }.forEach { item ->
                 FilterPill(
                     label = item.label,
                     count = tasks.filterByArea(item).size,
                     selected = areaFilter == item,
-                    onClick = { areaFilter = item }
+                    onClick = { areaFilter = if (areaFilter == item) TaskAreaFilter.ALL else item }
                 )
             }
             if (currentUserId != null) {
@@ -243,20 +238,18 @@ fun TaskListScreen(
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    LazyColumn(
+                    org.example.project.ui.tables.PaginatedCardList(
+                        items = filtered,
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)
-                    ) {
-                        items(filtered, key = { it.id }) { task ->
-                            TaskCard(
-                                task = task,
-                                users = users,
-                                projects = projects,
-                                currentUserId = currentUserId,
-                                onClick = { onTaskClick(task) }
-                            )
-                        }
+                        itemSpacing = 10.dp
+                    ) { _, task ->
+                        TaskCard(
+                            task = task,
+                            users = users,
+                            projects = projects,
+                            currentUserId = currentUserId,
+                            onClick = { onTaskClick(task) }
+                        )
                     }
                 }
             }

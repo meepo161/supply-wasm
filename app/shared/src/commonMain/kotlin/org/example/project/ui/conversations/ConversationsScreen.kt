@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -362,6 +364,7 @@ private fun ConversationList(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ConversationFilters(
     selectedFilter: ConversationListFilter,
@@ -369,7 +372,11 @@ private fun ConversationFilters(
     onFilterChange: (ConversationListFilter) -> Unit,
     onKindChange: (ConversationKind?) -> Unit
 ) {
-    ConversationFilterRow(modifier = Modifier.padding(bottom = 4.dp)) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         ConversationListFilter.entries.forEach { filter ->
             ConversationFilterChip(
                 text = filter.localizedName(),
@@ -378,7 +385,11 @@ private fun ConversationFilters(
             )
         }
     }
-    ConversationFilterRow(modifier = Modifier.padding(bottom = 10.dp)) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         ConversationKind.entries.forEach { kind ->
             ConversationFilterChip(
                 text = kind.localizedName(),

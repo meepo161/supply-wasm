@@ -23,11 +23,14 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import org.example.project.dto.ApiError
 import org.example.project.dto.ProjectDto
 import org.example.project.dto.ProjectStatus
+import org.example.project.ui.tables.PersistentDataGrid
+import com.unchil.un7datagrid.Un7KCMPDataGridConfig
 import org.example.project.ui.tasks.toShortDate
 import org.example.project.ui.theme.Avatar
 import org.example.project.ui.theme.Brand
@@ -122,15 +127,78 @@ fun ProjectListScreen(
                     accent = Brand.Indigo
                 )
             }
-            else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 340.dp),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                items(projects, key = { it.id }) { project ->
-                    ProjectCard(project = project, onClick = { onProjectClick(project) })
+            else -> {
+                var statusFilter by remember { mutableStateOf<String>("ALL") }
+                val filteredProjects = remember(projects, statusFilter) {
+                    when (statusFilter) {
+                        "ACTIVE" -> projects.filter { it.status == ProjectStatus.IN_PROGRESS || it.status == ProjectStatus.PLANNED || it.status == ProjectStatus.ON_HOLD }
+                        "DRAFT" -> projects.filter { it.status == ProjectStatus.DRAFT }
+                        "DONE" -> projects.filter { it.status == ProjectStatus.COMPLETED || it.status == ProjectStatus.CLOSED }
+                        else -> projects
+                    }
+                }
+                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = statusFilter == "ALL",
+                            onClick = { statusFilter = "ALL" },
+                            label = { Text("Все (${projects.size})") }
+                        )
+                        FilterChip(
+                            selected = statusFilter == "ACTIVE",
+                            onClick = { statusFilter = "ACTIVE" },
+                            label = { Text("В работе (${projects.count { it.status == ProjectStatus.IN_PROGRESS || it.status == ProjectStatus.PLANNED || it.status == ProjectStatus.ON_HOLD }})") }
+                        )
+                        FilterChip(
+                            selected = statusFilter == "DRAFT",
+                            onClick = { statusFilter = "DRAFT" },
+                            label = { Text("Черновики (${projects.count { it.status == ProjectStatus.DRAFT }})") }
+                        )
+                        FilterChip(
+                            selected = statusFilter == "DONE",
+                            onClick = { statusFilter = "DONE" },
+                            label = { Text("Завершённые (${projects.count { it.status == ProjectStatus.COMPLETED || it.status == ProjectStatus.CLOSED }})") }
+                        )
+                    }
+                    val data = remember(filteredProjects) {
+                        mapOf(
+                            "Номер" to filteredProjects.map { it.number },
+                            "Название" to filteredProjects.map { it.name },
+                            "Статус" to filteredProjects.map {
+                                if (it.status == ProjectStatus.DRAFT) "Черновик (откройте проект)" else it.status.localizedName()
+                            },
+                            "Руководитель" to filteredProjects.map { p ->
+                                p.members.find { it.userId == p.ownerId }?.fullName ?: "—"
+                            },
+                            "Приоритет" to filteredProjects.map {
+                                if (it.priority.name == "NORMAL") "—" else it.priority.localizedName()
+                            },
+                            "Заказчик" to filteredProjects.map { it.customer ?: "—" },
+                            "Сроки" to filteredProjects.map { p ->
+                                val s = org.example.project.ui.theme.ErpFormat.dateRu(p.plannedStartAt)
+                                val e = org.example.project.ui.theme.ErpFormat.dateRu(p.plannedEndAt)
+                                if (s == "—" && e == "—") "—" else "$s — $e"
+                            }
+                        )
+                    }
+                    PersistentDataGrid(
+                        data = data,
+                        tableKey = "projects-portfolio",
+                        modifier = Modifier.fillMaxSize(),
+                        config = Un7KCMPDataGridConfig(
+                            isUsableHaptic = false,
+                            pageSizeList = listOf("20", "50", "100"),
+                            defaultPageSizeListIndex = 1
+                        ),
+                        onClick = { selected ->
+                            selected.firstOrNull()?.first?.let { idx ->
+                                filteredProjects.getOrNull(idx)?.let(onProjectClick)
+                            }
+                        }
+                    )
                 }
             }
         }

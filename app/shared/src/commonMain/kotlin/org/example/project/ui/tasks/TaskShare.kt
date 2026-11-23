@@ -68,7 +68,7 @@ internal fun TaskShareAction(
         modifier = modifier
     ) {
         ErpIcon(ErpIconGlyph.Send, modifier = Modifier.size(16.dp))
-        Text("Отправить", modifier = Modifier.padding(start = 6.dp))
+        Text("Переслать", modifier = Modifier.padding(start = 6.dp))
     }
     if (dialogOpen) {
         TaskShareDialog(

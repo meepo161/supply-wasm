@@ -98,12 +98,12 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(26.dp))
                     .background(Brush.linearGradient(Gradients.Sidebar))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(26.dp))
-                    .padding(26.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(22.dp))
+                    .padding(20.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(260.dp)
+                        .size(110.dp)
                         .align(Alignment.TopEnd)
                         .background(
                             Brush.radialGradient(
@@ -302,21 +302,22 @@ fun ProfileScreen(
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
-                        value = endsAtInput,
+                    org.example.project.ui.theme.ErpDateField(
+                        value = endsAtInput.substringBefore('T'),
                         onValueChange = { endsAtInput = it },
-                        label = { Text("До (ISO)") },
-                        singleLine = true,
+                        label = "Действует до",
                         modifier = Modifier.weight(1.4f)
                     )
                     SoftButton(text = "Назначить", onClick = {
                         val targetId = delegateIdInput.trim().toLongOrNull()
                         if (targetId != null) {
+                            val rawDate = endsAtInput.trim()
+                            val isoEndsAt = if (rawDate.length == 10 && !rawDate.contains('T')) "${rawDate}T23:59:59Z" else rawDate
                             delScope.launch {
                                 when (val res = extrasRepo.createDelegation(
                                     org.example.project.dto.CreateDelegationRequest(
                                         delegateId = targetId,
-                                        endsAt = endsAtInput.trim(),
+                                        endsAt = isoEndsAt,
                                         reason = delReason.ifBlank { null }
                                     )
                                 )) {

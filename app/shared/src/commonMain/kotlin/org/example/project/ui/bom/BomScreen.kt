@@ -156,13 +156,28 @@ private fun ModelsPage(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        PageHeader(
-            title = "Модели изделий",
-            onCreate = { viewModel.showDialog(BomDialog.CreateModel) },
-            onRefresh = viewModel::loadModels,
-            createLabel = "Новая модель",
-            canCreate = viewModel.hasPermission("bom", "create")
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Всего моделей: ${state.models.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SoftButton(text = "Обновить", onClick = viewModel::loadModels, leadingIcon = ErpIconGlyph.Refresh)
+                if (viewModel.hasPermission("bom", "create")) {
+                    GradientButton(
+                        text = "Новая модель",
+                        onClick = { viewModel.showDialog(BomDialog.CreateModel) },
+                        gradient = Gradients.Berry,
+                        leadingIcon = ErpIconGlyph.Plus
+                    )
+                }
+            }
+        }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.models.isEmpty()) {
             LoadingOverlay()
@@ -264,6 +279,7 @@ private fun RevisionDetailPage(
         } else {
             BomLinesGrid(
                 lines = state.revisionLines,
+                nomenclature = state.nomenclature,
                 onClick = { line ->
                     if (!revision.status.isReadOnly() && viewModel.hasPermission("bom", "update")) {
                         viewModel.showDialog(BomDialog.EditLine(line))
@@ -308,7 +324,6 @@ private fun RevisionInfoCard(
                     }
                 )
             }
-            Text(text = "Версия: ${revision.version}", style = MaterialTheme.typography.bodyMedium)
             if (!revision.changeReason.isNullOrBlank()) {
                 Text(text = "Причина: ${revision.changeReason}", style = MaterialTheme.typography.bodyMedium)
             }
@@ -343,11 +358,10 @@ private fun RevisionInfoCard(
                     )
                 }
                 if (revision.status == BomRevisionStatus.ACTIVE && viewModel.hasPermission("bom", "approve")) {
-                    GradientButton(
+                    SoftButton(
                         text = "Заменить",
                         onClick = { confirmRevisionAction = "REPLACE" },
-                        gradient = Gradients.Ocean,
-                        compact = true
+                        tint = Brand.Amber
                     )
                 }
                 if (isDraft && viewModel.hasPermission("bom", "delete_draft")) {

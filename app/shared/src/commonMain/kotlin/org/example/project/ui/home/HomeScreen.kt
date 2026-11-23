@@ -74,13 +74,16 @@ fun HomeScreen(
     }
 
     val today = state.currentDate
-    val myAssigned = state.allTasks.filter { it.assigneeId == viewModel.currentUser.id }
-    val openAssigned = myAssigned.filter { it.isOpen() }
+    var companyScope by remember { mutableStateOf(false) }
+    var hideNotificationBanner by remember { mutableStateOf(false) }
+    val scopedTasks = if (companyScope) state.allTasks else state.allTasks.filter { it.assigneeId == viewModel.currentUser.id }
+    val openAssigned = scopedTasks.filter { it.isOpen() }
     val overdue = openAssigned.filter { it.isOverdue(today) }.sortedBy { it.dueDate }
     val upcoming = openAssigned.filter { it.isUpcoming(today) }.sortedBy { it.dueDate }
     val onReview = state.allTasks.filter {
-        it.reviewerId == viewModel.currentUser.id && it.status == TaskStatus.ON_REVIEW
+        (companyScope || it.reviewerId == viewModel.currentUser.id) && it.status == TaskStatus.ON_REVIEW
     }
+    val companyOverdueCount = state.allTasks.count { it.isOpen() && it.isOverdue(today) }
     val unreadNotifications = state.notifications.filter { !it.isRead }
     var reverseBlockOrder by remember { mutableStateOf(false) }
 
@@ -98,6 +101,9 @@ fun HomeScreen(
         ) {
             HeroCard(
                 userName = viewModel.currentUser.fullName,
+                companyScope = companyScope,
+                onToggleScope = { companyScope = !companyScope },
+                companyOverdueCount = companyOverdueCount,
                 openCount = openAssigned.size,
                 overdueCount = overdue.size,
                 reviewCount = onReview.size,
@@ -107,15 +113,18 @@ fun HomeScreen(
                 onOpenNotifications = onOpenNotifications
             )
 
-            BrowserNotificationRow(
-                enabled = browserNotificationEnabled,
-                supported = BrowserNotifications.isSupported(),
-                onEnable = {
-                    viewModel.requestBrowserNotificationPermission { granted ->
-                        browserNotificationEnabled = granted
-                    }
-                }
-            )
+            if (!hideNotificationBanner) {
+                BrowserNotificationRow(
+                    enabled = browserNotificationEnabled,
+                    supported = BrowserNotifications.isSupported(),
+                    onEnable = {
+                        viewModel.requestBrowserNotificationPermission { granted ->
+                            browserNotificationEnabled = granted
+                        }
+                    },
+                    onDismiss = { hideNotificationBanner = true }
+                )
+            }
 
             state.operationError?.let { ErrorMessageCard(error = it) }
 
@@ -281,6 +290,9 @@ fun HomeScreen(
 @Composable
 private fun HeroCard(
     userName: String,
+    companyScope: Boolean,
+    onToggleScope: () -> Unit,
+    companyOverdueCount: Int,
     openCount: Int,
     overdueCount: Int,
     reviewCount: Int,
@@ -324,57 +336,51 @@ private fun HeroCard(
                 )
         )
 
-        Column(modifier = Modifier.padding(26.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Brand.Mint)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Рабочий день · сегодня",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f)
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
                     Text(
-                        text = "Здравствуйте,\n$userName",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = Color.White
+                        text = "$userName · ${if (companyScope) "по компании" else "ваши задачи"}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = when {
-                            overdueCount > 0 -> "У вас $overdueCount просроченных задач — начните с них"
-                            openCount > 0 -> "У вас $openCount открытых задач в работе"
-                            else -> "Все задачи под контролем. Отличный день!"
+                            overdueCount > 0 -> "Просрочено: $overdueCount · открыто: $openCount"
+                            openCount > 0 -> "Открытых задач: $openCount"
+                            companyOverdueCount > 0 && !companyScope -> "У вас просрочек нет (по компании просрочено: $companyOverdueCount)"
+                            else -> if (companyScope) "По компании просроченных задач нет" else "Ваших просроченных задач нет"
                         },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.78f)
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.82f)
                     )
                 }
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(12.dp))
                 HeroBadge(unreadCount = unreadCount, onOpenNotifications = onOpenNotifications)
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(10.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 GradientButton(
-                    text = "Обновить данные",
+                    text = if (companyScope) "Показать мои" else "По компании",
+                    onClick = onToggleScope,
+                    compact = true,
+                    gradient = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0.16f))
+                )
+                GradientButton(
+                    text = "Обновить",
                     onClick = onRefresh,
                     enabled = !isLoading,
                     compact = true,
-                    gradient = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0.16f)),
+                    gradient = listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.12f)),
                     leadingIcon = ErpIconGlyph.Refresh
                 )
                 GlassChip(text = "Открытых: $openCount")
@@ -509,9 +515,9 @@ private fun MetricCard(metric: Metric, loading: Boolean, modifier: Modifier = Mo
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconBadge(metric.glyph, gradient = metric.gradient, size = 34.dp, iconSize = 17.dp)
-                if (!loading) {
+                if (!loading && metric.value > 0) {
                     PillBadge(
-                        text = if (metric.value == 0) "чисто" else "активно",
+                        text = "активно",
                         accent = metric.accent
                     )
                 }
@@ -544,18 +550,18 @@ private fun MetricCard(metric: Metric, loading: Boolean, modifier: Modifier = Mo
 private fun BrowserNotificationRow(
     enabled: Boolean,
     supported: Boolean,
-    onEnable: () -> Unit
+    onEnable: () -> Unit,
+    onDismiss: () -> Unit
 ) {
     if (!supported || enabled) return
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = 14.dp,
+        contentPadding = 12.dp,
         gradient = null
     ) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconBadge(ErpIconGlyph.Bell, gradient = Gradients.Sunset, size = 34.dp, iconSize = 17.dp)
-                Spacer(Modifier.width(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconBadge(ErpIconGlyph.Bell, gradient = Gradients.Sunset, size = 32.dp, iconSize = 16.dp)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Браузерные уведомления отключены",
@@ -571,6 +577,10 @@ private fun BrowserNotificationRow(
                     text = "Включить",
                     onClick = onEnable,
                     leadingIcon = ErpIconGlyph.Bell
+                )
+                SoftButton(
+                    text = "Скрыть",
+                    onClick = onDismiss
                 )
             }
         }

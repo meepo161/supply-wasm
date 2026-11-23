@@ -78,8 +78,11 @@ class SupplierViewModel(
                 verificationStatus = state.statusFilter,
                 archived = state.showArchived
             )) {
-                is ApiResult.Success -> update {
-                    it.copy(suppliers = result.data, isSuppliersLoading = false)
+                is ApiResult.Success -> {
+                    update { it.copy(suppliers = result.data, isSuppliersLoading = false) }
+                    if (_uiState.value.selectedCard == null && result.data.isNotEmpty()) {
+                        selectSupplier(result.data.first().id)
+                    }
                 }
                 is ApiResult.Error -> update {
                     it.copy(isSuppliersLoading = false, operationError = result.error)
