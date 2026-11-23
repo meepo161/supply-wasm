@@ -708,6 +708,7 @@ private fun CancelStageDialog(
         subtitle = stage.name,
         onDismiss = onDismiss,
         confirmText = "Отменить этап",
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         confirmEnabled = reason.isNotBlank(),
         onConfirm = { onConfirm(reason) }
     ) {

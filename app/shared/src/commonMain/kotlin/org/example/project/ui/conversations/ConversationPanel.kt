@@ -709,7 +709,7 @@ private fun ConversationMessageItem(
                 viewModel?.revokeMessage(message)
                 revoking = false
             },
-            confirmGradient = org.example.project.ui.theme.Gradients.Sunset,
+            confirmGradient = org.example.project.ui.theme.Gradients.Danger,
             onDismiss = { revoking = false }
         ) {
             Text("Текст будет скрыт, а системный след сохранится.")

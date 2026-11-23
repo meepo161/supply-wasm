@@ -342,7 +342,7 @@ private fun CancelRouteDialog(
         confirmText = "Отменить маршрут",
         onConfirm = onConfirm,
         confirmEnabled = !busy,
-        confirmGradient = org.example.project.ui.theme.Gradients.Sunset,
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         dismissText = "Закрыть",
         onDismiss = onDismiss
     ) {

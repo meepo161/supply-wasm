@@ -114,10 +114,10 @@ fun ProfileScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            PillBadge(
+                            Text(
                                 text = "@${user.login}",
-                                accent = Brand.Cyan,
-                                modifier = Modifier
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = 0.8f)
                             )
                             user.email?.takeIf { it.isNotBlank() }?.let {
                                 Spacer(Modifier.width(8.dp))
@@ -213,11 +213,11 @@ fun ProfileScreen(
                         }
                     }
                     GlassCard(modifier = Modifier.weight(1f)) {
-                        SectionTitle("Оформление", ErpIconGlyph.Sparkle)
+                        SectionTitle("Оформление", if (theme.isDark) ErpIconGlyph.Moon else ErpIconGlyph.Sun)
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = if (theme.isDark) "Включена тёмная тема: комфортно для вечерней работы."
-                            else "Используется светлая тема с мягкими градиентами.",
+                            text = if (theme.isDark) "Включена тёмная тема."
+                            else "Включена светлая тема.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

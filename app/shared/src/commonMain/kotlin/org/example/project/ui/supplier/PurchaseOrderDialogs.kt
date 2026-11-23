@@ -338,7 +338,7 @@ private fun CancelOrderDialog(
         confirmText = "Отменить заказ",
         onConfirm = viewModel::cancelOrder,
         confirmEnabled = !state.isActionRunning && form.reason.isNotBlank(),
-        confirmGradient = Gradients.Berry,
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         dismissText = "Назад"
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -371,7 +371,7 @@ private fun CancelDeliveryDialog(
         confirmText = "Отменить поставку",
         onConfirm = viewModel::cancelDelivery,
         confirmEnabled = !state.isActionRunning && form.reason.isNotBlank(),
-        confirmGradient = Gradients.Berry,
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         dismissText = "Назад"
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

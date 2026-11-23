@@ -239,6 +239,7 @@ fun CancelDemandDialog(
         gradient = Gradients.Sunset,
         width = 520.dp,
         confirmText = "Отменить потребность",
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         onConfirm = onCancel,
         dismissText = "Закрыть",
         onDismiss = onDismiss

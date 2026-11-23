@@ -87,6 +87,43 @@ fun OutlinedButton(
     content = content
 )
 
+/**
+ * Вкладка: выбранная основным цветом, невыбранные нейтральным текстом.
+ * В Material 3 по умолчанию обе синие, и невыбранные выглядят как ссылки.
+ */
+@Composable
+fun Tab(
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    text: @Composable (() -> Unit)? = null,
+    icon: @Composable (() -> Unit)? = null,
+    selectedContentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+    unselectedContentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    interactionSource: MutableInteractionSource? = null
+) = androidx.compose.material3.Tab(
+    selected = selected,
+    onClick = onClick,
+    modifier = modifier.handCursor(enabled),
+    enabled = enabled,
+    text = text?.let { content ->
+        {
+            androidx.compose.material3.ProvideTextStyle(
+                MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold
+                    else androidx.compose.ui.text.font.FontWeight.Normal
+                ),
+                content
+            )
+        }
+    },
+    icon = icon,
+    selectedContentColor = selectedContentColor,
+    unselectedContentColor = unselectedContentColor,
+    interactionSource = interactionSource
+)
+
 @Composable
 fun TextButton(
     onClick: () -> Unit,

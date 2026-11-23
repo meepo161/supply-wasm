@@ -178,7 +178,7 @@ private fun CancelOrderDialog(state: ProductionUiState, viewModel: ProductionVie
         onDismiss = viewModel::dismissDialog,
         confirmText = "Отменить заказ",
         onConfirm = viewModel::submitCancel,
-        confirmGradient = Gradients.Berry,
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         confirmEnabled = !state.isActionRunning,
         dismissText = "Назад"
     ) {

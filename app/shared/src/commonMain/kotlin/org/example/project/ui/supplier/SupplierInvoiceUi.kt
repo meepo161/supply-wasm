@@ -633,7 +633,7 @@ private fun CancelInvoiceDialog(state: SupplierInvoiceUiState, viewModel: Suppli
         confirmText = "Отменить счёт",
         onConfirm = viewModel::cancel,
         confirmEnabled = !state.isBusy && state.cancelReason.isNotBlank(),
-        confirmGradient = Gradients.Berry,
+        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
         dismissText = "Назад"
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

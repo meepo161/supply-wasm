@@ -199,11 +199,8 @@ fun GradientButton(
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(6.dp)
     // Главное действие везде одного цвета, чтобы его узнавали в любом разделе.
-    // Свой цвет сохраняют только смысловые действия: опасное, предупреждающее, подтверждающее.
-    val base = when (gradient) {
-        Gradients.Berry, Gradients.Sunset, Gradients.Emerald, Gradients.AmberGlow -> gradient.first()
-        else -> if (gradient.first().alpha < 1f) gradient.first() else Gradients.Primary.first()
-    }
+    // Цвета модулей на кнопки не переносятся; красной бывает только опасная кнопка (Gradients.Danger).
+    val base = if (gradient == Gradients.Danger) gradient.first() else Gradients.Primary.first()
     val fill = when {
         !enabled -> scheme.surfaceContainerHighest
         pressed -> base.shade(0.78f)
