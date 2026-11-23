@@ -34,7 +34,6 @@ fun SuppliersGrid(
         data = data,
         modifier = modifier,
         tableKey = "suppliers-registry",
-        showSearch = false,
         config = gridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->
@@ -56,7 +55,7 @@ fun SupplierContactsGrid(
         "Почта" to contacts.map { it.email ?: "—" },
         "Основной" to contacts.map { if (it.isPrimary) "Да" else "Нет" }
     )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-contacts", compact = true, config = gridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-contacts", config = gridConfig, onClick = { })
 }
 
 @Composable
@@ -71,7 +70,7 @@ fun SupplierDocumentsGrid(
         "Действует с" to documents.map { ErpFormat.dateRu(it.validFrom) },
         "Действует до" to documents.map { ErpFormat.dateRu(it.validTo) }
     )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-documents", compact = true, config = gridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-documents", config = gridConfig, onClick = { })
 }
 
 @Composable
@@ -113,5 +112,5 @@ fun SupplierCategoriesSummary(
         "Код" to categories.map { it.code },
         "Категория" to categories.map { it.name }
     )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-categories", compact = true, config = gridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "supplier-categories", config = gridConfig, onClick = { })
 }

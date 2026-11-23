@@ -60,7 +60,7 @@ fun PurchaseOrderLinesGrid(
         "НДС" to lines.map { ErpFormat.percent(it.vatRate) },
         "Сумма" to lines.map { ErpFormat.money(it.lineTotal, order.currency) }
     )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-lines", compact = true, config = ordersGridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-lines", config = ordersGridConfig, onClick = { })
 }
 
 @Composable
@@ -102,7 +102,7 @@ fun PurchaseDeliveryLinesGrid(
         "Количество" to delivery.lines.map { ErpFormat.qty(it.quantity) },
         "Примечание" to delivery.lines.map { it.note ?: "—" }
     )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-delivery-lines", compact = true, config = ordersGridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-delivery-lines", config = ordersGridConfig, onClick = { })
 }
 
 @Composable
@@ -117,7 +117,7 @@ fun PurchaseOrderHistoryGrid(
         "Основание" to history.map { it.reason ?: "—" },
         "Когда" to history.map { ErpFormat.dateTimeRu(it.changedAt) }
     )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-history", compact = true, config = ordersGridConfig, onClick = { })
+    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-history", config = ordersGridConfig, onClick = { })
 }
 
 private fun statusTitle(raw: String): String {

@@ -56,7 +56,6 @@ fun BomRevisionsGrid(
         data = data,
         modifier = modifier,
         tableKey = "bom-revisions",
-        compact = true,
         config = gridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->

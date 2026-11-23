@@ -62,7 +62,6 @@ fun DemandLinesGrid(
         data = data,
         modifier = modifier,
         tableKey = "demand-lines",
-        compact = true,
         config = gridConfig,
         onClick = { }
     )
@@ -88,7 +87,6 @@ fun DemandCoverageGrid(
         data = data,
         modifier = modifier,
         tableKey = "demand-coverage",
-        compact = true,
         config = gridConfig,
         onClick = { }
     )

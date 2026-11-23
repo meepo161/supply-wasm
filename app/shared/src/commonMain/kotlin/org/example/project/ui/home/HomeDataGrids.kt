@@ -33,7 +33,6 @@ fun HomeTaskGrid(
         data = data,
         modifier = modifier,
         tableKey = "home-tasks",
-        compact = true,
         config = gridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->
@@ -60,7 +59,6 @@ fun HomeNotificationGrid(
         data = data,
         modifier = modifier,
         tableKey = "home-notifications",
-        compact = true,
         config = gridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->

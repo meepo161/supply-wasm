@@ -62,7 +62,6 @@ fun ProductionStagesGrid(
         data = data,
         modifier = modifier,
         tableKey = "production-stages",
-        compact = true,
         config = gridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->
@@ -87,7 +86,6 @@ fun ProductInstancesGrid(
         data = data,
         modifier = modifier,
         tableKey = "production-instances",
-        compact = true,
         config = gridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->

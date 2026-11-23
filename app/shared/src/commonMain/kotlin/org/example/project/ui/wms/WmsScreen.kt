@@ -400,8 +400,7 @@ private fun NomenclatureTab(
             NomenclatureGrid(
                 items = visibleItems,
                 onClick = { viewModel.selectNomenclature(it) },
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                showSearch = false
+                modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
         if (state.selectedNomenclature != null) {
