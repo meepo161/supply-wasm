@@ -1597,9 +1597,9 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
             state.barcodeResult?.let { nom ->
                 Spacer(Modifier.height(8.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(6.dp),
                     color = Brand.Teal.copy(alpha = 0.10f),
-                    modifier = Modifier.fillMaxWidth().border(1.dp, Brand.Teal.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
+                    modifier = Modifier.fillMaxWidth().border(1.dp, Brand.Teal.copy(alpha = 0.30f), RoundedCornerShape(6.dp))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1796,7 +1796,7 @@ private fun MovementKpiTile(
             Box(
                 modifier = Modifier
                     .size(34.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(accent.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -1838,7 +1838,7 @@ private fun MovementLogCard(m: StockMovementDto, nomenclature: NomenclatureDto?)
     val serviceNote = m.note?.trim()?.let { Regex("^(Receipt|Issue|Transfer|Return|Write[- ]?off|Inventory|Initial stock) +([^ ]+)$", RegexOption.IGNORE_CASE).find(it) }
     val docNumber = serviceNote?.groupValues?.get(2)
     val visibleNote = if (serviceNote != null) null else m.note
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(8.dp)
 
     Surface(
         shape = shape,
@@ -1961,7 +1961,7 @@ private fun LowStockItemCard(item: LowStockItemDto) {
     val minS = item.minStock.toDoubleOrNull() ?: 0.0
     val ratio = if (minS > 0.0) (avail / minS).toFloat().coerceIn(0f, 1f) else 0f
     val barColor = if (ratio < 0.35f) Brand.Rose else Brand.Amber
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(8.dp)
 
     Surface(
         shape = shape,
@@ -2138,7 +2138,7 @@ private fun WmsTopNav(
 
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -2304,7 +2304,7 @@ private fun WmsNavItemRow(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val scheme = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(8.dp)
 
     val bgModifier = when {
         selected -> Modifier.background(

@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import org.example.project.ui.theme.erpInteractive
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -221,25 +222,14 @@ private fun ProjectCard(project: ProjectDto, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        scheme.surfaceContainerLowest,
-                        accent.copy(alpha = 0.05f + 0.06f * lift)
-                    )
-                )
-            )
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (hovered) scheme.surfaceContainerLow else scheme.surface)
             .border(
                 1.dp,
-                Brush.linearGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.4f),
-                        accent.copy(alpha = 0.16f + 0.22f * lift)
-                    )
-                ),
-                RoundedCornerShape(20.dp)
+                if (hovered) scheme.primary.copy(alpha = 0.55f) else scheme.outlineVariant,
+                RoundedCornerShape(10.dp)
             )
+            .erpInteractive(interaction, RoundedCornerShape(10.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
     ) {
         Column {

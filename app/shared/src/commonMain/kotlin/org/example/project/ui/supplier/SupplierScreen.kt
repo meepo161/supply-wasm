@@ -552,7 +552,7 @@ private fun ComparisonCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
             .padding(12.dp)
     ) {
@@ -610,7 +610,7 @@ private fun SuccessNote(text: String, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Brand.Mint.copy(alpha = 0.14f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically

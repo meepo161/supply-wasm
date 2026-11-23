@@ -195,9 +195,9 @@ private fun TaskChatListRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = if (selected) scheme.primaryContainer else scheme.surfaceContainerLowest
     ) {
         Column(modifier = Modifier.padding(10.dp)) {

@@ -225,13 +225,13 @@ private fun ChatFilterTab(
             .background(
                 color = if (selected) scheme.primary.copy(alpha = 0.12f)
                 else scheme.surfaceContainerLow.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(6.dp)
             )
             .border(
                 width = 1.dp,
                 color = if (selected) scheme.primary.copy(alpha = 0.45f)
                 else scheme.outlineVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(6.dp)
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -269,7 +269,7 @@ private fun ChatIconButton(
             .size(34.dp)
             .background(
                 color = scheme.surfaceContainerLow,
-                shape = RoundedCornerShape(11.dp)
+                shape = RoundedCornerShape(6.dp)
             )
             .semantics { this.contentDescription = contentDescription }
             .clickable(enabled = enabled, onClick = onClick),
@@ -428,7 +428,7 @@ private fun ChatEmptyState(filter: ChatMessageFilter, modifier: Modifier = Modif
                 .size(48.dp)
                 .background(
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                    shape = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(10.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -519,8 +519,8 @@ private fun UserMessageItem(
             Box(
                 modifier = Modifier
                     .widthIn(max = 520.dp)
-                    .background(color = bubbleColor, shape = RoundedCornerShape(12.dp))
-                    .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+                    .background(color = bubbleColor, shape = RoundedCornerShape(8.dp))
+                    .border(1.dp, borderColor, RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             ) {
                 Text(
@@ -630,7 +630,7 @@ private fun ChatComposer(
                 placeholder = { Text("Написать сообщение…") },
                 minLines = 1,
                 maxLines = 5,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
@@ -676,7 +676,7 @@ private fun ReadOnlyNotice(modifier: Modifier = Modifier) {
                 .size(30.dp)
                 .background(
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(6.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {

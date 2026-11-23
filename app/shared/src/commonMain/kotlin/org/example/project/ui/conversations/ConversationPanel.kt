@@ -488,7 +488,7 @@ private fun ConversationMessageItem(
     )
     val bubbleBrush = when {
         highlighted -> SolidColor(MaterialTheme.colorScheme.tertiaryContainer)
-        own -> Brush.linearGradient(listOf(Brand.Blue, Brand.Indigo))
+        own -> SolidColor(Brand.Blue)
         else -> SolidColor(MaterialTheme.colorScheme.surfaceContainerLowest)
     }
     val contentColor = when {
@@ -545,7 +545,7 @@ private fun ConversationMessageItem(
                     message.replyTo?.let { reply ->
                         Surface(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(6.dp),
                             color = contentColor.copy(alpha = 0.06f)
                         ) {
                             Text(
@@ -586,7 +586,7 @@ private fun ConversationMessageItem(
                             }
                             Surface(
                                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = contentColor.copy(alpha = if (own && !highlighted) 0.14f else 0.06f)
                             ) {
                                 AttachmentRow(
@@ -755,7 +755,7 @@ private fun ForwardConversationDialog(
         onDismiss = onDismiss
     ) {
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -813,7 +813,7 @@ private fun ForwardConversationDialog(
                             val selected = key == selectedKey
                             Surface(
                                 onClick = { selectedKey = key },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest
                             ) {
                                 Row(

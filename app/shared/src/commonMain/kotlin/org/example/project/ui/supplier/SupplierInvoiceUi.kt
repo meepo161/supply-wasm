@@ -105,7 +105,7 @@ fun SupplierInvoicesPane(viewModel: SupplierInvoiceViewModel) {
     Column(modifier = Modifier.fillMaxSize()) {
         state.message?.let { message ->
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(14.dp))
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(8.dp))
                     .background(Brand.Mint.copy(alpha = 0.14f)).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -166,7 +166,7 @@ private fun FilterChip(text: String, active: Boolean, onClick: () -> Unit) {
 @Composable
 private fun InvoiceRow(invoice: SupplierInvoiceDto, selected: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp))
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(8.dp))
             .background(if (selected) Brand.Violet.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -260,7 +260,7 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
             SectionHeader(title = "Строки счёта", count = invoice.lines.size, accent = Brand.Blue)
             invoice.lines.forEach { line ->
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)).padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
@@ -302,7 +302,7 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
             )
             issues.forEach { issue ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).clip(RoundedCornerShape(8.dp))
                         .background(issue.severity.accent().copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -365,7 +365,7 @@ private fun InvoiceActions(invoice: SupplierInvoiceDto, state: SupplierInvoiceUi
 
 @Composable
 private fun TotalChip(label: String, value: String, accent: Color, modifier: Modifier) {
-    Column(modifier = modifier.clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Column(modifier = modifier.clip(RoundedCornerShape(8.dp)).background(accent.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = accent)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
@@ -458,7 +458,7 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
         ) {
             state.error?.let { ErrorMessageCard(error = it) }
             Row(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                     .background((if (form.hasFile) Brand.Mint else Brand.Rose).copy(alpha = 0.12f))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -494,7 +494,7 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
             if (showTextParser.value) {
                 Column(
                     modifier = Modifier.fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
                         .padding(10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -549,7 +549,7 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
             }
             form.lines.forEachIndexed { index, line ->
                 Column(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)).padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {

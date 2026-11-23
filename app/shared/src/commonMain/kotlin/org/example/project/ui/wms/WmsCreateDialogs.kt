@@ -533,7 +533,7 @@ private fun ReceiptLineRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(6.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     ) {

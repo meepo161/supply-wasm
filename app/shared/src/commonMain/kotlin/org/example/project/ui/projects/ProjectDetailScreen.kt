@@ -134,7 +134,7 @@ fun ProjectDetailScreen(
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
@@ -511,7 +511,7 @@ private fun ProjectHeader(project: ProjectDto, modifier: Modifier = Modifier) {
 private fun ProjectInfoSection(project: ProjectDto, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -629,7 +629,7 @@ private fun MembersSection(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {

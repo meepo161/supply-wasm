@@ -18,74 +18,77 @@ import androidx.compose.ui.unit.sp
 private val LightColors = lightColorScheme(
     primary = Brand.Blue,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDCE9FF),
-    onPrimaryContainer = Color(0xFF0A2E6B),
-    secondary = Brand.Indigo,
+    primaryContainer = Color(0xFFDCE6F7),
+    onPrimaryContainer = Color(0xFF0E2E63),
+    secondary = Color(0xFF44546B),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE4E1FF),
-    onSecondaryContainer = Color(0xFF241A66),
+    secondaryContainer = Color(0xFFE1E6EE),
+    onSecondaryContainer = Color(0xFF1A2533),
     tertiary = Brand.Teal,
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFCFF5EE),
-    onTertiaryContainer = Color(0xFF00382F),
-    error = Color(0xFFD92D3C),
+    tertiaryContainer = Color(0xFFD3ECE8),
+    onTertiaryContainer = Color(0xFF00352F),
+    error = Color(0xFFB3261E),
     onError = Color.White,
-    errorContainer = Color(0xFFFFE1E3),
-    onErrorContainer = Color(0xFF61000B),
-    background = Color(0xFFF5F8FD),
+    errorContainer = Color(0xFFFBE3E1),
+    onErrorContainer = Color(0xFF5C0B07),
+    background = Color(0xFFF2F4F7),
     onBackground = Brand.Ink,
     surface = Color(0xFFFFFFFF),
     onSurface = Brand.Ink,
-    surfaceVariant = Color(0xFFEDF2FA),
-    onSurfaceVariant = Brand.Slate,
+    surfaceVariant = Color(0xFFEBEEF3),
+    onSurfaceVariant = Color(0xFF4E5A6C),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF8FAFE),
-    surfaceContainer = Color(0xFFF1F5FC),
-    surfaceContainerHigh = Color(0xFFE9EFF9),
-    surfaceContainerHighest = Color(0xFFE1E8F5),
-    outline = Color(0xFFC7D2E4),
-    outlineVariant = Color(0xFFE0E8F4),
-    inverseSurface = Color(0xFF1B2433),
-    inverseOnSurface = Color(0xFFEFF3FA),
-    scrim = Color(0x66101826)
+    surfaceContainerLow = Color(0xFFF8F9FB),
+    surfaceContainer = Color(0xFFF1F3F6),
+    surfaceContainerHigh = Color(0xFFE9ECF1),
+    surfaceContainerHighest = Color(0xFFE1E5EB),
+    outline = Color(0xFFB9C2CF),
+    outlineVariant = Color(0xFFD9DFE7),
+    inverseSurface = Color(0xFF1A2330),
+    inverseOnSurface = Color(0xFFEEF1F5),
+    scrim = Color(0x8010151C)
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF7FB0FF),
-    onPrimary = Color(0xFF04224F),
-    primaryContainer = Color(0xFF1B3B75),
-    onPrimaryContainer = Color(0xFFD9E5FF),
-    secondary = Color(0xFFB5ACFF),
-    onSecondary = Color(0xFF211A57),
-    secondaryContainer = Color(0xFF33286E),
-    onSecondaryContainer = Color(0xFFE7E2FF),
-    tertiary = Color(0xFF57DBC6),
-    onTertiary = Color(0xFF00352E),
-    tertiaryContainer = Color(0xFF0B4A43),
-    onTertiaryContainer = Color(0xFFB5F2E7),
-    error = Color(0xFFFF8B93),
-    onError = Color(0xFF52000B),
-    errorContainer = Color(0xFF6E1020),
-    onErrorContainer = Color(0xFFFFDFE1),
-    background = Color(0xFF080D17),
-    onBackground = Color(0xFFE9EEF8),
-    surface = Color(0xFF0E1522),
-    onSurface = Color(0xFFE9EEF8),
-    surfaceVariant = Color(0xFF18202F),
-    onSurfaceVariant = Color(0xFFA3B1C8),
-    surfaceContainerLowest = Color(0xFF0A101A),
-    surfaceContainerLow = Color(0xFF0F1725),
-    surfaceContainer = Color(0xFF131C2C),
-    surfaceContainerHigh = Color(0xFF182233),
-    surfaceContainerHighest = Color(0xFF1E2A3D),
-    outline = Color(0xFF3C4A61),
-    outlineVariant = Color(0xFF26313F),
-    inverseSurface = Color(0xFFE9EEF8),
-    inverseOnSurface = Color(0xFF131C2C),
-    scrim = Color(0xCC04070D)
+    primary = Color(0xFF8DB4F2),
+    onPrimary = Color(0xFF0A2552),
+    primaryContainer = Color(0xFF1D3A6B),
+    onPrimaryContainer = Color(0xFFD8E4F8),
+    secondary = Color(0xFFB4BFCF),
+    onSecondary = Color(0xFF1E2835),
+    secondaryContainer = Color(0xFF2B3544),
+    onSecondaryContainer = Color(0xFFDDE3EC),
+    tertiary = Color(0xFF6CCBBC),
+    onTertiary = Color(0xFF00332D),
+    tertiaryContainer = Color(0xFF0E4740),
+    onTertiaryContainer = Color(0xFFC4EDE6),
+    error = Color(0xFFF2A39B),
+    onError = Color(0xFF4E0B06),
+    errorContainer = Color(0xFF6A1A15),
+    onErrorContainer = Color(0xFFFCE0DD),
+    background = Color(0xFF0C1118),
+    onBackground = Color(0xFFE6EAF0),
+    surface = Color(0xFF151C26),
+    onSurface = Color(0xFFE6EAF0),
+    surfaceVariant = Color(0xFF1E2632),
+    onSurfaceVariant = Color(0xFFA9B4C3),
+    surfaceContainerLowest = Color(0xFF0E141C),
+    surfaceContainerLow = Color(0xFF131A23),
+    surfaceContainer = Color(0xFF18202A),
+    surfaceContainerHigh = Color(0xFF1E2631),
+    surfaceContainerHighest = Color(0xFF252E3A),
+    outline = Color(0xFF465263),
+    outlineVariant = Color(0xFF2A3442),
+    inverseSurface = Color(0xFFE6EAF0),
+    inverseOnSurface = Color(0xFF18202A),
+    scrim = Color(0xCC05080C)
 )
 
-/** Типографика: плотные заголовки, спокойный основной текст. */
+/**
+ * Типографика: системный шрифт Compose (гарантированная кириллица без новых
+ * зависимостей), плотные заголовки и цифры, спокойный основной текст.
+ */
 private val AppTypography = Typography(
     displaySmall = TextStyle(fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
     headlineLarge = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
@@ -102,13 +105,16 @@ private val AppTypography = Typography(
     labelSmall = TextStyle(fontSize = 10.5.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
 )
 
-/** Мягкие, «воздушные» скругления. */
+/**
+ * Сдержанные скругления: 4 dp у бирок и полей, 6-8 dp у кнопок и карточек,
+ * 12 dp только у диалогов. Форма различает тип элемента, а не украшает его.
+ */
 private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(10.dp),
+    extraLarge = RoundedCornerShape(12.dp)
 )
 
 @Composable

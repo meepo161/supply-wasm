@@ -274,7 +274,7 @@ internal fun OverviewTab(
         planSummary?.let { plan ->
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLowest,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             ) {
@@ -331,7 +331,7 @@ private fun SummaryMetricTile(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -468,7 +468,7 @@ private fun DemandsTab(demands: List<DemandHeaderDto>, modifier: Modifier = Modi
     }
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -516,7 +516,7 @@ private fun DocumentsTab(documents: List<DocumentDto>, modifier: Modifier = Modi
     }
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
@@ -570,7 +570,7 @@ private fun HistoryTab(
         SectionHeader(title = "События", count = history.size)
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {

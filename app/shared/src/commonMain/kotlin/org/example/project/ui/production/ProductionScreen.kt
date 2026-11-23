@@ -410,7 +410,7 @@ private fun SuccessNote(text: String, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Brand.Mint.copy(alpha = 0.14f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -431,7 +431,7 @@ private fun OrderHeader(order: ProductionOrderDto) {
         Box(
             modifier = Modifier
                 .size(46.dp)
-                .clip(RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(Brush.linearGradient(Gradients.Aurora)),
             contentAlignment = Alignment.Center
         ) {
@@ -512,7 +512,7 @@ private fun TotalChip(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(accent.copy(alpha = 0.10f))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {

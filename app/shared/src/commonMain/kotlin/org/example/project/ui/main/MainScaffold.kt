@@ -7,6 +7,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import org.example.project.ui.theme.ErpIconButton
+import org.example.project.ui.theme.erpInteractive
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -342,7 +351,7 @@ fun MainScaffold(
             snackbarHost = {
                 SnackbarHost(snackbarHostState) { data ->
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.inverseSurface,
                         modifier = Modifier.padding(16.dp)
                     ) {
@@ -444,7 +453,7 @@ private fun TopBar(
     ) {
         if (showMenu) {
             Box {
-                RoundIconButton(glyph = ErpIconGlyph.Menu) { menuExpanded = true }
+                RoundIconButton(glyph = ErpIconGlyph.Menu, contentDescription = "Меню разделов") { menuExpanded = true }
                 DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false }
@@ -516,6 +525,7 @@ private fun TopBar(
             Box {
                 RoundIconButton(
                     glyph = ErpIconGlyph.Plus,
+                    contentDescription = "Быстрые действия",
                     onClick = { quickActionsExpanded = true }
                 )
                 DropdownMenu(
@@ -572,11 +582,13 @@ private fun TopBar(
             Spacer(Modifier.width(8.dp))
             RoundIconButton(
                 glyph = ErpIconGlyph.Bell,
+                contentDescription = "Уведомления",
                 onClick = onOpenNotifications
             )
             Spacer(Modifier.width(8.dp))
             RoundIconButton(
                 glyph = if (theme.isDark) ErpIconGlyph.Sun else ErpIconGlyph.Moon,
+                contentDescription = if (theme.isDark) "Светлая тема" else "Тёмная тема",
                 onClick = { theme.toggle() }
             )
             Spacer(Modifier.width(14.dp))
@@ -635,33 +647,44 @@ private fun TopBar(
     }
 }
 
+/** Кнопка-иконка верхней панели: контурная, с доступным именем и рамкой фокуса. */
 @Composable
 private fun RoundIconButton(
     glyph: ErpIconGlyph,
+    contentDescription: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val palette = LocalBrandPalette.current
+    val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val alpha by animateFloatAsState(
-        targetValue = if (hovered) 1f else 0.75f,
-        animationSpec = tween(160),
-        label = "roundBtn"
-    )
+    val pressed by interaction.collectIsPressedAsState()
+    val shape = RoundedCornerShape(6.dp)
     Box(
         modifier = modifier
             .size(40.dp)
-            .clip(RoundedCornerShape(13.dp))
-            .background(palette.glassOverlay.copy(alpha = 0.7f * alpha))
-            .border(1.dp, palette.glassBorder.first(), RoundedCornerShape(13.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            .clip(shape)
+            .background(
+                when {
+                    pressed -> scheme.surfaceContainerHighest
+                    hovered -> scheme.surfaceContainerHigh
+                    else -> palette.glassOverlay
+                }
+            )
+            .border(1.dp, palette.glassBorder.first(), shape)
+            .erpInteractive(interaction, shape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            },
         contentAlignment = Alignment.Center
     ) {
         ErpIcon(
             glyph = glyph,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(19.dp)
+            tint = scheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
         )
     }
 }
@@ -682,67 +705,41 @@ private fun Sidebar(
     val palette = LocalBrandPalette.current
     Column(
         modifier = Modifier
-            .width(if (collapsed) 92.dp else 268.dp)
+            .width(if (collapsed) 76.dp else 256.dp)
             .fillMaxHeight()
-            .padding(start = 16.dp, top = 0.dp, bottom = 16.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(Brush.verticalGradient(palette.sidebarGradient))
-            .border(
-                1.dp,
-                Color.White.copy(alpha = 0.10f),
-                RoundedCornerShape(26.dp)
-            )
+            .padding(start = 12.dp, top = 0.dp, bottom = 12.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(palette.sidebarGradient.first())
     ) {
-        // Логотип и кнопка сворачивания
+        // Название предприятия текстом (логотип не утверждён) и кнопка сворачивания.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = if (collapsed) 14.dp else 20.dp, vertical = 22.dp),
+                .padding(start = if (collapsed) 0.dp else 18.dp, end = if (collapsed) 0.dp else 8.dp, top = 16.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Brush.linearGradient(listOf(Brand.BlueBright, Brand.Violet)))
-                        .clickable(onClick = onToggleCollapse),
-                    contentAlignment = Alignment.Center
-                ) {
-                    ErpIcon(
-                        glyph = ErpIconGlyph.Sparkle,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+            if (!collapsed) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Авиаагрегат-Н",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "ERP · WMS · MES",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.62f)
                     )
                 }
-                if (!collapsed) {
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Авиаагрегат",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "ERP · WMS · MES",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.55f)
-                        )
-                    }
-                }
             }
-            if (!collapsed) {
-                Text(
-                    text = "‹",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onToggleCollapse)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
+            ErpIconButton(
+                glyph = if (collapsed) ErpIconGlyph.Menu else ErpIconGlyph.ChevronLeft,
+                contentDescription = if (collapsed) "Развернуть меню" else "Свернуть меню",
+                onClick = onToggleCollapse,
+                tint = Color.White.copy(alpha = 0.8f)
+            )
         }
 
         Column(
@@ -754,11 +751,10 @@ private fun Sidebar(
             if (favorites.isNotEmpty()) {
                 if (!collapsed) {
                     Text(
-                        text = "ИЗБРАННОЕ",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Brand.Amber.copy(alpha = 0.85f),
-                        modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 8.dp)
+                        text = "Избранное",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.62f),
+                        modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp)
                     )
                 }
                 favorites.forEach { dest ->
@@ -776,14 +772,16 @@ private fun Sidebar(
                 if (items.isNotEmpty()) {
                     if (!collapsed) {
                         Text(
-                            text = group.label.uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.38f),
-                            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 5.dp)
+                            text = group.label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.62f),
+                            modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp)
                         )
                     } else {
-                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                            color = Color.White.copy(alpha = 0.10f)
+                        )
                     }
                     items.forEach { dest ->
                         SidebarItem(
@@ -803,10 +801,9 @@ private fun Sidebar(
             modifier = Modifier
                 .padding(12.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.White.copy(alpha = 0.07f))
-                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp))
-                .padding(12.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .padding(10.dp)
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -823,30 +820,35 @@ private fun Sidebar(
                         Text(
                             text = "@${user.login}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = Color.White.copy(alpha = 0.62f),
                             maxLines = 1
                         )
                     }
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
+                val logoutInteraction = remember { MutableInteractionSource() }
+                val logoutHovered by logoutInteraction.collectIsHoveredAsState()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(11.dp))
-                        .clickable { onLogout() }
+                        .heightIn(min = 36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (logoutHovered) Color.White.copy(alpha = 0.08f) else Color.Transparent)
+                        .erpInteractive(logoutInteraction, RoundedCornerShape(6.dp), focusColor = Brand.Signal)
+                        .clickable(interactionSource = logoutInteraction, indication = null) { onLogout() }
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     ErpIcon(
                         glyph = ErpIconGlyph.Logout,
-                        tint = Color.White.copy(alpha = 0.7f),
+                        tint = Color.White.copy(alpha = 0.78f),
                         modifier = Modifier.size(15.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "Выйти из системы",
                         style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.7f)
+                        color = Color.White.copy(alpha = 0.78f)
                     )
                 }
             }
@@ -863,74 +865,56 @@ private fun SidebarItem(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val backgroundAlpha by animateFloatAsState(
-        targetValue = when {
-            selected -> 1f
-            hovered -> 0.12f
-            else -> 0.05f
-        },
-        animationSpec = tween(180),
-        label = "sidebarItem"
-    )
+    val pressed by interaction.collectIsPressedAsState()
+    val shape = RoundedCornerShape(6.dp)
+    // Текущий раздел: светлая подложка, полужирная подпись и янтарная метка слева.
+    // Метка остаётся и в свёрнутом меню, поэтому текущее место видно не только по цвету.
+    val background = when {
+        selected -> Color.White.copy(alpha = 0.12f)
+        pressed -> Color.White.copy(alpha = 0.10f)
+        hovered -> Color.White.copy(alpha = 0.06f)
+        else -> Color.Transparent
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(
-                if (selected) {
-                    Brush.linearGradient(
-                        listOf(Brand.Blue.copy(alpha = 0.95f), Brand.Indigo.copy(alpha = 0.9f))
-                    )
-                } else if (hovered) {
-                    Brush.linearGradient(
-                        listOf(Brand.Blue.copy(alpha = 0.30f), Brand.Indigo.copy(alpha = 0.24f))
-                    )
-                } else {
-                    Brush.linearGradient(
-                        listOf(
-                            Color.White.copy(alpha = backgroundAlpha),
-                            Color.White.copy(alpha = backgroundAlpha * 0.5f)
-                        )
-                    )
-                }
-            )
-            .then(
-                if (selected) {
-                    Modifier.border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
-                } else {
-                    Modifier
-                }
-            )
+            .heightIn(min = 38.dp)
+            .clip(shape)
+            .background(background)
+            .erpInteractive(interaction, shape, focusColor = Brand.Signal)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .semantics { if (collapsed) contentDescription = destination.label },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(
-                    if (selected) Color.White.copy(alpha = 0.2f)
-                    else Color.White.copy(alpha = 0.08f)
-                ),
-            contentAlignment = Alignment.Center
+                .width(3.dp)
+                .height(20.dp)
+                .background(if (selected) Brand.Signal else Color.Transparent)
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = if (collapsed) 0.dp else 9.dp, end = 10.dp),
+            horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             ErpIcon(
                 glyph = destination.glyph,
                 tint = if (selected) Color.White else Color.White.copy(alpha = 0.72f),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(17.dp)
             )
-        }
-        if (!collapsed) {
-            Spacer(Modifier.width(11.dp))
-            Text(
-                text = destination.label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) Color.White else Color.White.copy(alpha = 0.78f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (!collapsed) {
+                Spacer(Modifier.width(11.dp))
+                Text(
+                    text = destination.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) Color.White else Color.White.copy(alpha = 0.80f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -960,10 +944,10 @@ private fun BottomNavigationBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
-            .shadow(12.dp, RoundedCornerShape(22.dp))
-            .clip(RoundedCornerShape(22.dp))
+            .shadow(12.dp, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(palette.glassOverlay.copy(alpha = 0.95f))
-            .border(1.dp, palette.glassBorder.first(), RoundedCornerShape(22.dp))
+            .border(1.dp, palette.glassBorder.first(), RoundedCornerShape(10.dp))
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
@@ -981,7 +965,7 @@ private fun BottomNavigationBar(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .clickable { menuExpanded = true }
                         .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
@@ -1023,7 +1007,7 @@ private fun BottomItem(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -1031,7 +1015,7 @@ private fun BottomItem(
         Box(
             modifier = Modifier
                 .size(width = 38.dp, height = 28.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(6.dp))
                 .background(
                     if (selected) {
                         Brush.linearGradient(destination.gradient)

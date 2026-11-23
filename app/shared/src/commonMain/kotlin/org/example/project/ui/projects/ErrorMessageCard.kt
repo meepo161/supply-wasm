@@ -41,16 +41,9 @@ fun ErrorMessageCard(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        scheme.errorContainer.copy(alpha = 0.85f),
-                        scheme.error.copy(alpha = 0.10f)
-                    )
-                )
-            )
-            .border(1.dp, scheme.error.copy(alpha = 0.28f), RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(scheme.errorContainer)
+            .border(1.dp, scheme.error.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

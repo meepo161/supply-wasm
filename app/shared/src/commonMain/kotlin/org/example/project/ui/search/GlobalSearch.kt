@@ -98,7 +98,7 @@ fun GlobalSearchBox(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                .clip(RoundedCornerShape(13.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(palette.glassOverlay.copy(alpha = 0.7f))
                 .border(
                     width = 1.dp,
@@ -109,7 +109,7 @@ fun GlobalSearchBox(
                             palette.glassBorder[1]
                         )
                     ),
-                    shape = RoundedCornerShape(13.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -265,9 +265,9 @@ private fun SearchDropdown(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(palette.glassOverlay)
-            .border(1.dp, palette.glassBorder[0].copy(alpha = 0.6f), RoundedCornerShape(18.dp))
+            .border(1.dp, palette.glassBorder[0].copy(alpha = 0.6f), RoundedCornerShape(10.dp))
             .heightIn(max = 460.dp)
     ) {
         when {
@@ -461,7 +461,7 @@ private fun SearchResultRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 6.dp)
-            .clip(RoundedCornerShape(11.dp))
+            .clip(RoundedCornerShape(6.dp))
             .background(
                 if (highlighted || hovered) accent.copy(alpha = 0.10f) else Color.Transparent
             )

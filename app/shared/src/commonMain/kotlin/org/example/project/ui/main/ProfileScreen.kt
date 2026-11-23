@@ -96,21 +96,11 @@ fun ProfileScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Brush.linearGradient(Gradients.Sidebar))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(22.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
                     .padding(20.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(110.dp)
-                        .align(Alignment.TopEnd)
-                        .background(
-                            Brush.radialGradient(
-                                listOf(Brand.Violet.copy(alpha = 0.35f), Color.Transparent)
-                            )
-                        )
-                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(name = user.fullName, size = 72.dp)
                     Spacer(Modifier.width(20.dp))

@@ -246,7 +246,7 @@ private fun OrderCardPane(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -409,7 +409,7 @@ private fun TotalsRow(order: PurchaseOrderDto) {
 private fun PurchaseOrderTotalChip(label: String, value: String, accent: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(accent.copy(alpha = 0.12f))
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
@@ -431,7 +431,7 @@ private fun PurchaseOrderSuccessNote(text: String, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(Brand.Mint.copy(alpha = 0.14f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically

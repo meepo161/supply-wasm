@@ -49,6 +49,9 @@ import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.EmptyState
 import org.example.project.ui.theme.ErpIcon
 import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.ErpIconButton
+import org.example.project.ui.theme.erpInteractive
+import org.example.project.ui.theme.readableAccent
 import org.example.project.ui.theme.GlassCard
 import org.example.project.ui.theme.GradientButton
 import org.example.project.ui.theme.Gradients
@@ -287,6 +290,12 @@ fun HomeScreen(
 
 /* ---------------------------------- Hero ----------------------------------- */
 
+/**
+ * Шапка главной: кто и в каком охвате смотрит, одна строка итога и действия.
+ * Это заголовок страницы, а не баннер: фокус экрана остаётся на просрочках ниже.
+ * Иерархия действий: «Уведомления» и переключатель охвата второстепенные (контур),
+ * «Обновить» служебное (иконка).
+ */
 @Composable
 private fun HeroCard(
     userName: String,
@@ -301,141 +310,73 @@ private fun HeroCard(
     onRefresh: () -> Unit,
     onOpenNotifications: () -> Unit
 ) {
-    val palette = LocalBrandPalette.current
-    val heroColors = if (palette.isDark) {
-        listOf(Color(0xFF14295F), Color(0xFF2A1B63), Color(0xFF3E1A55))
-    } else {
-        listOf(Color(0xFF1247C0), Color(0xFF4B2DD6), Color(0xFF7C2FD6))
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(Brush.linearGradient(heroColors))
-            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(28.dp))
-    ) {
-        // Декоративные круги
-        Box(
-            modifier = Modifier
-                .size(320.dp)
-                .align(Alignment.TopEnd)
-                .background(
-                    Brush.radialGradient(
-                        listOf(Color.White.copy(alpha = 0.18f), Color.Transparent)
-                    )
+    val scheme = MaterialTheme.colorScheme
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val narrow = maxWidth < 640.dp
+        val summary: @Composable () -> Unit = {
+            Column {
+                Text(
+                    text = if (companyScope) "Задачи компании" else "Мои задачи",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = scheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-        )
-        Box(
-            modifier = Modifier
-                .size(220.dp)
-                .align(Alignment.BottomStart)
-                .background(
-                    Brush.radialGradient(
-                        listOf(Brand.Cyan.copy(alpha = 0.22f), Color.Transparent)
-                    )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = buildString {
+                        append(userName)
+                        append(" · ")
+                        append(
+                            when {
+                                overdueCount > 0 -> "просрочено $overdueCount, открыто $openCount, на приёмке $reviewCount"
+                                openCount > 0 -> "открыто $openCount, на приёмке $reviewCount, просрочек нет"
+                                companyOverdueCount > 0 && !companyScope -> "у вас просрочек нет, по компании просрочено $companyOverdueCount"
+                                else -> if (companyScope) "по компании просроченных задач нет" else "просроченных задач нет"
+                            }
+                        )
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (overdueCount > 0) readableAccent(Brand.Rose) else scheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
-        )
-
-        Column(modifier = Modifier.padding(horizontal = 22.dp, vertical = 14.dp)) {
+            }
+        }
+        val actions: @Composable () -> Unit = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SoftButton(
+                    text = if (unreadCount > 0) "Уведомления: $unreadCount" else "Уведомления",
+                    onClick = onOpenNotifications,
+                    leadingIcon = ErpIconGlyph.Bell
+                )
+                SoftButton(
+                    text = if (companyScope) "Показать мои" else "Показать по компании",
+                    onClick = onToggleScope
+                )
+                ErpIconButton(
+                    glyph = ErpIconGlyph.Refresh,
+                    contentDescription = "Обновить",
+                    onClick = onRefresh,
+                    enabled = !isLoading
+                )
+            }
+        }
+        if (narrow) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                summary()
+                actions()
+            }
+        } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "$userName · ${if (companyScope) "по компании" else "ваши задачи"}",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = when {
-                            overdueCount > 0 -> "Просрочено: $overdueCount · открыто: $openCount"
-                            openCount > 0 -> "Открытых задач: $openCount"
-                            companyOverdueCount > 0 && !companyScope -> "У вас просрочек нет (по компании просрочено: $companyOverdueCount)"
-                            else -> if (companyScope) "По компании просроченных задач нет" else "Ваших просроченных задач нет"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.82f)
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                HeroBadge(unreadCount = unreadCount, onOpenNotifications = onOpenNotifications)
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                GradientButton(
-                    text = if (companyScope) "Показать мои" else "По компании",
-                    onClick = onToggleScope,
-                    compact = true,
-                    gradient = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0.16f))
-                )
-                GradientButton(
-                    text = "Обновить",
-                    onClick = onRefresh,
-                    enabled = !isLoading,
-                    compact = true,
-                    gradient = listOf(Color.White.copy(alpha = 0.22f), Color.White.copy(alpha = 0.12f)),
-                    leadingIcon = ErpIconGlyph.Refresh
-                )
-                GlassChip(text = "Открытых: $openCount")
-                GlassChip(text = "На приёмке: $reviewCount")
+                Box(Modifier.weight(1f)) { summary() }
+                Spacer(Modifier.width(16.dp))
+                actions()
             }
         }
-    }
-}
-
-@Composable
-private fun HeroBadge(unreadCount: Int, onOpenNotifications: () -> Unit) {
-    Column(horizontalAlignment = Alignment.End) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.14f))
-                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(16.dp))
-                .clickable(onClick = onOpenNotifications)
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ErpIcon(ErpIconGlyph.Bell, Color.White, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "$unreadCount",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "непрочитанных",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GlassChip(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(alpha = 0.10f))
-            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(50))
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.85f)
-        )
     }
 }
 
@@ -474,71 +415,47 @@ private fun MetricRow(metrics: List<Metric>, loading: Boolean) {
     }
 }
 
+/**
+ * Показатель: число крупно, подпись рядом с иконкой. Карточка не кликабельна
+ * (своего перехода у показателя нет). Цвет включается, только когда показатель
+ * требует внимания: ненулевая просрочка красная, остальные нейтральные.
+ */
 @Composable
 private fun MetricCard(metric: Metric, loading: Boolean, modifier: Modifier = Modifier) {
-    val palette = LocalBrandPalette.current
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val lift by animateFloatAsState(
-        targetValue = if (hovered) 1f else 0f,
-        animationSpec = tween(220),
-        label = "metricLift"
-    )
-    Box(
+    val scheme = MaterialTheme.colorScheme
+    val alarming = !loading && metric.value > 0 && metric.glyph == ErpIconGlyph.Alert
+    val shape = RoundedCornerShape(8.dp)
+    val alarmText = readableAccent(Brand.Rose)
+    Column(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        palette.glassOverlay,
-                        metric.accent.copy(alpha = if (palette.isDark) 0.10f else 0.06f)
-                    )
-                )
-            )
-            .border(
-                1.dp,
-                Brush.linearGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.5f + 0.3f * lift),
-                        metric.accent.copy(alpha = 0.16f)
-                    )
-                ),
-                RoundedCornerShape(20.dp)
-            )
-            .clickable(interactionSource = interaction, indication = null) {}
-            .padding(16.dp)
+            .clip(shape)
+            .background(if (alarming) Brand.Rose.copy(alpha = 0.08f) else scheme.surface)
+            .border(1.dp, if (alarming) Brand.Rose.copy(alpha = 0.45f) else scheme.outlineVariant, shape)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconBadge(metric.glyph, gradient = metric.gradient, size = 34.dp, iconSize = 17.dp)
-                if (!loading && metric.value > 0) {
-                    PillBadge(
-                        text = "активно",
-                        accent = metric.accent
-                    )
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            if (loading) {
-                SkeletonLine(height = 22.dp, widthFraction = 0.4f)
-            } else {
-                Text(
-                    text = metric.value.toString(),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Spacer(Modifier.height(2.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ErpIcon(
+                metric.glyph,
+                if (alarming) alarmText else scheme.onSurfaceVariant,
+                Modifier.size(15.dp)
+            )
+            Spacer(Modifier.width(6.dp))
             Text(
                 text = metric.label,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (alarming) alarmText else scheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        if (loading) {
+            SkeletonLine(height = 22.dp, widthFraction = 0.4f)
+        } else {
+            Text(
+                text = metric.value.toString(),
+                style = MaterialTheme.typography.headlineMedium,
+                color = if (alarming) alarmText else scheme.onSurface
             )
         }
     }
@@ -607,10 +524,7 @@ private fun TaskSection(
             title = title,
             count = tasks.size,
             accent = accent,
-            subtitle = subtitle,
-            action = {
-                IconBadge(glyph, gradient = gradient, size = 30.dp, iconSize = 15.dp)
-            }
+            subtitle = subtitle
         )
         Spacer(Modifier.height(14.dp))
         when {
@@ -653,26 +567,18 @@ private fun TaskRow(task: TaskDto, accent: Color, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(accent.copy(alpha = 0.05f + 0.07f * bg))
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (hovered) scheme.surfaceContainerLow else scheme.surface)
             .border(
                 1.dp,
-                accent.copy(alpha = 0.10f + 0.18f * bg),
-                RoundedCornerShape(14.dp)
+                if (hovered) scheme.primary.copy(alpha = 0.5f) else scheme.outlineVariant,
+                RoundedCornerShape(8.dp)
             )
+            .erpInteractive(interaction, RoundedCornerShape(8.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(width = 3.dp, height = 32.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(
-                    Brush.verticalGradient(listOf(accent, accent.copy(alpha = 0.25f)))
-                )
-        )
-        Spacer(Modifier.width(11.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = task.title,
@@ -722,21 +628,16 @@ private fun TaskRow(task: TaskDto, accent: Color, onClick: () -> Unit) {
     }
 }
 
+/** Приоритет показывается словом и только когда он выше обычного: цвет лишь дублирует текст. */
 @Composable
 private fun PriorityDot(priority: TaskPriority) {
-    val color = when (priority) {
-        TaskPriority.CRITICAL -> Brand.Crimson
-        TaskPriority.HIGH -> Brand.Orange
-        TaskPriority.NORMAL -> Brand.Blue
-        TaskPriority.LOW -> Brand.Mint
+    val (label, color) = when (priority) {
+        TaskPriority.CRITICAL -> "критический" to Brand.Crimson
+        TaskPriority.HIGH -> "высокий" to Brand.Orange
+        else -> return
     }
-    Box(
-        modifier = Modifier
-            .padding(start = 8.dp)
-            .size(6.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(color)
-    )
+    Spacer(Modifier.width(8.dp))
+    PillBadge(text = label, accent = color)
 }
 
 /* ----------------------------- Уведомления --------------------------------- */
@@ -796,9 +697,9 @@ private fun NotificationRow(notification: NotificationDto, onClick: () -> Unit) 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(accent.copy(alpha = 0.06f))
-            .border(1.dp, accent.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+            .border(1.dp, accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically

@@ -114,7 +114,7 @@ private fun TaskShareDialog(
         onDismiss = { if (!state.isSharingTask) onDismiss() }
     ) {
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(8.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -154,7 +154,7 @@ private fun TaskShareDialog(
                             items(recipients, key = { it.id }) { user ->
                                 val selected = selectedUserId == user.id
                                 Surface(
-                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(
+                                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(
                                         enabled = !state.isSharingTask
                                     ) { selectedUserId = user.id },
                                     color = if (selected) MaterialTheme.colorScheme.primaryContainer
@@ -194,7 +194,7 @@ internal fun SharedTaskMessageCard(
     Surface(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = contentColor.copy(alpha = 0.08f)
     ) {
         Column(Modifier.fillMaxWidth().padding(10.dp)) {

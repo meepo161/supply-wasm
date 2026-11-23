@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -49,6 +50,7 @@ import org.example.project.dto.TaskPriority
 import org.example.project.dto.TaskStatus
 import org.example.project.dto.UserDto
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.erpInteractive
 import org.example.project.ui.theme.Avatar
 import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.EmptyState
@@ -260,24 +262,23 @@ fun TaskListScreen(
 @Composable
 private fun FilterPill(label: String, count: Int, selected: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val shape = RoundedCornerShape(6.dp)
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
+            .heightIn(min = 36.dp)
+            .clip(shape)
             .background(
-                if (selected) Brush.linearGradient(Gradients.Primary)
-                else Brush.linearGradient(
-                    listOf(
-                        scheme.surfaceContainerHigh.copy(alpha = 0.9f),
-                        scheme.surfaceContainer.copy(alpha = 0.9f)
-                    )
-                )
+                when {
+                    selected -> scheme.primary
+                    hovered -> scheme.surfaceContainerHigh
+                    else -> scheme.surface
+                }
             )
-            .border(
-                1.dp,
-                if (selected) Color.White.copy(alpha = 0.2f) else scheme.outlineVariant,
-                RoundedCornerShape(50)
-            )
-            .clickable(onClick = onClick)
+            .border(1.dp, if (selected) scheme.primary else scheme.outline, shape)
+            .erpInteractive(interaction, shape, focusColor = scheme.onBackground)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -285,12 +286,12 @@ private fun FilterPill(label: String, count: Int, selected: Boolean, onClick: ()
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) Color.White else scheme.onSurfaceVariant
+                color = if (selected) scheme.onPrimary else scheme.onSurface
             )
             Spacer(Modifier.width(7.dp))
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(50))
+                    .clip(RoundedCornerShape(4.dp))
                     .background(
                         if (selected) Color.White.copy(alpha = 0.22f)
                         else scheme.onSurfaceVariant.copy(alpha = 0.10f)
@@ -300,7 +301,7 @@ private fun FilterPill(label: String, count: Int, selected: Boolean, onClick: ()
                 Text(
                     text = count.toString(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (selected) Color.White else scheme.onSurfaceVariant
+                    color = if (selected) scheme.onPrimary else scheme.onSurfaceVariant
                 )
             }
         }
@@ -330,25 +331,14 @@ internal fun TaskCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        scheme.surfaceContainerLowest,
-                        statusAccent.copy(alpha = 0.04f + 0.05f * lift)
-                    )
-                )
-            )
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (hovered) scheme.surfaceContainerLow else scheme.surface)
             .border(
                 1.dp,
-                Brush.linearGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.4f),
-                        statusAccent.copy(alpha = 0.18f + 0.20f * lift)
-                    )
-                ),
-                RoundedCornerShape(18.dp)
+                if (hovered) scheme.primary.copy(alpha = 0.55f) else scheme.outlineVariant,
+                RoundedCornerShape(10.dp)
             )
+            .erpInteractive(interaction, RoundedCornerShape(10.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(16.dp)
     ) {
@@ -365,11 +355,8 @@ internal fun TaskCard(
                         modifier = Modifier
                             .size(width = 4.dp, height = 46.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(statusAccent, statusAccent.copy(alpha = 0.2f))
-                                )
-                            )
+                            // Полоса дублирует цветом статус, который назван текстом в шапке карточки.
+                            .background(statusAccent)
                     )
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
