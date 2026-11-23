@@ -128,8 +128,13 @@ fun ErpTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = AppTypography,
-            shapes = AppShapes,
-            content = content
-        )
+            shapes = AppShapes
+        ) {
+            // Текст без явного цвета иначе берёт чёрный по умолчанию и пропадает на тёмной теме.
+            CompositionLocalProvider(
+                androidx.compose.material3.LocalContentColor provides colorScheme.onBackground,
+                content = content
+            )
+        }
     }
 }
