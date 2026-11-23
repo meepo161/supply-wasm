@@ -720,7 +720,7 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
             onDismiss = viewModel::dismissDialog
         ) {
             Box {
-                androidx.compose.material3.OutlinedButton(onClick = { supplierExpanded = true }) {
+                org.example.project.ui.theme.OutlinedButton(onClick = { supplierExpanded = true }) {
                     Text(selectedSupplier?.name ?: "Выберите поставщика")
                 }
                 androidx.compose.material3.DropdownMenu(

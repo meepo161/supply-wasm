@@ -8,6 +8,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.FocusInteraction
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.semantics.Role
@@ -98,9 +103,20 @@ fun Modifier.erpInteractive(
     focusColor: Color = MaterialTheme.colorScheme.primary
 ): Modifier {
     val focused by interaction.collectIsFocusedAsState()
+    // Фокус, полученный кликом мышью, рамку не показывает: она нужна для навигации клавиатурой.
+    var focusedByPointer by remember(interaction) { mutableStateOf(false) }
+    LaunchedEffect(interaction) {
+        interaction.interactions.collect { event ->
+            when (event) {
+                is PressInteraction.Press -> focusedByPointer = true
+                is FocusInteraction.Unfocus -> focusedByPointer = false
+            }
+        }
+    }
+    val showRing = focused && !focusedByPointer
     return this
         .pointerHoverIcon(if (enabled) PointerIcon.Hand else PointerIcon.Default)
-        .then(if (focused) Modifier.border(2.dp, focusColor, shape) else Modifier)
+        .then(if (showRing) Modifier.border(2.dp, focusColor, shape) else Modifier)
 }
 
 /**
@@ -182,7 +198,12 @@ fun GradientButton(
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(6.dp)
-    val base = gradient.first()
+    // Главное действие везде одного цвета, чтобы его узнавали в любом разделе.
+    // Свой цвет сохраняют только смысловые действия: опасное, предупреждающее, подтверждающее.
+    val base = when (gradient) {
+        Gradients.Berry, Gradients.Sunset, Gradients.Emerald, Gradients.AmberGlow -> gradient.first()
+        else -> if (gradient.first().alpha < 1f) gradient.first() else Gradients.Primary.first()
+    }
     val fill = when {
         !enabled -> scheme.surfaceContainerHighest
         pressed -> base.shade(0.78f)

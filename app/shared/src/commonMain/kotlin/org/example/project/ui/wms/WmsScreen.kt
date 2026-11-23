@@ -25,7 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import org.example.project.ui.theme.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -34,14 +34,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -792,8 +792,8 @@ private fun StockTab(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Button(onClick = viewModel::loadStock) { Text("Обновить", softWrap = false) }
-            OutlinedButton(onClick = {
+            OutlinedButton(onClick = viewModel::loadStock) { Text("Обновить", softWrap = false) }
+            TextButton(onClick = {
                 filterOnlyAvailable = false
                 filterQuarantineOnly = false
                 viewModel.updateStockFilters(StockFilters())
