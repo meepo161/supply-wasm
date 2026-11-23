@@ -499,7 +499,7 @@ fun CreateReceiptDialog(
                         Text("Заполнить из заказа")
                     }
                 }
-                Button(onClick = onAddLine, enabled = form.warehouseId != null) {
+                OutlinedButton(onClick = onAddLine, enabled = form.warehouseId != null) {
                     Text("Добавить строку")
                 }
             }

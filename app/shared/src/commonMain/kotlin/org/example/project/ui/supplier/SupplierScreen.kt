@@ -249,10 +249,10 @@ private fun SupplierCardPane(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 sectionTitles.forEachIndexed { idx, label ->
-                    SoftButton(
-                        text = label,
+                    org.example.project.ui.theme.ErpFilterChip(
+                        selected = cardSection == idx,
                         onClick = { cardSection = idx },
-                        tint = if (cardSection == idx) Brand.Orange else Brand.Slate
+                        label = { Text(label) }
                     )
                 }
             }

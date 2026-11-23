@@ -387,7 +387,7 @@ private fun ProjectStageStatus.accentColor() = when (this) {
     ProjectStageStatus.CANCELLED -> MaterialTheme.colorScheme.error
 }
 
-private fun ProjectMilestoneStatus.localizedName(): String = when (this) {
+internal fun ProjectMilestoneStatus.localizedName(): String = when (this) {
     ProjectMilestoneStatus.PLANNED -> "Ожидается"
     ProjectMilestoneStatus.REACHED -> "Достигнута"
     ProjectMilestoneStatus.MISSED -> "Пропущена"

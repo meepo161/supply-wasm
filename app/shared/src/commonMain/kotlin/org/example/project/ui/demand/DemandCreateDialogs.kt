@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import org.example.project.ui.theme.Button
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -182,7 +183,7 @@ private fun ManualLinesSection(
                 onRemove = { onRemoveLine(index) }
             )
         }
-        Button(onClick = onAddLine) { Text("Добавить позицию") }
+        OutlinedButton(onClick = onAddLine) { Text("Добавить позицию") }
     }
 }
 

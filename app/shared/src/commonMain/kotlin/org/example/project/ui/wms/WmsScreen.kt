@@ -1583,7 +1583,7 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
-                Button(onClick = viewModel::lookupBarcode) { Text("Найти") }
+                OutlinedButton(onClick = viewModel::lookupBarcode) { Text("Найти") }
                 OutlinedButton(onClick = viewModel::loadMovementsAndLowStock) {
                     ErpIcon(
                         glyph = ErpIconGlyph.Refresh,

@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import org.example.project.ui.theme.Button
+import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -661,7 +662,7 @@ internal fun CreateIssueDialog(
                         )
                     }
                 }
-                Button(onClick = onAddLine) { Text("Добавить строку") }
+                OutlinedButton(onClick = onAddLine) { Text("Добавить строку") }
     }
 }
 
@@ -967,7 +968,7 @@ internal fun CreateReturnDialog(
                         )
                     }
                 }
-                Button(onClick = onAddLine) { Text("Добавить строку") }
+                OutlinedButton(onClick = onAddLine) { Text("Добавить строку") }
     }
 }
 
@@ -1249,7 +1250,7 @@ internal fun CreateWriteOffDialog(
                         )
                     }
                 }
-                Button(onClick = onAddLine) { Text("Добавить строку") }
+                OutlinedButton(onClick = onAddLine) { Text("Добавить строку") }
     }
 }
 
