@@ -2,6 +2,8 @@ package org.example.project.ui.tasks
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -269,21 +271,49 @@ private fun TaskChatCenterColumn(
     onToggleContext: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
+    val canWrite = conversationState.selectedConversation?.canWrite == true && !task.isClosedLike()
+    // Та же подложка, рамка, отступы и шапка, что у личного, группового и проектного чата
+    // (ConversationDetail): задачный чат отличается только своими действиями справа.
+    Column(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f))
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Avatar(name = task.title, size = 36.dp)
+            Column(modifier = Modifier.padding(start = 10.dp).weight(1f)) {
                 Text(
                     text = task.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Задачи · ${task.number}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    PillBadge(text = task.status.localizedName(), accent = task.status.accentColor())
+                    if (!canWrite) {
+                        PillBadge(text = "Только чтение", accent = MaterialTheme.colorScheme.outline)
+                    }
+                }
             }
-            PillBadge(text = task.status.localizedName(), accent = task.status.accentColor())
-            Spacer(Modifier.width(8.dp))
+        }
+        // Действия задачи отдельной строкой: в узкой колонке они не вытесняют название.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             TaskShareAction(task, state, viewModel)
             TextButton(onClick = onToggleContext) {
                 Text(if (contextOpen) "Скрыть сведения" else "Сведения")
@@ -296,7 +326,7 @@ private fun TaskChatCenterColumn(
         conversationState.selectedConversation?.let { conversation ->
             ConversationPanel(
                 messages = conversationState.messages,
-                canWrite = conversation.canWrite && !task.isClosedLike(),
+                canWrite = canWrite,
                 currentUserId = currentUser.id,
                 readOnlyHint = if (task.isClosedLike()) {
                     "Задача закрыта. Обсуждение доступно только для чтения."
