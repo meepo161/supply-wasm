@@ -55,6 +55,9 @@ class ProductionViewModel(
 
     fun hasPermission(): Boolean = currentUser.hasPermission("production", "manage")
 
+    /** Резерв и списание материалов двигают складской остаток: сервер требует ещё и wms:post. */
+    fun canMoveStock(): Boolean = hasPermission() && currentUser.hasPermission("wms", "post")
+
     fun dismissError() {
         _uiState.value = _uiState.value.copy(operationError = null)
     }
@@ -164,6 +167,7 @@ class ProductionViewModel(
                     _uiState.value = _uiState.value.copy(selectedOrder = result.data)
                     loadInstances(id)
                     loadOrderExtras(id)
+                    loadRevisionLabel(result.data)
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
             }
@@ -183,6 +187,74 @@ class ProductionViewModel(
             when (val nc = productionRepository.listNonconformities(objectType = "PRODUCTION", objectId = orderId)) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(nonconformities = nc.data)
                 is ApiResult.Error -> { }
+            }
+        }
+    }
+
+    private fun loadRevisionLabel(order: ProductionOrderDto) {
+        _uiState.value = _uiState.value.copy(orderRevisionLabel = null)
+        viewModelScope.launch {
+            val label = (bomRepository.listRevisions(order.productModelId) as? ApiResult.Success)
+                ?.data?.firstOrNull { it.id == order.bomRevisionId }?.revisionNumber
+            if (_uiState.value.selectedOrder?.id == order.id) {
+                _uiState.value = _uiState.value.copy(orderRevisionLabel = label)
+            }
+        }
+    }
+
+    // --- Материалы заказа ---
+
+    fun allocateMaterial(materialId: Long, warehouseId: Long?, quantity: String) {
+        val orderId = _uiState.value.selectedOrder?.id ?: return
+        val material = _uiState.value.materials.firstOrNull { it.id == materialId } ?: return
+        if (warehouseId == null) return fail("Выберите склад, с которого резервируется материал")
+        if (quantity.trim().replace(',', '.').toDoubleOrNull()?.let { it > 0 } != true) {
+            return fail("Укажите количество больше нуля")
+        }
+        materialAction("Материал ${material.nomenclatureCode} зарезервирован") {
+            productionRepository.allocateMaterial(
+                orderId, materialId,
+                org.example.project.dto.AllocateProductionMaterialRequest(
+                    warehouseId = warehouseId,
+                    quantity = quantity.trim().replace(',', '.'),
+                    version = material.version
+                )
+            )
+        }
+    }
+
+    fun consumeMaterial(materialId: Long, quantity: String) {
+        val orderId = _uiState.value.selectedOrder?.id ?: return
+        val material = _uiState.value.materials.firstOrNull { it.id == materialId } ?: return
+        if (quantity.trim().replace(',', '.').toDoubleOrNull()?.let { it > 0 } != true) {
+            return fail("Укажите количество больше нуля")
+        }
+        materialAction("Материал ${material.nomenclatureCode} списан в производство") {
+            productionRepository.consumeMaterial(
+                orderId, materialId,
+                org.example.project.dto.ConsumeProductionMaterialRequest(
+                    quantity = quantity.trim().replace(',', '.'),
+                    version = material.version
+                )
+            )
+        }
+    }
+
+    private fun materialAction(
+        message: String,
+        block: suspend () -> ApiResult<org.example.project.dto.ProductionOrderMaterialDto>
+    ) {
+        if (!hasPermission()) return fail("Нет права управлять производством")
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = block()) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    materials = _uiState.value.materials.map { if (it.id == result.data.id) result.data else it },
+                    isActionRunning = false,
+                    activeDialog = null,
+                    successMessage = message
+                )
+                is ApiResult.Error -> failWith(result.error)
             }
         }
     }
@@ -324,10 +396,18 @@ class ProductionViewModel(
                         createForm = CreateProductionOrderForm(),
                         revisions = emptyList(),
                         successMessage = "Заказ ${result.data.number} создан",
-                        selectedOrder = result.data
+                        selectedOrder = result.data,
+                        // Материалы, NCR и изделия предыдущего заказа не должны остаться в карточке нового.
+                        instances = emptyList(),
+                        materials = emptyList(),
+                        engineeringChanges = emptyList(),
+                        nonconformities = emptyList(),
+                        orderRevisionLabel = null
                     )
                     loadOrders()
                     loadInstances(result.data.id)
+                    loadOrderExtras(result.data.id)
+                    loadRevisionLabel(result.data)
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isActionRunning = false,
@@ -750,9 +830,14 @@ class ProductionViewModel(
         }
     }
 
-    fun createNonconformity(category: String, description: String) {
+    fun createNonconformity(
+        category: String,
+        description: String,
+        severity: org.example.project.dto.NonconformitySeverity = org.example.project.dto.NonconformitySeverity.MINOR,
+        temporaryMeasures: String = ""
+    ) {
         val orderId = _uiState.value.selectedOrder?.id ?: return
-        if (description.isBlank()) return
+        if (description.isBlank()) return fail("Опишите несоответствие")
         _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
         viewModelScope.launch {
             when (val res = productionRepository.createNonconformity(
@@ -760,7 +845,9 @@ class ProductionViewModel(
                     category = category.ifBlank { "PRODUCTION" },
                     objectType = "PRODUCTION",
                     objectId = orderId,
-                    description = description.trim()
+                    description = description.trim(),
+                    severity = severity,
+                    temporaryMeasures = temporaryMeasures.trim().ifBlank { null }
                 )
             )) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
@@ -792,7 +879,8 @@ class ProductionViewModel(
             )) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
                     nonconformities = _uiState.value.nonconformities.map { if (it.id == res.data.id) res.data else it },
-                    isActionRunning = false
+                    isActionRunning = false,
+                    successMessage = "${res.data.number}: ${res.data.status.localizedName()}"
                 )
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isActionRunning = false,

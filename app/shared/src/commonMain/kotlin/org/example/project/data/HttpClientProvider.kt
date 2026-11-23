@@ -10,6 +10,16 @@ import io.ktor.http.URLProtocol
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
+/**
+ * Адрес API-сервера. Один источник для HTTP-клиента и для ссылок, которые открываются
+ * в браузере напрямую (печать наряда, CSV-выгрузки), чтобы они не расходились.
+ */
+object ApiServer {
+    const val HOST = "localhost"
+    const val PORT = 8080
+    val baseUrl: String get() = "http://$HOST:$PORT"
+}
+
 internal fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureBaseClient() {
     expectSuccess = false
     install(WebSockets)
@@ -25,8 +35,8 @@ internal fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureBaseClien
     defaultRequest {
         url {
             protocol = URLProtocol.HTTP
-            host = "localhost"
-            port = 8080
+            host = ApiServer.HOST
+            port = ApiServer.PORT
         }
     }
 }

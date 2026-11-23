@@ -51,7 +51,9 @@ data class ProductionUiState(
     val cancelReason: String = "",
     val skipReason: String = "",
     val noteReason: String = "",
-    val pendingStageSkipId: Long? = null
+    val pendingStageSkipId: Long? = null,
+    /** Номер ревизии BOM выбранного заказа («A», «B»): в заказе хранится только её ID. */
+    val orderRevisionLabel: String? = null
 )
 
 sealed class ProductionDialog {
@@ -63,6 +65,10 @@ sealed class ProductionDialog {
     data class InstanceDetail(val instanceId: Long) : ProductionDialog()
     data object CreateEngineeringChange : ProductionDialog()
     data object CreateNonconformity : ProductionDialog()
+    /** Резерв материала заказа на складе. */
+    data class AllocateMaterial(val materialId: Long) : ProductionDialog()
+    /** Фактическое списание материала в производство (не больше зарезервированного). */
+    data class ConsumeMaterial(val materialId: Long) : ProductionDialog()
 }
 
 data class CreateProductionOrderForm(

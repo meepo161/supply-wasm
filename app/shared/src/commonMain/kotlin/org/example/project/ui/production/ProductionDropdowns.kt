@@ -1,11 +1,13 @@
 package org.example.project.ui.production
 
+import org.example.project.ui.bom.localizedName
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +41,7 @@ fun ProductionStatusDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
@@ -80,12 +82,12 @@ fun ProjectDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.number} — ${it.name}" } ?: if (allowEmpty) "Все" else "Не выбран",
+            value = selected?.let { "${it.number} · ${it.name}" } ?: if (allowEmpty) "Все" else "Не выбран",
             onValueChange = { },
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (allowEmpty) {
@@ -99,7 +101,7 @@ fun ProjectDropdown(
             }
             projects.forEach { project ->
                 DropdownMenuItem(
-                    text = { Text("${project.number} — ${project.name}") },
+                    text = { Text("${project.number} · ${project.name}") },
                     onClick = {
                         onSelect(project.id)
                         expanded = false
@@ -127,17 +129,17 @@ fun ProductModelDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.code} — ${it.name}" } ?: "Не выбрано",
+            value = selected?.let { "${it.code} · ${it.name}" } ?: "Не выбрано",
             onValueChange = { },
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             models.forEach { model ->
                 DropdownMenuItem(
-                    text = { Text("${model.code} — ${model.name}") },
+                    text = { Text("${model.code} · ${model.name}") },
                     onClick = {
                         onSelect(model.id)
                         expanded = false
@@ -165,12 +167,12 @@ fun BomRevisionDropdown(
         modifier = modifier
     ) {
         OutlinedTextField(
-            value = selected?.let { "${it.revisionNumber} · ${it.status.name}" } ?: "Не выбрана",
+            value = selected?.let { "${it.revisionNumber} · ${it.status.localizedName()}" } ?: "Не выбрана",
             onValueChange = { },
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (revisions.isEmpty()) {
@@ -181,7 +183,7 @@ fun BomRevisionDropdown(
             }
             revisions.forEach { revision ->
                 DropdownMenuItem(
-                    text = { Text("${revision.revisionNumber} · ${revision.status.name}") },
+                    text = { Text("${revision.revisionNumber} · ${revision.status.localizedName()}") },
                     onClick = {
                         onSelect(revision.id)
                         expanded = false
@@ -214,7 +216,7 @@ fun ResponsibleDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             users.forEach { user ->
@@ -250,7 +252,7 @@ fun StageTypeDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             ProductionStageType.entries.forEach { type ->
@@ -292,7 +294,7 @@ fun PriorityDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor().fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { (value, title) ->

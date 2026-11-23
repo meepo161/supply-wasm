@@ -56,7 +56,7 @@ fun ProductionStagesGrid(
         "План старт" to sorted.map { ErpFormat.dateRu(it.plannedStartAt) },
         "Факт старт" to sorted.map { ErpFormat.dateRu(it.actualStartAt) },
         "Факт финиш" to sorted.map { ErpFormat.dateRu(it.actualEndAt) },
-        "Основание" to sorted.map { it.skipReason ?: "—" }
+        "Основание" to sorted.map { it.skipReason.orEmpty() }
     )
     PersistentDataGrid(
         data = data,
@@ -80,7 +80,7 @@ fun ProductInstancesGrid(
 ) {
     val data = mapOf(
         "Серийный номер" to instances.map { it.serialNumber },
-        "Статус" to instances.map { it.status },
+        "Статус" to instances.map { it.status.productionCodeLabel() },
         "Изготовлен" to instances.map { ErpFormat.dateRu(it.manufacturedAt) }
     )
     PersistentDataGrid(

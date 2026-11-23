@@ -45,8 +45,11 @@ fun ProductionDialogs(
         ProductionDialog.HoldOrder -> HoldOrderDialog(state, viewModel)
         is ProductionDialog.SkipStage -> SkipStageDialog(dialog, state, viewModel)
         is ProductionDialog.InstanceDetail -> InstanceDetailDialog(dialog, state, viewModel)
+        // Эти окна рисуются в ProductionScreen (NCR и диалоги материалов).
         ProductionDialog.CreateEngineeringChange,
-        ProductionDialog.CreateNonconformity -> { }
+        ProductionDialog.CreateNonconformity,
+        is ProductionDialog.AllocateMaterial,
+        is ProductionDialog.ConsumeMaterial -> { }
     }
 }
 
@@ -71,8 +74,8 @@ private fun CreateOrderDialog(state: ProductionUiState, viewModel: ProductionVie
             state.operationError?.let { ErrorMessageCard(error = it) }
             if (state.modelsAccessDenied || state.models.isEmpty()) {
                 Text(
-                    text = "Справочник изделий недоступен (нужно право bom:read_any) — " +
-                        "создать заказ нельзя. Обратитесь к администратору.",
+                    text = "Справочник изделий недоступен (нужно право bom:read_any). " +
+                        "Создать заказ нельзя, обратитесь к администратору.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Brand.Rose
                 )
@@ -116,18 +119,18 @@ private fun CreateOrderDialog(state: ProductionUiState, viewModel: ProductionVie
                 modifier = Modifier.fillMaxWidth()
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ErpTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.plannedStartAt,
                     onValueChange = { viewModel.updateCreateForm(form.copy(plannedStartAt = it)) },
                     label = "План: начало",
-                    placeholder = "2026-11-20T09:00+03:00",
+                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
                     modifier = Modifier.weight(1f)
                 )
-                ErpTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.plannedEndAt,
                     onValueChange = { viewModel.updateCreateForm(form.copy(plannedEndAt = it)) },
                     label = "План: окончание",
-                    placeholder = "2026-11-25T18:00+03:00",
+                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -197,7 +200,7 @@ private fun CancelOrderDialog(state: ProductionUiState, viewModel: ProductionVie
 private fun HoldOrderDialog(state: ProductionUiState, viewModel: ProductionViewModel) {
     ErpDialog(
         title = "Приостановка заказа",
-        subtitle = "Укажите причину — она попадёт в журнал",
+        subtitle = "Укажите причину: она попадёт в журнал",
         glyph = ErpIconGlyph.Clock,
         gradient = Gradients.AmberGlow,
         onDismiss = viewModel::dismissDialog,
@@ -253,7 +256,7 @@ private fun CompleteOrderDialog(state: ProductionUiState, viewModel: ProductionV
                 onValueChange = {
                     viewModel.updateCompleteForm(form.copy(serialNumbers = it))
                 },
-                label = "Серийные номера — по одному в строке",
+                label = "Серийные номера, по одному в строке",
                 singleLine = false,
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth()
@@ -261,7 +264,7 @@ private fun CompleteOrderDialog(state: ProductionUiState, viewModel: ProductionV
             Text(
                 text = "Серийных номеров: $serialCount из $expected",
                 style = MaterialTheme.typography.bodySmall,
-                color = if (serialCount == expected && expected > 0) Brand.Mint else Brand.Amber
+                color = org.example.project.ui.theme.readableAccent(if (serialCount == expected && expected > 0) Brand.Teal else Brand.Amber)
             )
             Text(
                 text = "Экземпляры изделий создаются только после завершения всех этапов",
@@ -312,13 +315,11 @@ private fun InstanceDetailDialog(
     val detail = state.selectedInstanceDetail
     ErpDialog(
         title = detail?.let { "Паспорт изделия ${it.serialNumber}" } ?: "Паспорт изделия #${dialog.instanceId}",
-        subtitle = detail?.let { listOfNotNull(it.productModelCode, it.productModelName).joinToString(" — ").ifBlank { null } },
+        subtitle = detail?.let { listOfNotNull(it.productModelCode, it.productModelName).joinToString(" · ").ifBlank { null } },
         glyph = ErpIconGlyph.Layers,
         gradient = Gradients.Ocean,
         onDismiss = viewModel::dismissDialog,
-        confirmText = "Закрыть",
-        onConfirm = viewModel::dismissDialog,
-        confirmGradient = Gradients.Ocean,
+        dismissText = "Закрыть",
         width = 700.dp
     ) {
         Column(
@@ -342,7 +343,7 @@ private fun InstanceDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    PillBadge(text = detail.status, accent = Brand.Teal)
+                    PillBadge(text = detail.status.productionCodeLabel(), accent = Brand.Teal)
                     detail.orderNumber?.let { PillBadge(text = "Заказ $it", accent = Brand.Indigo) }
                     if (detail.status != "ACCEPTED" && detail.status != "SHIPPED") {
                         GradientButton(
@@ -364,7 +365,7 @@ private fun InstanceDetailDialog(
                     }
                 }
                 DetailRow("Серийный номер", detail.serialNumber)
-                DetailRow("Модель", listOfNotNull(detail.productModelCode, detail.productModelName).joinToString(" — ").ifBlank { "#${detail.productModelId}" })
+                DetailRow("Модель", listOfNotNull(detail.productModelCode, detail.productModelName).joinToString(" · ").ifBlank { "#${detail.productModelId}" })
                 DetailRow("Изготовлен", detail.manufacturedAt.toDisplayDateTime())
                 detail.acceptedAt?.let { DetailRow("Принят ОТК", it.toDisplayDateTime()) }
                 detail.shippedAt?.let { DetailRow("Отгружен", it.toDisplayDateTime()) }
@@ -374,7 +375,7 @@ private fun InstanceDetailDialog(
                     Text("Состав комплектующих не зафиксирован.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     detail.components.forEach { comp ->
-                        val title = listOfNotNull(comp.nomenclatureCode, comp.nomenclatureName).joinToString(" — ").ifBlank { "#${comp.nomenclatureId}" }
+                        val title = listOfNotNull(comp.nomenclatureCode, comp.nomenclatureName).joinToString(" · ").ifBlank { "#${comp.nomenclatureId}" }
                         DetailRow(title, "${comp.quantity} шт. (${comp.installedAt.toDisplayDateTime()})")
                     }
                 }
@@ -385,7 +386,18 @@ private fun InstanceDetailDialog(
                 var attachedDocs by androidx.compose.runtime.remember(detail.id) {
                     androidx.compose.runtime.mutableStateOf<List<org.example.project.dto.InstanceDocumentDto>>(emptyList())
                 }
-                var docVerInput by androidx.compose.runtime.remember(detail.id) { androidx.compose.runtime.mutableStateOf("") }
+                // Документ выбирается из реестра; привязывается его действующая версия.
+                val documentRepo: org.example.project.data.DocumentRepository = org.koin.compose.koinInject()
+                var documents by androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf<List<org.example.project.dto.DocumentDto>>(emptyList())
+                }
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    val res = documentRepo.list()
+                    if (res is org.example.project.data.ApiResult.Success) documents = res.data.filter { it.currentVersionId != null }
+                }
+                var selectedDoc by androidx.compose.runtime.remember(detail.id) {
+                    androidx.compose.runtime.mutableStateOf<org.example.project.dto.DocumentDto?>(null)
+                }
                 var docAttachMsg by androidx.compose.runtime.remember(detail.id) { androidx.compose.runtime.mutableStateOf<String?>(null) }
                 androidx.compose.runtime.LaunchedEffect(detail.id) {
                     val res = extrasRepo.listInstanceDocuments(detail.id)
@@ -408,14 +420,17 @@ private fun InstanceDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    org.example.project.ui.theme.ErpTextField(
-                        value = docVerInput,
-                        onValueChange = { docVerInput = it },
-                        label = "ID версии документа",
+                    org.example.project.ui.components.SearchableDropdown(
+                        items = documents,
+                        selected = selectedDoc,
+                        onSelect = { selectedDoc = it },
+                        label = "Документ (действующая версия)",
+                        itemText = { "${it.number} · ${it.name}" },
+                        emptyText = "Нет документов с действующей версией",
                         modifier = Modifier.weight(1f)
                     )
                     SoftButton(text = "Привязать", onClick = {
-                        val verId = docVerInput.trim().toLongOrNull()
+                        val verId = selectedDoc?.currentVersionId
                         if (verId != null) {
                             docScope.launch {
                                 when (val res = extrasRepo.attachInstanceDocument(
@@ -424,8 +439,8 @@ private fun InstanceDetailDialog(
                                 )) {
                                     is org.example.project.data.ApiResult.Success -> {
                                         attachedDocs = listOf(res.data) + attachedDocs
-                                        docVerInput = ""
-                                        docAttachMsg = "Версия документа #$verId привязана"
+                                        docAttachMsg = "Документ ${selectedDoc?.number.orEmpty()} привязан"
+                                        selectedDoc = null
                                     }
                                     is org.example.project.data.ApiResult.Error -> docAttachMsg = res.error.userText()
                                 }
@@ -482,7 +497,7 @@ private fun InstanceDetailDialog(
                     detail.tests.forEach { t ->
                         DetailRow(
                             "Испытание #${t.id} (${t.performedAt.toDisplayDateTime()})",
-                            "${t.result} / Тех. решение: ${t.technicalDecision}" + (t.notes?.let { " — $it" } ?: "")
+                            "${t.result.productionCodeLabel()}, тех. решение: ${t.technicalDecision.productionCodeLabel()}" + (t.notes?.let { ". $it" } ?: "")
                         )
                     }
                 }
@@ -525,7 +540,7 @@ private fun InstanceDetailDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                DetailRow("${r.severity} · ${r.status}$blockBadge", r.description)
+                                DetailRow("${r.severity.productionCodeLabel()} · ${r.status.productionCodeLabel()}$blockBadge", r.description)
                             }
                             if (r.status == "OPEN") {
                                 SoftButton(
@@ -542,7 +557,7 @@ private fun InstanceDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf("MINOR" to "Незнач.", "CRITICAL" to "Крит.").forEach { (code, label) ->
+                    listOf("MINOR" to "Незначительное", "CRITICAL" to "Критическое").forEach { (code, label) ->
                         SoftButton(
                             text = label,
                             onClick = { viewModel.updateInstanceRemarkSeverity(code) },

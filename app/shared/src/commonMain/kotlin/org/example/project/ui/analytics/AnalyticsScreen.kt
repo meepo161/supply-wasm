@@ -213,15 +213,15 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                                     ) {
                                         SoftButton(
                                             text = "Задачи (CSV)",
-                                            onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/tasks.csv") }
+                                            onClick = { uriHandler.openUri("${org.example.project.data.ApiServer.baseUrl}/api/analytics/export/tasks.csv") }
                                         )
                                         SoftButton(
                                             text = "Проекты (CSV)",
-                                            onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/projects.csv") }
+                                            onClick = { uriHandler.openUri("${org.example.project.data.ApiServer.baseUrl}/api/analytics/export/projects.csv") }
                                         )
                                         SoftButton(
                                             text = "Остатки склада (CSV)",
-                                            onClick = { uriHandler.openUri("http://localhost:8080/api/analytics/export/stock.csv") }
+                                            onClick = { uriHandler.openUri("${org.example.project.data.ApiServer.baseUrl}/api/analytics/export/stock.csv") }
                                         )
                                     }
                                     Row(

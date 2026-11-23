@@ -96,33 +96,61 @@ fun ProductionScreen(
     }
 
     ProductionDialogs(state = state, viewModel = viewModel)
+    MaterialDialogs(state = state, viewModel = viewModel)
 
     if (state.activeDialog == ProductionDialog.CreateNonconformity) {
         var category by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("PRODUCTION") }
+        var severity by androidx.compose.runtime.remember {
+            androidx.compose.runtime.mutableStateOf(org.example.project.dto.NonconformitySeverity.MINOR)
+        }
         var description by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+        var measures by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = viewModel::dismissDialog,
             title = { Text("Новое несоответствие (NCR)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    org.example.project.ui.theme.ErpTextField(
-                        value = category,
-                        onValueChange = { category = it },
-                        label = "Категория"
+                    state.operationError?.let { ErrorMessageCard(error = it) }
+                    org.example.project.ui.components.SearchableDropdown(
+                        items = nonconformityCategories,
+                        selected = nonconformityCategories.firstOrNull { it.first == category },
+                        onSelect = { category = it.first },
+                        label = "Объект несоответствия",
+                        itemText = { it.second },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    org.example.project.ui.components.SearchableDropdown(
+                        items = org.example.project.dto.NonconformitySeverity.entries,
+                        selected = severity,
+                        onSelect = { severity = it },
+                        label = "Критичность",
+                        itemText = { it.localizedName() },
+                        modifier = Modifier.fillMaxWidth()
                     )
                     org.example.project.ui.theme.ErpTextField(
                         value = description,
                         onValueChange = { description = it },
-                        label = "Описание несоответствия"
+                        label = "Что обнаружено *",
+                        singleLine = false,
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    org.example.project.ui.theme.ErpTextField(
+                        value = measures,
+                        onValueChange = { measures = it },
+                        label = "Временные меры",
+                        singleLine = false,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
             confirmButton = {
                 GradientButton(
-                    text = "Создать",
-                    onClick = { viewModel.createNonconformity(category, description) },
+                    text = "Зарегистрировать",
+                    onClick = { viewModel.createNonconformity(category, description, severity, measures) },
                     gradient = Gradients.Aurora,
-                    compact = true
+                    compact = true,
+                    enabled = description.isNotBlank() && !state.isActionRunning
                 )
             },
             dismissButton = {
@@ -161,13 +189,15 @@ private fun OrdersPane(
             )
         }
         Spacer(Modifier.height(10.dp))
-        state.successMessage?.let { message ->
-            SuccessNote(text = message, onDismiss = viewModel::dismissSuccess)
-            Spacer(Modifier.height(8.dp))
-        }
-        state.operationError?.let { error ->
-            ErrorMessageCard(error = error)
-            Spacer(Modifier.height(8.dp))
+        if (state.selectedOrder == null) {
+            state.successMessage?.let { message ->
+                SuccessNote(text = message, onDismiss = viewModel::dismissSuccess)
+                Spacer(Modifier.height(8.dp))
+            }
+            state.operationError?.let { error ->
+                ErrorMessageCard(error = error)
+                Spacer(Modifier.height(8.dp))
+            }
         }
         when {
             state.isOrdersLoading && state.orders.isEmpty() -> Box(
@@ -210,6 +240,16 @@ private fun OrderDetailPane(
         } else {
             OrderHeader(order = order)
             Spacer(Modifier.height(12.dp))
+            state.successMessage?.let { message ->
+                SuccessNote(text = message, onDismiss = viewModel::dismissSuccess)
+                Spacer(Modifier.height(8.dp))
+            }
+            if (state.activeDialog == null) {
+                state.operationError?.let { error ->
+                    ErrorMessageCard(error = error)
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
             Column(
                 modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
             ) {
@@ -237,7 +277,7 @@ private fun OrderDetailPane(
                         modifier = Modifier.fillMaxWidth().height(220.dp)
                     )
                     Spacer(Modifier.height(8.dp))
-                    StageActions(order = order, viewModel = viewModel, canManage = canManage)
+                    StageActions(order = order, viewModel = viewModel, canManage = canManage, state = state)
                 }
                 Spacer(Modifier.height(14.dp))
                 SectionHeader(
@@ -267,22 +307,36 @@ private fun OrderDetailPane(
                     count = state.materials.size,
                     accent = Brand.Blue,
                     subtitle = "План, резерв и факт списания",
-                    action = if (canManage) {
-                        { SoftButton(text = "Из BOM", onClick = viewModel::initMaterialsFromBom) }
+                    action = if (canManage && state.materials.isEmpty()) {
+                        { SoftButton(text = "Сформировать из BOM", onClick = viewModel::initMaterialsFromBom) }
                     } else null
                 )
                 Spacer(Modifier.height(6.dp))
                 if (state.materials.isEmpty()) {
                     Text(
-                        "Материалы не сформированы. Нажмите «Из BOM».",
+                        "Материалы не сформированы. Нажмите «Сформировать из BOM»: норма возьмётся из ревизии заказа.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    state.materials.forEach { m ->
+                    val materialsEditable = viewModel.canMoveStock() && order.status !in setOf(
+                        ProductionOrderStatus.COMPLETED,
+                        ProductionOrderStatus.CLOSED,
+                        ProductionOrderStatus.CANCELLED
+                    )
+                    if (canManage && !viewModel.canMoveStock()) {
                         Text(
-                            text = "${m.nomenclatureCode} ${m.nomenclatureName}: план ${m.plannedQty} / резерв ${m.allocatedQty} / факт ${m.consumedQty} ${m.unit}",
-                            style = MaterialTheme.typography.bodySmall
+                            "Резерв и списание материалов выполняет сотрудник с правом «Склад: проведение».",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    state.materials.forEach { m ->
+                        MaterialRow(
+                            material = m,
+                            editable = materialsEditable,
+                            onAllocate = { viewModel.showDialog(ProductionDialog.AllocateMaterial(m.id)) },
+                            onConsume = { viewModel.showDialog(ProductionDialog.ConsumeMaterial(m.id)) }
                         )
                     }
                 }
@@ -310,23 +364,21 @@ private fun OrderDetailPane(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "${nc.number} [${nc.status.name}] ${nc.description}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (canManage && nc.status != org.example.project.dto.NonconformityStatus.CLOSED) {
-                                val next = when (nc.status) {
-                                    org.example.project.dto.NonconformityStatus.REGISTERED -> org.example.project.dto.NonconformityStatus.EVALUATION
-                                    org.example.project.dto.NonconformityStatus.EVALUATION -> org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION
-                                    org.example.project.dto.NonconformityStatus.ASSIGNED -> org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION
-                                    org.example.project.dto.NonconformityStatus.ROOT_CAUSE_ANALYSIS -> org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION
-                                    org.example.project.dto.NonconformityStatus.CORRECTIVE_ACTION -> org.example.project.dto.NonconformityStatus.EFFECTIVENESS_CHECK
-                                    org.example.project.dto.NonconformityStatus.EFFECTIVENESS_CHECK -> org.example.project.dto.NonconformityStatus.CLOSED
-                                    org.example.project.dto.NonconformityStatus.CLOSED -> org.example.project.dto.NonconformityStatus.CLOSED
-                                }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${nc.number} · ${nc.description}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "${nc.category.nonconformityCategoryLabel()} · ${nc.severity.localizedName()} · ${nc.status.localizedName()}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            val next = nc.status.nextStep()
+                            if (canManage && next != null) {
                                 SoftButton(
-                                    text = "Далее",
+                                    text = if (next == org.example.project.dto.NonconformityStatus.CLOSED) "Закрыть" else "→ ${next.localizedName()}",
                                     onClick = { viewModel.transitionNonconformity(nc, next) }
                                 )
                             }
@@ -343,7 +395,7 @@ private fun OrderDetailPane(
                     )
                     state.engineeringChanges.forEach { ec ->
                         Text(
-                            text = "#${ec.id} [${ec.status.name}] ${ec.impactSummary} (${ec.materialDecision.name})",
+                            text = "${ec.status.localizedName()}: ${ec.impactSummary} (материалы: ${ec.materialDecision.localizedName()})",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -421,13 +473,13 @@ private fun OrderFacts(order: ProductionOrderDto, state: ProductionUiState) {
     val project = state.projects.firstOrNull { it.id == order.projectId }
     val model = state.models.firstOrNull { it.id == order.productModelId }
     val responsible = state.users.firstOrNull { it.id == order.responsibleId }
-    DetailRow("Проект", project?.let { "${it.number} — ${it.name}" } ?: order.projectId.toString())
-    DetailRow("Изделие", model?.let { "${it.code} — ${it.name}" } ?: order.productModelId.toString())
-    DetailRow("Ревизия BOM", order.bomRevisionId.toString())
-    DetailRow("Ответственный", responsible?.fullName ?: order.responsibleId.toString())
-    DetailRow("Приоритет", order.priority)
-    DetailRow("План: начало", order.plannedStartAt.toDisplayDateTime())
-    DetailRow("План: окончание", order.plannedEndAt.toDisplayDateTime())
+    DetailRow("Проект", project?.let { "${it.number} · ${it.name}" } ?: "Проект #${order.projectId}")
+    DetailRow("Изделие", model?.let { "${it.code} · ${it.name}" } ?: "Изделие #${order.productModelId}")
+    DetailRow("Ревизия BOM", state.orderRevisionLabel ?: "загрузка…")
+    DetailRow("Ответственный", responsible?.fullName ?: "Сотрудник #${order.responsibleId}")
+    DetailRow("Приоритет", order.priority.priorityLabel())
+    DetailRow("План: начало", org.example.project.ui.theme.ErpFormat.dateRu(order.plannedStartAt))
+    DetailRow("План: окончание", org.example.project.ui.theme.ErpFormat.dateRu(order.plannedEndAt))
 }
 
 @Composable
@@ -488,7 +540,8 @@ private fun TotalChip(
 private fun StageActions(
     order: ProductionOrderDto,
     viewModel: ProductionViewModel,
-    canManage: Boolean
+    canManage: Boolean,
+    state: ProductionUiState
 ) {
     if (!canManage || !ProductionViewModel.canEditStages(order.status)) {
         Text(
@@ -500,17 +553,27 @@ private fun StageActions(
     }
     val pending = order.stages.filter { it.status == ProductionStageStatus.PENDING }.sortedBy { it.sequence }
     val running = order.stages.filter { it.status == ProductionStageStatus.IN_PROGRESS }.sortedBy { it.sequence }
-    Row(
+    if (pending.isEmpty() && running.isEmpty()) {
+        Text(
+            text = "Все этапы закрыты. Можно завершать выпуск.",
+            style = MaterialTheme.typography.bodySmall,
+            color = org.example.project.ui.theme.readableAccent(Brand.Teal)
+        )
+        return
+    }
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        running.firstOrNull()?.let { stage ->
+        running.forEach { stage ->
             GradientButton(
                 text = "Завершить «${stage.name}»",
                 onClick = { viewModel.completeStage(stage.id) },
                 gradient = Gradients.Emerald,
-                compact = true
+                compact = true,
+                enabled = !state.isActionRunning
             )
         }
         pending.firstOrNull()?.let { stage ->
@@ -518,7 +581,8 @@ private fun StageActions(
                 text = "Запустить «${stage.name}»",
                 onClick = { viewModel.startStage(stage.id) },
                 gradient = Gradients.Ocean,
-                compact = true
+                compact = true,
+                enabled = !state.isActionRunning
             )
             SoftButton(
                 text = "Пропустить",
@@ -530,10 +594,22 @@ private fun StageActions(
 
 @Composable
 private fun OrderActionRow(order: ProductionOrderDto, viewModel: ProductionViewModel) {
-    Row(
+    if (ProductionViewModel.canComplete(order.status) && order.stages.any {
+            it.status == ProductionStageStatus.PENDING || it.status == ProductionStageStatus.IN_PROGRESS
+        }
+    ) {
+        Text(
+            text = "Завершить выпуск можно после закрытия всех этапов.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(6.dp))
+    }
+    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+    androidx.compose.foundation.layout.FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         when {
             ProductionViewModel.canPlan(order.status) -> GradientButton(
@@ -548,20 +624,26 @@ private fun OrderActionRow(order: ProductionOrderDto, viewModel: ProductionViewM
                 gradient = Gradients.Emerald,
                 compact = true
             )
-            ProductionViewModel.canHold(order.status) -> SoftButton(
-                text = "Приостановить",
-                onClick = { viewModel.showDialog(ProductionDialog.HoldOrder) }
-            )
+            ProductionViewModel.canComplete(order.status) -> {
+                val stagesClosed = order.stages.all {
+                    it.status == ProductionStageStatus.COMPLETED || it.status == ProductionStageStatus.SKIPPED
+                }
+                GradientButton(
+                    text = "Завершить выпуск",
+                    onClick = { viewModel.prepareComplete() },
+                    gradient = Gradients.Emerald,
+                    compact = true,
+                    enabled = stagesClosed
+                )
+                SoftButton(
+                    text = "Приостановить",
+                    onClick = { viewModel.showDialog(ProductionDialog.HoldOrder) }
+                )
+            }
             ProductionViewModel.canResume(order.status) -> GradientButton(
                 text = "Возобновить",
                 onClick = viewModel::resumeOrder,
                 gradient = Gradients.Ocean,
-                compact = true
-            )
-            ProductionViewModel.canComplete(order.status) -> GradientButton(
-                text = "Завершить выпуск",
-                onClick = { viewModel.prepareComplete() },
-                gradient = Gradients.Emerald,
                 compact = true
             )
             ProductionViewModel.canClose(order.status) -> GradientButton(
@@ -581,7 +663,142 @@ private fun OrderActionRow(order: ProductionOrderDto, viewModel: ProductionViewM
         val printUriHandler = androidx.compose.ui.platform.LocalUriHandler.current
         SoftButton(
             text = "Печать наряда",
-            onClick = { printUriHandler.openUri("http://localhost:8080/api/analytics/print/production-order/${order.id}") }
+            onClick = { printUriHandler.openUri("${org.example.project.data.ApiServer.baseUrl}/api/analytics/print/production-order/${order.id}") }
         )
+    }
+}
+
+
+/** Строка материала заказа: план, резерв, факт и действия оператора. */
+@Composable
+private fun MaterialRow(
+    material: org.example.project.dto.ProductionOrderMaterialDto,
+    editable: Boolean,
+    onAllocate: () -> Unit,
+    onConsume: () -> Unit
+) {
+    val qty = org.example.project.ui.theme.ErpFormat
+    val planned = material.plannedQty.toDoubleOrNull() ?: 0.0
+    val allocated = material.allocatedQty.toDoubleOrNull() ?: 0.0
+    val consumed = material.consumedQty.toDoubleOrNull() ?: 0.0
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "${material.nomenclatureCode} · ${material.nomenclatureName}",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "план ${qty.qty(material.plannedQty)} · резерв ${qty.qty(material.allocatedQty)} · " +
+                    "списано ${qty.qty(material.consumedQty)} ${material.unit}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (editable && allocated < planned) {
+            SoftButton(text = "Зарезервировать", onClick = onAllocate)
+        }
+        if (editable && consumed < allocated) {
+            SoftButton(text = "Списать", onClick = onConsume)
+        }
+    }
+}
+
+/** «40.0000» → «40»: количество для поля ввода. */
+private fun plainQty(value: Double): String =
+    if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
+
+@Composable
+private fun MaterialDialogs(state: ProductionUiState, viewModel: ProductionViewModel) {
+    when (val dialog = state.activeDialog) {
+        is ProductionDialog.AllocateMaterial -> {
+            val material = state.materials.firstOrNull { it.id == dialog.materialId } ?: return
+            val remaining = (material.plannedQty.toDoubleOrNull() ?: 0.0) - (material.allocatedQty.toDoubleOrNull() ?: 0.0)
+            val wmsRepository: org.example.project.data.WmsRepository = org.koin.compose.koinInject()
+            var warehouses by androidx.compose.runtime.remember {
+                androidx.compose.runtime.mutableStateOf<List<org.example.project.dto.WarehouseDto>>(emptyList())
+            }
+            var warehouseId by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+            var quantity by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(plainQty(remaining.coerceAtLeast(0.0))) }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                val list = (wmsRepository.listWarehouses() as? org.example.project.data.ApiResult.Success)?.data.orEmpty()
+                    .filter { it.active }
+                warehouses = list
+                if (warehouseId == null && list.size == 1) warehouseId = list.first().id
+            }
+            org.example.project.ui.theme.ErpDialog(
+                title = "Резерв материала",
+                subtitle = "${material.nomenclatureCode} · ${material.nomenclatureName}",
+                glyph = ErpIconGlyph.Layers,
+                gradient = Gradients.Ocean,
+                onDismiss = viewModel::dismissDialog,
+                confirmText = "Зарезервировать",
+                onConfirm = { viewModel.allocateMaterial(material.id, warehouseId, quantity) },
+                confirmGradient = Gradients.Ocean,
+                confirmEnabled = !state.isActionRunning && warehouseId != null && quantity.isNotBlank()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    state.operationError?.let { ErrorMessageCard(error = it) }
+                    Text(
+                        text = "Осталось зарезервировать ${plainQty(remaining)} ${material.unit}. " +
+                            "Резерв берётся со свободного остатка выбранного склада.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    org.example.project.ui.components.SearchableDropdown(
+                        items = warehouses,
+                        selected = warehouses.firstOrNull { it.id == warehouseId },
+                        onSelect = { warehouseId = it.id },
+                        label = "Склад *",
+                        itemText = { "${it.code} · ${it.name}" },
+                        emptyText = "Нет доступных складов",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    org.example.project.ui.theme.ErpTextField(
+                        value = quantity,
+                        onValueChange = { quantity = it },
+                        label = "Количество, ${material.unit} *",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        is ProductionDialog.ConsumeMaterial -> {
+            val material = state.materials.firstOrNull { it.id == dialog.materialId } ?: return
+            val available = (material.allocatedQty.toDoubleOrNull() ?: 0.0) - (material.consumedQty.toDoubleOrNull() ?: 0.0)
+            var quantity by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(plainQty(available.coerceAtLeast(0.0))) }
+            org.example.project.ui.theme.ErpDialog(
+                title = "Списание в производство",
+                subtitle = "${material.nomenclatureCode} · ${material.nomenclatureName}",
+                glyph = ErpIconGlyph.Layers,
+                gradient = Gradients.Emerald,
+                onDismiss = viewModel::dismissDialog,
+                confirmText = "Списать",
+                onConfirm = { viewModel.consumeMaterial(material.id, quantity) },
+                confirmGradient = Gradients.Emerald,
+                confirmEnabled = !state.isActionRunning && quantity.isNotBlank()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    state.operationError?.let { ErrorMessageCard(error = it) }
+                    Text(
+                        text = "Списать можно не больше зарезервированного: доступно ${plainQty(available)} ${material.unit}. " +
+                            "Списание уменьшает складской остаток и резерв.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    org.example.project.ui.theme.ErpTextField(
+                        value = quantity,
+                        onValueChange = { quantity = it },
+                        label = "Количество, ${material.unit} *",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        else -> Unit
     }
 }
