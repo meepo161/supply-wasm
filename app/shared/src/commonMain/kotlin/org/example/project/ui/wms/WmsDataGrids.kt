@@ -201,7 +201,6 @@ fun IssuesGrid(
     val data = mapOf(
         "Номер" to issues.map { it.number },
         "Основание" to issues.map { it.reasonType.localizedName() },
-        "Строк" to issues.map { it.lines.size.toString() },
         "Статус" to issues.map { it.status.localizedName() },
         "Выдано" to issues.map { ErpFormat.dateRu(it.issuedAt) }
     )
@@ -226,7 +225,6 @@ fun ReturnsGrid(
 ) {
     val data = mapOf(
         "Номер" to returns.map { it.number },
-        "Строк" to returns.map { it.lines.size.toString() },
         "Причина" to returns.map { it.reason },
         "Статус" to returns.map { it.status.localizedName() },
         "Принято" to returns.map { ErpFormat.dateRu(it.receivedAt) }

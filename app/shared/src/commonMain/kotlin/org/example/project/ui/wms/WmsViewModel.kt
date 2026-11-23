@@ -483,6 +483,11 @@ class WmsViewModel(
         loadReceipts()
     }
 
+    fun updateReceiptFilters(filters: ReceiptFilters) {
+        _uiState.value = _uiState.value.copy(receiptFilters = filters)
+        loadReceipts()
+    }
+
     fun postReceipt() {
         val receipt = _uiState.value.currentReceipt ?: return
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
@@ -987,6 +992,15 @@ class WmsViewModel(
                     is ApiResult.Error -> { }
                 }
             }
+            // Список выдач приходит без строк: карточке нужен полный документ.
+            viewModelScope.launch {
+                when (val result = repository.getIssue(order.id)) {
+                    is ApiResult.Success -> if (_uiState.value.selectedIssue?.id == order.id) {
+                        _uiState.value = _uiState.value.copy(selectedIssue = result.data)
+                    }
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+                }
+            }
         }
     }
 
@@ -1252,6 +1266,15 @@ class WmsViewModel(
                 when (val result = repository.listLocations(ret.warehouseId)) {
                     is ApiResult.Success -> _uiState.value = _uiState.value.copy(returnLocations = result.data)
                     is ApiResult.Error -> { }
+                }
+            }
+            // Список возвратов приходит без строк: карточке нужен полный документ.
+            viewModelScope.launch {
+                when (val result = repository.getReturn(ret.id)) {
+                    is ApiResult.Success -> if (_uiState.value.selectedReturn?.id == ret.id) {
+                        _uiState.value = _uiState.value.copy(selectedReturn = result.data)
+                    }
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
                 }
             }
         }
@@ -1706,7 +1729,7 @@ class WmsViewModel(
         // Строки подсчёта инициализируются значением среза, чтобы комиссии
         // было достаточно поправить расхождения.
         val inputs = inventory?.snapshot?.associate { line ->
-            line.id to (line.countedQuantity ?: line.bookQuantity)
+            line.id to plainQuantity(line.countedQuantity ?: line.bookQuantity)
         }.orEmpty()
         _uiState.value = _uiState.value.copy(
             selectedInventory = inventory,
@@ -1714,6 +1737,23 @@ class WmsViewModel(
             inventoryCancelReason = "",
             operationError = null
         )
+        // Список инвентаризаций приходит без среза и подсчёта: карточке нужен полный документ.
+        inventory?.let { selected ->
+            viewModelScope.launch {
+                when (val result = repository.getInventory(selected.id)) {
+                    is ApiResult.Success -> if (_uiState.value.selectedInventory?.id == selected.id) {
+                        val full = result.data
+                        _uiState.value = _uiState.value.copy(
+                            selectedInventory = full,
+                            inventoryCountInputs = full.snapshot.associate { line ->
+                                line.id to plainQuantity(line.countedQuantity ?: line.bookQuantity)
+                            }
+                        )
+                    }
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+                }
+            }
+        }
     }
 
     fun updateInventoryCountInput(snapshotId: Long, value: String) {
@@ -2375,3 +2415,7 @@ data class CreateInventoryForm(
     val scopeNomenclatureId: Long? = null,
     val note: String = ""
 )
+
+/** «6.0000» → «6»: количество для поля ввода без лишних нулей. */
+private fun plainQuantity(raw: String): String =
+    if (raw.contains('.')) raw.trimEnd('0').trimEnd('.') else raw

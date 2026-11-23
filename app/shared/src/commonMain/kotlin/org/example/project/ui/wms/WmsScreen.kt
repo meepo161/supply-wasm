@@ -60,6 +60,7 @@ import org.example.project.dto.LowStockItemDto
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReceiptStatus
+import org.example.project.dto.ReceiptSourceType
 import org.example.project.dto.StockMovementDto
 import org.example.project.dto.StockMovementType
 import org.example.project.dto.WarehouseDto
@@ -82,192 +83,195 @@ fun WmsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    val names = rememberWmsNames(state.warehouses, state.nomenclature, state.issues)
+    androidx.compose.runtime.CompositionLocalProvider(LocalWmsNames provides names) {
 
-    Column(modifier = modifier.fillMaxSize()) {
-        PageHeader(
-            title = "Склад",
-            glyph = ErpIconGlyph.Warehouse,
-            gradient = Gradients.Emerald,
-            subtitle = "Склады, ячейки, остатки, приёмка, резервы, перемещения, выдача, возвраты, списания и инвентаризация"
-        )
-        Spacer(Modifier.height(10.dp))
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            val isWide = maxWidth >= 780.dp
-            if (isWide) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp)
-                ) {
-                    WmsVerticalNav(
-                        state = state,
-                        onSelectTab = viewModel::selectTab,
+        Column(modifier = modifier.fillMaxSize()) {
+            PageHeader(
+                title = "Склад",
+                glyph = ErpIconGlyph.Warehouse,
+                gradient = Gradients.Emerald,
+                subtitle = "Склады, ячейки, остатки, приёмка, резервы, перемещения, выдача, возвраты, списания и инвентаризация"
+            )
+            Spacer(Modifier.height(10.dp))
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                val isWide = maxWidth >= 780.dp
+                if (isWide) {
+                    Row(
                         modifier = Modifier
-                            .width(256.dp)
-                            .fillMaxHeight()
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
-                        WmsTabContent(state, viewModel)
-                    }
-                }
-            } else {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    ScrollableTabRow(
-                        selectedTabIndex = WmsTab.entries.indexOf(state.selectedTab),
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                        edgePadding = 12.dp
-                    ) {
-                        WmsTab.entries.forEach { tab ->
-                            val count = wmsTabCount(tab, state)
-                            val label = if (count > 0) "${tab.title} ($count)" else tab.title
-                            Tab(
-                                selected = state.selectedTab == tab,
-                                onClick = { viewModel.selectTab(tab) },
-                                text = { Text(label) }
-                            )
+                        WmsVerticalNav(
+                            state = state,
+                            onSelectTab = viewModel::selectTab,
+                            modifier = Modifier
+                                .width(256.dp)
+                                .fillMaxHeight()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                        ) {
+                            WmsTabContent(state, viewModel)
                         }
                     }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        WmsTabContent(state, viewModel)
+                } else {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ScrollableTabRow(
+                            selectedTabIndex = WmsTab.entries.indexOf(state.selectedTab),
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                            edgePadding = 12.dp
+                        ) {
+                            WmsTab.entries.forEach { tab ->
+                                val count = wmsTabCount(tab, state)
+                                val label = if (count > 0) "${tab.title} ($count)" else tab.title
+                                Tab(
+                                    selected = state.selectedTab == tab,
+                                    onClick = { viewModel.selectTab(tab) },
+                                    text = { Text(label) }
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                        ) {
+                            WmsTabContent(state, viewModel)
+                        }
                     }
                 }
             }
         }
-    }
 
-    when (state.activeDialog) {
-        WmsDialog.CreateWarehouse -> CreateWarehouseDialog(
-            form = state.createWarehouseForm,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateWarehouseForm,
-            onCreate = viewModel::createWarehouse,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateLocation -> CreateLocationDialog(
-            form = state.createLocationForm,
-            warehouses = state.warehouses,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateLocationForm,
-            onCreate = viewModel::createLocation,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateNomenclature -> CreateNomenclatureDialog(
-            form = state.createNomenclatureForm,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateNomenclatureForm,
-            onCreate = viewModel::createNomenclature,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateReceipt -> CreateReceiptDialog(
-            form = state.createReceiptForm,
-            warehouses = state.warehouses,
-            locations = state.receiptLocations,
-            nomenclature = state.nomenclature,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateReceiptForm,
-            onWarehouseChange = viewModel::onReceiptWarehouseChanged,
-            onAddLine = viewModel::addReceiptLine,
-            onUpdateLine = viewModel::updateReceiptLine,
-            onRemoveLine = viewModel::removeReceiptLine,
-            onCreate = viewModel::createReceipt,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateReservation -> CreateReservationDialog(
-            form = state.createReservationForm,
-            warehouses = state.warehouses,
-            locations = state.reservationLocations,
-            nomenclature = state.nomenclature,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateReservationForm,
-            onWarehouseChange = viewModel::onReservationWarehouseChanged,
-            onCreate = viewModel::createReservation,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateTransfer -> CreateTransferDialog(
-            form = state.createTransferForm,
-            warehouses = state.warehouses,
-            locationsFrom = state.transferLocationsFrom,
-            locationsTo = state.transferLocationsTo,
-            nomenclature = state.nomenclature,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateTransferForm,
-            onFromWarehouseChange = viewModel::onTransferFromWarehouseChanged,
-            onToWarehouseChange = viewModel::onTransferToWarehouseChanged,
-            onCreate = viewModel::createTransfer,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateIssue -> CreateIssueDialog(
-            form = state.createIssueForm,
-            warehouses = state.warehouses,
-            nomenclature = state.nomenclature,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateIssueForm,
-            onWarehouseChange = viewModel::onIssueWarehouseChanged,
-            onAddLine = viewModel::addIssueLine,
-            onUpdateLine = viewModel::updateIssueLine,
-            onRemoveLine = viewModel::removeIssueLine,
-            onCreate = viewModel::createIssue,
-            onDismiss = viewModel::dismissDialog,
-            reservations = state.reservations
-        )
-        WmsDialog.CreateInventory -> CreateInventoryDialog(
-            form = state.createInventoryForm,
-            warehouses = state.warehouses,
-            locations = state.inventoryLocations,
-            nomenclature = state.nomenclature,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateInventoryForm,
-            onWarehouseChange = viewModel::onInventoryWarehouseChanged,
-            onCreate = viewModel::createInventory,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateWriteOff -> CreateWriteOffDialog(
-            form = state.createWriteOffForm,
-            warehouses = state.warehouses,
-            locations = state.writeOffLocations,
-            nomenclature = state.nomenclature,
-            limit = state.writeOffLimit,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateWriteOffForm,
-            onWarehouseChange = viewModel::onWriteOffWarehouseChanged,
-            onLimitChange = viewModel::updateWriteOffLimit,
-            onSaveLimit = viewModel::saveWriteOffLimit,
-            onAddLine = viewModel::addWriteOffLine,
-            onUpdateLine = viewModel::updateWriteOffLine,
-            onRemoveLine = viewModel::removeWriteOffLine,
-            onCreate = viewModel::createWriteOff,
-            onDismiss = viewModel::dismissDialog
-        )
-        WmsDialog.CreateReturn -> CreateReturnDialog(
-            form = state.createReturnForm,
-            warehouses = state.warehouses,
-            locations = state.returnLocations,
-            error = state.operationError,
-            onFormChange = viewModel::updateCreateReturnForm,
-            onWarehouseChange = viewModel::onReturnWarehouseChanged,
-            onAddLine = viewModel::addReturnLine,
-            onUpdateLine = viewModel::updateReturnLine,
-            onRemoveLine = viewModel::removeReturnLine,
-            onCreate = viewModel::createReturn,
-            onDismiss = viewModel::dismissDialog,
-            issues = state.issues,
-            nomenclature = state.nomenclature
-        )
-        null -> { }
+        when (state.activeDialog) {
+            WmsDialog.CreateWarehouse -> CreateWarehouseDialog(
+                form = state.createWarehouseForm,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateWarehouseForm,
+                onCreate = viewModel::createWarehouse,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateLocation -> CreateLocationDialog(
+                form = state.createLocationForm,
+                warehouses = state.warehouses,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateLocationForm,
+                onCreate = viewModel::createLocation,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateNomenclature -> CreateNomenclatureDialog(
+                form = state.createNomenclatureForm,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateNomenclatureForm,
+                onCreate = viewModel::createNomenclature,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateReceipt -> CreateReceiptDialog(
+                form = state.createReceiptForm,
+                warehouses = state.warehouses,
+                locations = state.receiptLocations,
+                nomenclature = state.nomenclature,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateReceiptForm,
+                onWarehouseChange = viewModel::onReceiptWarehouseChanged,
+                onAddLine = viewModel::addReceiptLine,
+                onUpdateLine = viewModel::updateReceiptLine,
+                onRemoveLine = viewModel::removeReceiptLine,
+                onCreate = viewModel::createReceipt,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateReservation -> CreateReservationDialog(
+                form = state.createReservationForm,
+                warehouses = state.warehouses,
+                locations = state.reservationLocations,
+                nomenclature = state.nomenclature,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateReservationForm,
+                onWarehouseChange = viewModel::onReservationWarehouseChanged,
+                onCreate = viewModel::createReservation,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateTransfer -> CreateTransferDialog(
+                form = state.createTransferForm,
+                warehouses = state.warehouses,
+                locationsFrom = state.transferLocationsFrom,
+                locationsTo = state.transferLocationsTo,
+                nomenclature = state.nomenclature,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateTransferForm,
+                onFromWarehouseChange = viewModel::onTransferFromWarehouseChanged,
+                onToWarehouseChange = viewModel::onTransferToWarehouseChanged,
+                onCreate = viewModel::createTransfer,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateIssue -> CreateIssueDialog(
+                form = state.createIssueForm,
+                warehouses = state.warehouses,
+                nomenclature = state.nomenclature,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateIssueForm,
+                onWarehouseChange = viewModel::onIssueWarehouseChanged,
+                onAddLine = viewModel::addIssueLine,
+                onUpdateLine = viewModel::updateIssueLine,
+                onRemoveLine = viewModel::removeIssueLine,
+                onCreate = viewModel::createIssue,
+                onDismiss = viewModel::dismissDialog,
+                reservations = state.reservations
+            )
+            WmsDialog.CreateInventory -> CreateInventoryDialog(
+                form = state.createInventoryForm,
+                warehouses = state.warehouses,
+                locations = state.inventoryLocations,
+                nomenclature = state.nomenclature,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateInventoryForm,
+                onWarehouseChange = viewModel::onInventoryWarehouseChanged,
+                onCreate = viewModel::createInventory,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateWriteOff -> CreateWriteOffDialog(
+                form = state.createWriteOffForm,
+                warehouses = state.warehouses,
+                locations = state.writeOffLocations,
+                nomenclature = state.nomenclature,
+                limit = state.writeOffLimit,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateWriteOffForm,
+                onWarehouseChange = viewModel::onWriteOffWarehouseChanged,
+                onLimitChange = viewModel::updateWriteOffLimit,
+                onSaveLimit = viewModel::saveWriteOffLimit,
+                onAddLine = viewModel::addWriteOffLine,
+                onUpdateLine = viewModel::updateWriteOffLine,
+                onRemoveLine = viewModel::removeWriteOffLine,
+                onCreate = viewModel::createWriteOff,
+                onDismiss = viewModel::dismissDialog
+            )
+            WmsDialog.CreateReturn -> CreateReturnDialog(
+                form = state.createReturnForm,
+                warehouses = state.warehouses,
+                locations = state.returnLocations,
+                error = state.operationError,
+                onFormChange = viewModel::updateCreateReturnForm,
+                onWarehouseChange = viewModel::onReturnWarehouseChanged,
+                onAddLine = viewModel::addReturnLine,
+                onUpdateLine = viewModel::updateReturnLine,
+                onRemoveLine = viewModel::removeReturnLine,
+                onCreate = viewModel::createReturn,
+                onDismiss = viewModel::dismissDialog,
+                issues = state.issues,
+                nomenclature = state.nomenclature
+            )
+            null -> { }
+        }
     }
 }
 
@@ -325,7 +329,11 @@ private fun WarehousesTab(
         if (state.isLoading && state.warehouses.isEmpty()) {
             LoadingOverlay()
         } else if (state.warehouses.isEmpty()) {
-            EmptyState("Нет складов. Создайте первый склад.")
+            EmptyState(
+                "Складов нет. Без склада нельзя завести ячейки и принять товар.",
+                actionLabel = "Создать склад",
+                onAction = { viewModel.showDialog(WmsDialog.CreateWarehouse) }
+            )
         } else {
             WarehousesGrid(
                 warehouses = state.warehouses,
@@ -369,7 +377,11 @@ private fun LocationsTab(
         if (state.isLoading && state.locations.isEmpty()) {
             LoadingOverlay()
         } else if (state.locations.isEmpty()) {
-            EmptyState("Нет ячеек для выбранного склада.")
+            EmptyState(
+                "У выбранного склада нет ячеек. Ячейка нужна, чтобы разместить принятый товар.",
+                actionLabel = "Создать ячейку",
+                onAction = { viewModel.showDialog(WmsDialog.CreateLocation) }
+            )
         } else {
             LocationsGrid(
                 locations = state.locations,
@@ -411,9 +423,17 @@ private fun NomenclatureTab(
         if (state.isLoading && state.nomenclature.isEmpty()) {
             LoadingOverlay()
         } else if (state.nomenclature.isEmpty()) {
-            EmptyState("Нет номенклатуры. Создайте первую позицию.")
+            EmptyState(
+                "Номенклатуры нет. Позиция нужна для приёмки, резерва и выдачи.",
+                actionLabel = "Создать номенклатуру",
+                onAction = { viewModel.showDialog(WmsDialog.CreateNomenclature) }
+            )
         } else if (visibleItems.isEmpty()) {
-            EmptyState("По запросу ничего не найдено.")
+            EmptyState(
+                "По запросу «${state.nomenclatureSearch.trim()}» ничего не найдено.",
+                actionLabel = "Очистить поиск",
+                onAction = { viewModel.updateNomenclatureSearch("") }
+            )
         } else {
             NomenclatureGrid(
                 items = visibleItems,
@@ -820,13 +840,13 @@ private fun StockTab(
                 }
             }
             Spacer(Modifier.weight(1f))
-            Button(onClick = viewModel::loadStock) { Text("Обновить") }
+            Button(onClick = viewModel::loadStock) { Text("Обновить", softWrap = false) }
             OutlinedButton(onClick = {
                 filterOnlyAvailable = false
                 filterQuarantineOnly = false
                 viewModel.updateStockFilters(StockFilters())
                 viewModel.loadStock()
-            }) { Text("Сбросить") }
+            }) { Text("Сбросить", softWrap = false) }
         }
 
         state.operationError?.let { ErrorMessageCard(error = it) }
@@ -981,10 +1001,19 @@ private fun ReceiptsTab(
             if (state.receipts.isEmpty()) {
                 if (!state.isLoading) {
                     val filtered = state.receiptFilters.warehouseId != null || state.receiptFilters.status != null
-                    EmptyState(
-                        if (filtered) "Приёмки по выбранным фильтрам не найдены."
-                        else "Приёмок ещё не было. Создайте документ с основанием."
-                    )
+                    if (filtered) {
+                        EmptyState(
+                            "Нет приёмок, подходящих под фильтры.",
+                            actionLabel = "Сбросить фильтры",
+                            onAction = { viewModel.updateReceiptFilters(ReceiptFilters()) }
+                        )
+                    } else {
+                        EmptyState(
+                            "Приёмок ещё не было. Приёмка ставит товар на остаток по накладной, счёту или заказу.",
+                            actionLabel = "Новая приёмка",
+                            onAction = { viewModel.showDialog(WmsDialog.CreateReceipt) }
+                        )
+                    }
                 }
             } else {
                 Card(
@@ -1242,7 +1271,15 @@ private fun ReceiptDetailCard(
             // К заказу поставщику привязываются только приёмки по заказу, счёту
             // и накладной/УПД — начальный остаток, возврат и перемещение к нему
             // не относятся (сервер отвечает 400).
-            if (receipt.status == ReceiptStatus.POSTED) {
+            // Сервер пишет связь один раз: заказ — если его ещё нет, номер документа — если
+            // он не был указан. Когда привязывать нечего, блок не показывается.
+            val orderLinkAllowed = receipt.purchaseOrderId == null && receipt.sourceType in setOf(
+                ReceiptSourceType.PURCHASE_ORDER,
+                ReceiptSourceType.INVOICE,
+                ReceiptSourceType.DELIVERY_NOTE
+            )
+            val documentLinkAllowed = receipt.sourceDocumentNo.isNullOrBlank()
+            if (receipt.status == ReceiptStatus.POSTED && (orderLinkAllowed || documentLinkAllowed)) {
                 HorizontalDivider()
                 Text(
                     text = "Связать с документами, появившимися позже (остаток не пересоздаётся)",
@@ -1252,27 +1289,46 @@ private fun ReceiptDetailCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PurchaseOrderPicker(
-                        value = linkOrderId.trim().toLongOrNull(),
-                        onChange = { onLinkOrderIdChange(it?.toString().orEmpty()) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = linkDocumentNo,
-                        onValueChange = onLinkDocumentNoChange,
-                        label = { Text("Номер накладной") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
+                    if (orderLinkAllowed) {
+                        PurchaseOrderPicker(
+                            value = linkOrderId.trim().toLongOrNull(),
+                            onChange = { onLinkOrderIdChange(it?.toString().orEmpty()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (documentLinkAllowed) {
+                        OutlinedTextField(
+                            value = linkDocumentNo,
+                            onValueChange = onLinkDocumentNoChange,
+                            label = { Text("Номер накладной / УПД") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
                 }
                 OutlinedTextField(
                     value = linkReason,
                     onValueChange = onLinkReasonChange,
-                    label = { Text("Обоснование связи") },
+                    label = { Text("Обоснование связи *") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )
-                Button(onClick = onLink) { Text("Связать") }
+                val hasTarget = (orderLinkAllowed && linkOrderId.isNotBlank()) ||
+                    (documentLinkAllowed && linkDocumentNo.isNotBlank())
+                val canLink = hasTarget && linkReason.isNotBlank()
+                if (!canLink) {
+                    Text(
+                        text = when {
+                            orderLinkAllowed && documentLinkAllowed ->
+                                "Укажите заказ поставщику или номер накладной и обоснование связи."
+                            orderLinkAllowed -> "Укажите заказ поставщику и обоснование связи."
+                            else -> "Укажите номер документа и обоснование связи."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Button(onClick = onLink, enabled = canLink) { Text("Связать") }
             }
         }
     }
@@ -1327,7 +1383,19 @@ private fun ReservationsTab(
         if (state.isLoading && state.reservations.isEmpty()) {
             LoadingOverlay()
         } else if (state.reservations.isEmpty()) {
-            EmptyState("Резервы не найдены.")
+            if (state.reservationFilters != ReservationFilters()) {
+                EmptyState(
+                    "Нет резервов, подходящих под фильтры.",
+                    actionLabel = "Сбросить фильтры",
+                    onAction = { viewModel.updateReservationFilters(ReservationFilters()) }
+                )
+            } else {
+                EmptyState(
+                    "Резервов нет. Резерв закрепляет остаток за проектом, заказом или задачей.",
+                    actionLabel = "Создать резерв",
+                    onAction = { viewModel.showDialog(WmsDialog.CreateReservation) }
+                )
+            }
         } else {
             ReservationsGrid(
                 reservations = state.reservations,
@@ -1416,7 +1484,12 @@ private fun ReservationDetailDialog(
 }
 
 @Composable
-internal fun EmptyState(text: String, modifier: Modifier = Modifier) {
+internal fun EmptyState(
+    text: String,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -1435,8 +1508,12 @@ internal fun EmptyState(text: String, modifier: Modifier = Modifier) {
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
+                if (actionLabel != null && onAction != null) {
+                    OutlinedButton(onClick = onAction) { Text(actionLabel) }
+                }
             }
         }
     }

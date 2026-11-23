@@ -328,12 +328,11 @@ fun CreateReceiptDialog(
                     isError = form.sourceDocumentNo.isBlank() && form.sourceType != ReceiptSourceType.INITIAL_STOCK &&
                         form.sourceType != ReceiptSourceType.OTHER
                 )
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.sourceDocumentDate,
                     onValueChange = { onFormChange(form.copy(sourceDocumentDate = it)) },
-                    label = { Text("Дата документа (ГГГГ-ММ-ДД)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    label = "Дата документа",
+                    modifier = Modifier.fillMaxWidth()
                 )
                 if (form.sourceType == ReceiptSourceType.PURCHASE_ORDER ||
                     form.sourceType == ReceiptSourceType.DELIVERY_NOTE ||
@@ -378,13 +377,12 @@ fun CreateReceiptDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.expectedAt,
                     onValueChange = { onFormChange(form.copy(expectedAt = it)) },
-                    label = { Text("Ожидается (ISO-8601)") },
-                    placeholder = { Text("2026-01-01T00:00:00Z") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    label = "Ожидается",
+                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = form.note,
@@ -582,7 +580,7 @@ fun CreateReservationDialog(
                 NomenclatureDropdown(
                     items = nomenclature,
                     selected = nomenclature.find { it.id == form.nomenclatureId },
-                    onSelect = { onFormChange(form.copy(nomenclatureId = it.id)) },
+                    onSelect = { onFormChange(form.copy(nomenclatureId = it.id, lotId = "", serialId = "")) },
                     label = "Номенклатура *",
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -596,19 +594,18 @@ fun CreateReservationDialog(
                     label = "Ячейка *",
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                LotPicker(
                     value = form.lotId,
-                    onValueChange = { onFormChange(form.copy(lotId = it)) },
-                    label = { Text("ID партии") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(lotId = it)) },
+                    nomenclatureId = form.nomenclatureId,
+                    modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                SerialPicker(
                     value = form.serialId,
-                    onValueChange = { onFormChange(form.copy(serialId = it)) },
-                    label = { Text("ID серии") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(serialId = it)) },
+                    nomenclatureId = form.nomenclatureId,
+                    lotId = form.lotId.trim().toLongOrNull(),
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = form.quantity,
@@ -617,13 +614,12 @@ fun CreateReservationDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-                OutlinedTextField(
+                org.example.project.ui.theme.ErpDateField(
                     value = form.expiresAt,
                     onValueChange = { onFormChange(form.copy(expiresAt = it)) },
-                    label = { Text("Истекает (ISO-8601)") },
-                    placeholder = { Text("2026-12-31T00:00:00Z") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    label = "Резерв действует до",
+                    format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         },

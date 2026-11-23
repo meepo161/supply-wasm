@@ -78,7 +78,19 @@ internal fun TransfersTab(
         if (state.transfersLoading && state.transfers.isEmpty()) {
             LoadingOverlay()
         } else if (state.transfers.isEmpty()) {
-            EmptyState("Перемещений нет. Создайте первое перемещение.")
+            if (state.transferStatusFilter != null) {
+                EmptyState(
+                    "Нет перемещений в выбранном статусе.",
+                    actionLabel = "Показать все",
+                    onAction = { viewModel.updateTransferStatusFilter(null) }
+                )
+            } else {
+                EmptyState(
+                    "Перемещений нет. Перемещение переносит остаток между ячейками или складами.",
+                    actionLabel = "Создать перемещение",
+                    onAction = { viewModel.showDialog(WmsDialog.CreateTransfer) }
+                )
+            }
         } else {
             TransfersGrid(
                 transfers = state.transfers,
@@ -139,19 +151,22 @@ private fun TransferDetailDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val names = LocalWmsNames.current
                 Text("Вид: ${transfer.kind.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+                Text("Позиция: ${names.item(transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Из ячейки ${transfer.fromLocationId} (склад ${transfer.fromWarehouseId}) → " +
-                        "в ячейку ${transfer.toLocationId} (склад ${transfer.toWarehouseId})",
+                    "Откуда: ${names.warehouse(transfer.fromWarehouseId)}, ячейка ${names.location(transfer.fromLocationId)}",
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Text("Номенклатура ID: ${transfer.nomenclatureId}", style = MaterialTheme.typography.bodyMedium)
-                Text("Количество: ${transfer.quantity}", style = MaterialTheme.typography.bodyMedium)
-                Text("Принято: ${transfer.receivedQuantity ?: "—"}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Куда: ${names.warehouse(transfer.toWarehouseId)}, ячейка ${names.location(transfer.toLocationId)}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text("Количество: ${names.qty(transfer.quantity, transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
+                Text("Принято: ${names.qty(transfer.receivedQuantity, transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
                 if (transfer.note != null) {
                     Text("Примечание: ${transfer.note}", style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("Версия: ${transfer.version}", style = MaterialTheme.typography.bodySmall)
 
                 if (canReceive) {
                     HorizontalDivider()
@@ -177,7 +192,7 @@ private fun TransferDetailDialog(
                     Text("История", style = MaterialTheme.typography.labelLarge)
                     transfer.events.forEach { event ->
                         Text(
-                            text = "${event.action.name} · ${event.quantity ?: "—"} · ${event.createdAt.toShortDate()}",
+                            text = "${event.action.name} · ${event.quantity ?: "—"} · ${ErpFormat.dateRu(event.createdAt)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -265,7 +280,7 @@ internal fun CreateTransferDialog(
                 NomenclatureDropdown(
                     items = nomenclature,
                     selected = nomenclature.find { it.id == form.nomenclatureId },
-                    onSelect = { onFormChange(form.copy(nomenclatureId = it.id)) },
+                    onSelect = { onFormChange(form.copy(nomenclatureId = it.id, lotId = "")) },
                     label = "Номенклатура *",
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -276,12 +291,12 @@ internal fun CreateTransferDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-                OutlinedTextField(
+                LotPicker(
                     value = form.lotId,
-                    onValueChange = { onFormChange(form.copy(lotId = it)) },
-                    label = { Text("ID партии (если партия учитывается)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    onChange = { onFormChange(form.copy(lotId = it)) },
+                    nomenclatureId = form.nomenclatureId,
+                    label = "Партия (если партия учитывается)",
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = form.note,
@@ -338,7 +353,19 @@ internal fun IssuesTab(
         if (state.issuesLoading && state.issues.isEmpty()) {
             LoadingOverlay()
         } else if (state.issues.isEmpty()) {
-            EmptyState("Заказов на выдачу нет.")
+            if (state.issueStatusFilter != null) {
+                EmptyState(
+                    "Нет выдач в выбранном статусе.",
+                    actionLabel = "Показать все",
+                    onAction = { viewModel.updateIssueStatusFilter(null) }
+                )
+            } else {
+                EmptyState(
+                    "Заказов на выдачу нет. Выдача списывает товар со склада получателю.",
+                    actionLabel = "Создать выдачу",
+                    onAction = { viewModel.showDialog(WmsDialog.CreateIssue) }
+                )
+            }
         } else {
             IssuesGrid(
                 issues = state.issues,
@@ -403,16 +430,16 @@ private fun IssueDetailDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val names = LocalWmsNames.current
                 Text("Основание: ${issue.reasonType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 issue.reasonNote?.let {
                     Text("Пояснение: $it", style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("Склад ID: ${issue.warehouseId}", style = MaterialTheme.typography.bodyMedium)
-                Text("Получатель ID: ${issue.recipientId}", style = MaterialTheme.typography.bodyMedium)
+                Text("Склад: ${names.warehouse(issue.warehouseId)}", style = MaterialTheme.typography.bodyMedium)
+                Text("Получатель: ${names.user(issue.recipientId)}", style = MaterialTheme.typography.bodyMedium)
                 issue.refusalReason?.let {
                     Text("Причина отказа: $it", style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("Версия: ${issue.version}", style = MaterialTheme.typography.bodySmall)
 
                 HorizontalDivider()
                 Text("Строки", style = MaterialTheme.typography.labelLarge)
@@ -431,24 +458,35 @@ private fun IssueDetailDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                "Строка ${line.lineNo} · номенклатура ${line.nomenclatureId}",
+                                "Строка ${line.lineNo} · ${names.item(line.nomenclatureId)}",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(
-                                "Запрошено ${line.requestedQuantity} · выдано ${line.issuedQuantity}",
+                                "Запрошено ${names.qty(line.requestedQuantity, line.nomenclatureId)} · " +
+                                    "выдано ${names.qty(line.issuedQuantity, line.nomenclatureId)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             line.picks.forEach { pick ->
                                 Text(
-                                    "Отбор: ячейка ${pick.locationId}, ${pick.quantity}",
+                                    "Отбор: ячейка ${names.location(pick.locationId)}, ${names.qty(pick.quantity, line.nomenclatureId)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (canPick) {
+                            // Сколько ещё осталось отобрать по строке.
+                            val remaining = (line.requestedQuantity.toDoubleOrNull() ?: 0.0) -
+                                line.picks.sumOf { it.quantity.toDoubleOrNull() ?: 0.0 }
+                            if (canPick && remaining <= 0.0) {
+                                Text(
+                                    "Отобрано полностью",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Brand.Teal
+                                )
+                            }
+                            if (canPick && remaining > 0.0) {
                                 val form = pickForms[line.id] ?: IssuePickForm(
-                                    quantity = line.requestedQuantity
+                                    quantity = if (remaining % 1.0 == 0.0) remaining.toLong().toString() else remaining.toString()
                                 )
                                 LocationDropdown(
                                     locations = locations,
@@ -471,12 +509,11 @@ private fun IssueDetailDialog(
                                     )
                                     Button(onClick = { onPick(line.id) }) { Text("Отобрать") }
                                 }
-                                OutlinedTextField(
+                                LotPicker(
                                     value = form.lotId,
-                                    onValueChange = { onPickFormChange(line.id, form.copy(lotId = it)) },
-                                    label = { Text("ID партии") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true
+                                    onChange = { onPickFormChange(line.id, form.copy(lotId = it)) },
+                                    nomenclatureId = line.nomenclatureId,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
@@ -686,7 +723,19 @@ internal fun ReturnsTab(
         if (state.returnsLoading && state.returns.isEmpty()) {
             LoadingOverlay()
         } else if (state.returns.isEmpty()) {
-            EmptyState("Возвратов нет.")
+            if (state.returnStatusFilter != null) {
+                EmptyState(
+                    "Нет возвратов в выбранном статусе.",
+                    actionLabel = "Показать все",
+                    onAction = { viewModel.updateReturnStatusFilter(null) }
+                )
+            } else {
+                EmptyState(
+                    "Возвратов нет. Возврат оформляется по выдаче с подтверждённым получением.",
+                    actionLabel = "Создать возврат",
+                    onAction = { viewModel.showDialog(WmsDialog.CreateReturn) }
+                )
+            }
         } else {
             ReturnsGrid(
                 returns = state.returns,
@@ -738,12 +787,13 @@ private fun ReturnDetailDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Заказ выдачи ID: ${order.issueOrderId}", style = MaterialTheme.typography.bodyMedium)
-                Text("Склад ID: ${order.warehouseId}", style = MaterialTheme.typography.bodyMedium)
-                Text("Карантинная ячейка ID: ${order.quarantineLocationId}", style = MaterialTheme.typography.bodyMedium)
+                val names = LocalWmsNames.current
+                val issueDetails = rememberIssueDetails(order.issueOrderId)
+                Text("Выдача: ${names.issue(order.issueOrderId)}", style = MaterialTheme.typography.bodyMedium)
+                Text("Склад: ${names.warehouse(order.warehouseId)}", style = MaterialTheme.typography.bodyMedium)
+                Text("Карантинная ячейка: ${names.location(order.quarantineLocationId)}", style = MaterialTheme.typography.bodyMedium)
                 Text("Причина: ${order.reason}", style = MaterialTheme.typography.bodyMedium)
-                Text("Принято: ${order.receivedAt.toShortDate()}", style = MaterialTheme.typography.bodyMedium)
-                Text("Версия: ${order.version}", style = MaterialTheme.typography.bodySmall)
+                Text("Принято: ${ErpFormat.dateRu(order.receivedAt)}", style = MaterialTheme.typography.bodyMedium)
 
                 HorizontalDivider()
                 Text("Строки возврата", style = MaterialTheme.typography.labelLarge)
@@ -764,7 +814,9 @@ private fun ReturnDetailDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "Строка выдачи ${line.issueLineId} · ${line.quantity}",
+                                    issueDetails?.lines?.find { it.id == line.issueLineId }?.nomenclatureId.let { itemId ->
+                                        "${names.item(itemId)} · ${names.qty(line.quantity, itemId)}"
+                                    },
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodyMedium
                                 )
@@ -839,12 +891,14 @@ internal fun CreateReturnDialog(
     issues: List<IssueOrderDto> = emptyList(),
     nomenclature: List<NomenclatureDto> = emptyList()
 ) {
-    // Вернуть можно только то, что фактически выдано с выбранного склада.
+    // Вернуть можно только то, что фактически выдано с выбранного склада: выданное
+    // количество фиксируется при подтверждении получения (статусы «Получено» и «Недостача»).
     val returnableIssues = issues.filter {
         (form.warehouseId == null || it.warehouseId == form.warehouseId) &&
-            it.status in setOf(IssueStatus.ISSUED, IssueStatus.RECEIVED, IssueStatus.SHORTAGE)
+            it.status in setOf(IssueStatus.RECEIVED, IssueStatus.SHORTAGE)
     }
-    val selectedIssue = issues.find { it.id.toString() == form.issueOrderId.trim() }
+    val selectedIssueId = form.issueOrderId.trim().toLongOrNull()
+    val selectedIssue = rememberIssueDetails(selectedIssueId) ?: issues.find { it.id == selectedIssueId }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Новый возврат") },
@@ -882,7 +936,7 @@ internal fun CreateReturnDialog(
                     itemText = { issue ->
                         "${issue.number} · ${issue.reasonType.localizedName()} · ${ErpFormat.dateRu(issue.issuedAt)}"
                     },
-                    emptyText = "Нет выданных заказов по выбранному складу",
+                    emptyText = "Нет выдач с подтверждённым получением по выбранному складу",
                     modifier = Modifier.fillMaxWidth()
                 )
                 LocationDropdown(
@@ -939,12 +993,11 @@ internal fun CreateReturnDialog(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
-                        OutlinedTextField(
+                        LotPicker(
                             value = line.lotId,
-                            onValueChange = { onUpdateLine(index, line.copy(lotId = it)) },
-                            label = { Text("ID партии") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            onChange = { onUpdateLine(index, line.copy(lotId = it)) },
+                            nomenclatureId = selectedIssue?.lines?.find { it.id.toString() == line.issueLineId.trim() }?.nomenclatureId,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -994,7 +1047,19 @@ internal fun WriteOffsTab(
         if (state.writeOffsLoading && state.writeOffs.isEmpty()) {
             LoadingOverlay()
         } else if (state.writeOffs.isEmpty()) {
-            EmptyState("Списаний нет. Создайте первое списание.")
+            if (state.writeOffStatusFilter != null) {
+                EmptyState(
+                    "Нет списаний в выбранном статусе.",
+                    actionLabel = "Показать все",
+                    onAction = { viewModel.updateWriteOffStatusFilter(null) }
+                )
+            } else {
+                EmptyState(
+                    "Списаний нет.",
+                    actionLabel = "Создать списание",
+                    onAction = { viewModel.showDialog(WmsDialog.CreateWriteOff) }
+                )
+            }
         } else {
             WriteOffsGrid(
                 writeOffs = state.writeOffs,
@@ -1057,19 +1122,19 @@ private fun WriteOffDetailDialog(
                     )
                 }
                 writeOff.postedAt?.let {
-                    Text("Проведено: ${it.toShortDate()}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Проведено: ${ErpFormat.dateRu(it)}", style = MaterialTheme.typography.bodyMedium)
                 }
                 writeOff.cancelReason?.let {
                     Text("Причина отмены: $it", style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("Версия: ${writeOff.version}", style = MaterialTheme.typography.bodySmall)
+                val names = LocalWmsNames.current
 
                 HorizontalDivider()
                 Text("Строки", style = MaterialTheme.typography.labelLarge)
                 writeOff.lines.forEach { line ->
                     Text(
-                        "Строка ${line.lineNo}: номенклатура ${line.nomenclatureId}, " +
-                            "ячейка ${line.locationId}, ${line.quantity}",
+                        "Строка ${line.lineNo}: ${names.item(line.nomenclatureId)}, " +
+                            "ячейка ${names.location(line.locationId)}, ${names.qty(line.quantity, line.nomenclatureId)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1210,7 +1275,7 @@ internal fun CreateWriteOffDialog(
                         NomenclatureDropdown(
                             items = nomenclature,
                             selected = nomenclature.find { it.id == line.nomenclatureId },
-                            onSelect = { onUpdateLine(index, line.copy(nomenclatureId = it.id)) },
+                            onSelect = { onUpdateLine(index, line.copy(nomenclatureId = it.id, lotId = "")) },
                             label = "Номенклатура *",
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1228,12 +1293,11 @@ internal fun CreateWriteOffDialog(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
-                        OutlinedTextField(
+                        LotPicker(
                             value = line.lotId,
-                            onValueChange = { onUpdateLine(index, line.copy(lotId = it)) },
-                            label = { Text("ID партии") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            onChange = { onUpdateLine(index, line.copy(lotId = it)) },
+                            nomenclatureId = line.nomenclatureId,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -1283,7 +1347,19 @@ internal fun InventoriesTab(
         if (state.inventoriesLoading && state.inventories.isEmpty()) {
             LoadingOverlay()
         } else if (state.inventories.isEmpty()) {
-            EmptyState("Инвентаризаций нет. Создайте первую.")
+            if (state.inventoryStatusFilter != null) {
+                EmptyState(
+                    "Нет инвентаризаций в выбранном статусе.",
+                    actionLabel = "Показать все",
+                    onAction = { viewModel.updateInventoryStatusFilter(null) }
+                )
+            } else {
+                EmptyState(
+                    "Инвентаризаций нет. Инвентаризация сверяет учётный остаток с фактическим.",
+                    actionLabel = "Создать инвентаризацию",
+                    onAction = { viewModel.showDialog(WmsDialog.CreateInventory) }
+                )
+            }
         } else {
             InventoriesGrid(
                 inventories = state.inventories,
@@ -1356,19 +1432,19 @@ private fun InventoryDetailDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val names = LocalWmsNames.current
                 Text("Область: ${inventory.scopeType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 inventory.scopeLocationId?.let {
-                    Text("Ячейка/зона ID: $it", style = MaterialTheme.typography.bodyMedium)
+                    Text("Ячейка/зона: ${names.location(it)}", style = MaterialTheme.typography.bodyMedium)
                 }
                 inventory.scopeNomenclatureId?.let {
-                    Text("Номенклатура ID: $it", style = MaterialTheme.typography.bodyMedium)
+                    Text("Позиция: ${names.item(it)}", style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("Срез: ${inventory.bookedAt.toShortDate()}", style = MaterialTheme.typography.bodyMedium)
+                Text("Срез: ${ErpFormat.dateRu(inventory.bookedAt)}", style = MaterialTheme.typography.bodyMedium)
                 inventory.note?.let { Text("Примечание: $it", style = MaterialTheme.typography.bodyMedium) }
                 inventory.cancelReason?.let {
                     Text("Причина отмены: $it", style = MaterialTheme.typography.bodyMedium)
                 }
-                Text("Версия: ${inventory.version}", style = MaterialTheme.typography.bodySmall)
 
                 HorizontalDivider()
                 if (inventory.snapshot.isEmpty()) {
@@ -1392,19 +1468,19 @@ private fun InventoryDetailDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "Ячейка ${line.locationId} · номенклатура ${line.nomenclatureId}",
+                                    "Ячейка ${names.location(line.locationId)} · ${names.item(line.nomenclatureId)}",
                                     modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 PillBadge(
-                                    text = "Учёт ${line.bookQuantity}",
+                                    text = "Учёт ${ErpFormat.qty(line.bookQuantity)}",
                                     accent = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             val discrepancyKind = discrepancy?.kind
                             if (discrepancyKind != null) {
                                 PillBadge(
-                                    text = "${discrepancyKind.localizedName()}: ${discrepancy.discrepancy}",
+                                    text = "${discrepancyKind.localizedName()}: ${ErpFormat.qty(discrepancy.discrepancy)}",
                                     accent = if (discrepancyKind ==
                                         org.example.project.dto.InventoryDiscrepancyKind.SURPLUS
                                     ) {
