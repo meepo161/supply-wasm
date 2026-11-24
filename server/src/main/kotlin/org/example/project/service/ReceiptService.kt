@@ -657,7 +657,7 @@ class ReceiptService(
                     quantity = line.receivedQuantity,
                     documentType = "RECEIPT",
                     documentId = receipt.id,
-                    note = "Receipt ${receipt.number}",
+                    note = "Приёмка ${receipt.number}",
                     createdBy = currentUser.userId
                 )
                 wmsRepository.increasePhysical(
@@ -913,7 +913,7 @@ class ReceiptService(
 
     private fun parseQuantity(value: String, field: String, allowZero: Boolean): BigDecimal =
         try {
-            val parsed = BigDecimal(value.trim()).setScale(4, RoundingMode.HALF_UP)
+            val parsed = BigDecimal(value.trim().replace(" ", "").replace(',', '.')).setScale(4, RoundingMode.HALF_UP)
             if (parsed.signum() < 0 || (!allowZero && parsed.signum() == 0)) {
                 throw ValidationException("Quantity is invalid", mapOf(field to "not_positive"))
             }

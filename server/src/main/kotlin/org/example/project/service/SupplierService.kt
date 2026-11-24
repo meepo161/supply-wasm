@@ -1127,7 +1127,7 @@ class SupplierService(
 
     private fun parseQuantity(value: String, field: String): BigDecimal =
         try {
-            BigDecimal(value.trim()).setScale(4, RoundingMode.HALF_UP)
+            BigDecimal(value.trim().replace(" ", "").replace(',', '.')).setScale(4, RoundingMode.HALF_UP)
         } catch (_: NumberFormatException) {
             throw ValidationException("Invalid decimal value", mapOf(field to "format"))
         }

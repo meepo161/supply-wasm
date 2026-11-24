@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "aab42c4a-b82a-4c6a-9669-3814d81fd636",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\workflow-wms-operations-20261123-235300\\candidate.json",
+  "output": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\workflow-wms-operations-20261123-235300\\wms-operations.html",
+  "specification": {
+    "sha256": "494f689e69e5a15a8be0b2d92e9e246ea1963bcf81d57ef14308ac48c1907efb",
+    "bytes": 5367
+  },
+  "artifact": {
+    "sha256": "4b2f9dc3bd25bdfa07c8d8df6f417e3ce564e8715cd06f2c86ad1d12d74ebca8",
+    "bytes": 957258
+  }
+}

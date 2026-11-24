@@ -121,7 +121,7 @@ class WmsRepository(private val dsl: DSLContext) {
 
     fun existsWarehouseByCode(code: String): Boolean {
         return dsl.fetchExists(
-            dsl.selectOne().from(WAREHOUSES).where(WAREHOUSES.CODE.eq(code))
+            dsl.selectOne().from(WAREHOUSES).where(WAREHOUSES.CODE.equalIgnoreCase(code))
         )
     }
 
@@ -153,7 +153,7 @@ class WmsRepository(private val dsl: DSLContext) {
         return dsl.fetchExists(
             dsl.selectOne().from(STORAGE_LOCATIONS)
                 .where(STORAGE_LOCATIONS.WAREHOUSE_ID.eq(warehouseId))
-                .and(STORAGE_LOCATIONS.CODE.eq(code))
+                .and(STORAGE_LOCATIONS.CODE.equalIgnoreCase(code))
         )
     }
 
@@ -197,7 +197,7 @@ class WmsRepository(private val dsl: DSLContext) {
 
     fun existsNomenclatureByCode(code: String): Boolean {
         return dsl.fetchExists(
-            dsl.selectOne().from(NOMENCLATURE).where(NOMENCLATURE.CODE.eq(code))
+            dsl.selectOne().from(NOMENCLATURE).where(NOMENCLATURE.CODE.equalIgnoreCase(code))
         )
     }
 

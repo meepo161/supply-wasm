@@ -196,12 +196,16 @@ class SupplierViewModel(
     }
 
     fun refreshComparison() {
+        loadDemands()
+        loadOffers()
         loadComparison(_uiState.value.comparisonDemandId)
     }
 
     // --- Диалоги ---
 
     fun showDialog(dialog: SupplierDialog) {
+        // Потребности могли согласовать после входа — в форме предложения нужен свежий список.
+        if (dialog == SupplierDialog.CreateOffer) loadDemands()
         val card = _uiState.value.selectedCard
         update {
             when (dialog) {
@@ -358,7 +362,7 @@ class SupplierViewModel(
                         it.copy(
                             isActionRunning = false,
                             activeDialog = null,
-                            successMessage = "Статус проверки: ${result.data.verificationStatus}"
+                            successMessage = "Статус проверки: ${result.data.verificationStatus.localizedName()}"
                         )
                     }
                     selectSupplier(card.supplier.id)
@@ -816,7 +820,7 @@ class SupplierViewModel(
                         it.copy(
                             isActionRunning = false,
                             claims = it.claims.map { c -> if (c.id == result.data.id) result.data else c },
-                            successMessage = "Статус рекламации ${result.data.number}: ${result.data.status.name}"
+                            successMessage = "Статус рекламации ${result.data.number}: ${result.data.status.localizedName()}"
                         )
                     }
                 }

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "9d58b980-5648-4ad0-aea7-b02040e3caff",
+  "status": "current",
+  "command": "deliver",
+  "type": "lifecycle",
+  "input": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\lifecycle-task-mvp02-20261123-235300\\candidate.json",
+  "output": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\lifecycle-task-mvp02-20261123-235300\\task-lifecycle.html",
+  "specification": {
+    "sha256": "1e6bbbb6db914069bcbbff5d799ff30d31959be3fe85e8d1543a09e3483900f3",
+    "bytes": 4478
+  },
+  "artifact": {
+    "sha256": "0f4e0705f143268b5878007f37489a6937d1905e0c841408b07dfc98b49c398e",
+    "bytes": 955097
+  }
+}

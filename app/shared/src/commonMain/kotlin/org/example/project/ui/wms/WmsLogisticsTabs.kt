@@ -577,7 +577,8 @@ internal fun CreateIssueDialog(
                 ReservationReasonTypeDropdown(
                     selected = form.reasonType,
                     onSelect = { onFormChange(form.copy(reasonType = it)) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    label = "Основание выдачи"
                 )
                 ProjectPicker(
                     value = form.projectId,
@@ -908,13 +909,25 @@ internal fun CreateReturnDialog(
                     emptyText = "Нет выдач с подтверждённым получением по выбранному складу",
                     modifier = Modifier.fillMaxWidth()
                 )
+                // Сервер принимает возврат только в активную ячейку с назначением «Карантин».
+                val quarantineLocations = locations.filter {
+                    it.active && it.purpose == org.example.project.dto.StorageLocationPurpose.QUARANTINE
+                }
                 LocationDropdown(
-                    locations = locations,
-                    selected = locations.find { it.id == form.quarantineLocationId },
+                    locations = quarantineLocations,
+                    selected = quarantineLocations.find { it.id == form.quarantineLocationId },
                     onSelect = { onFormChange(form.copy(quarantineLocationId = it.id)) },
                     label = "Карантинная ячейка *",
+                    emptyText = "На складе нет ячейки карантина",
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (form.warehouseId != null && quarantineLocations.isEmpty()) {
+                    Text(
+                        "На этом складе нет ячейки с назначением «Карантин» — создайте её: Склад → Справочники → Ячейки.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 OutlinedTextField(
                     value = form.reason,
                     onValueChange = { onFormChange(form.copy(reason = it)) },

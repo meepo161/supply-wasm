@@ -1,5 +1,6 @@
 package org.example.project.ui.supplier
 
+import org.example.project.ui.demand.localizedName
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -117,7 +118,7 @@ fun DemandFilterDropdown(
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             demands.forEach { demand ->
                 DropdownMenuItem(
-                    text = { Text("${demand.number} · ${demand.status.name}") },
+                    text = { Text("${demand.number} · ${demand.status.localizedName()}") },
                     onClick = { onSelect(demand.id); expanded = false }
                 )
             }

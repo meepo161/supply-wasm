@@ -82,8 +82,12 @@ fun LocationDropdown(
     selected: StorageLocationDto?,
     onSelect: (StorageLocationDto) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Ячейка"
+    label: String = "Ячейка",
+    /** Служебная транзитная ячейка IN-TRANSIT заполняется перемещениями сама — вручную её не выбирают. */
+    includeTransit: Boolean = false,
+    emptyText: String = "На складе нет подходящих ячеек"
 ) {
+    val options = if (includeTransit) locations else locations.filterNot { it.code == TRANSIT_LOCATION_CODE }
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -102,7 +106,10 @@ fun LocationDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            locations.forEach { location ->
+            if (options.isEmpty()) {
+                DropdownMenuItem(text = { Text(emptyText) }, onClick = { expanded = false }, enabled = false)
+            }
+            options.forEach { location ->
                 DropdownMenuItem(
                     text = { Text("${location.code} · ${location.name} (${location.kind.localizedName()})") },
                     onClick = {
@@ -114,6 +121,9 @@ fun LocationDropdown(
         }
     }
 }
+
+/** Код служебной транзитной ячейки, которую сервер создаёт при первой отгрузке перемещения. */
+internal const val TRANSIT_LOCATION_CODE = "IN-TRANSIT"
 
 @Composable
 fun NomenclatureDropdown(
@@ -330,7 +340,8 @@ fun ReceiptSourceTypeDropdown(
 fun ReservationReasonTypeDropdown(
     selected: ReservationReasonType,
     onSelect: (ReservationReasonType) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    label: String = "Основание резерва"
 ) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
@@ -342,7 +353,7 @@ fun ReservationReasonTypeDropdown(
             value = selected.localizedName(),
             onValueChange = {},
             readOnly = true,
-            label = { Text("Основание резерва") },
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth()
         )

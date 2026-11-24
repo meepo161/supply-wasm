@@ -51,28 +51,31 @@ fun ReceiptAcceptance(
     receipt: ReceiptDto,
     nomenclature: List<NomenclatureDto> = emptyList(),
     onSave: (List<AcceptReceiptLineInput>) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** true — в форме есть несохранённые правки: проводить документ нельзя, они потеряются. */
+    onDirtyChange: (Boolean) -> Unit = {}
 ) {
     val wmsRepository: WmsRepository = koinInject()
     val invoiceRepository: SupplierInvoiceRepository = koinInject()
     val scope = rememberCoroutineScope()
     var locations by remember(receipt.warehouseId) { mutableStateOf<List<StorageLocationDto>>(emptyList()) }
     var message by remember(receipt.id) { mutableStateOf<String?>(null) }
-    val rows = remember(receipt.id, receipt.version) {
-        mutableStateListOf<AcceptanceRow>().apply {
-            receipt.lines.forEach {
-                add(
-                    AcceptanceRow(
-                        lineId = it.id,
-                        received = it.receivedQuantity.trimZeros(),
-                        locationId = it.locationId,
-                        lotNumber = "",
-                        reason = it.discrepancyReason.orEmpty()
-                    )
-                )
-            }
+    val savedRows = remember(receipt.id, receipt.version) {
+        receipt.lines.map {
+            AcceptanceRow(
+                lineId = it.id,
+                received = it.receivedQuantity.trimZeros(),
+                locationId = it.locationId,
+                lotNumber = "",
+                reason = it.discrepancyReason.orEmpty()
+            )
         }
     }
+    val rows = remember(receipt.id, receipt.version) {
+        mutableStateListOf<AcceptanceRow>().apply { addAll(savedRows) }
+    }
+    val dirty = rows.toList() != savedRows
+    LaunchedEffect(dirty) { onDirtyChange(dirty) }
     LaunchedEffect(receipt.warehouseId) {
         when (val r = wmsRepository.listLocations(receipt.warehouseId)) {
             is ApiResult.Success -> locations = r.data.filter { it.active }
@@ -169,6 +172,12 @@ fun ReceiptAcceptance(
         ) { Text("Сохранить факт приёмки") }
         if (!ready) {
             Text("Укажите ячейку и количество для каждой строки: без этого документ не проводится", style = MaterialTheme.typography.bodySmall)
+        } else if (dirty) {
+            Text(
+                "Есть несохранённые изменения — нажмите «Сохранить факт приёмки», иначе проводить нельзя",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }

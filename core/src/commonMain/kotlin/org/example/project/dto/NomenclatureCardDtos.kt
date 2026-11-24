@@ -198,7 +198,9 @@ data class NomenclatureCardDto(
     val expectedSupplies: List<NomenclatureExpectedSupplyDto> = emptyList(),
     val demandSuggestion: NomenclatureDemandSuggestionDto? = null,
     val counts: NomenclatureCardCountsDto = NomenclatureCardCountsDto(),
-    val createdByName: String? = null
+    val createdByName: String? = null,
+    /** Открытые потребности по позиции («номер · количество ед.») — и без дефицита по порогам. */
+    val openDemands: List<String> = emptyList()
 )
 
 @Serializable

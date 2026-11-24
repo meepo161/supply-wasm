@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "4005d4a2-210c-4e65-8552-9f377cbb61a7",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-realtime-chat-20261123-235300\\candidate.json",
+  "output": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-realtime-chat-20261123-235300\\realtime-chat.html",
+  "specification": {
+    "sha256": "975eabe708db4e173e62f09b207b74f3586a3589a1d7bfa95d982de903983b80",
+    "bytes": 4342
+  },
+  "artifact": {
+    "sha256": "393d2cde64a4a03cabce2baeaad8ad6ad6b9518f47b905faed33919de14c81fe",
+    "bytes": 946077
+  }
+}

@@ -52,7 +52,18 @@ class UxHelpersTest {
         assertTrue(conflict.userText().contains("Обновите карточку"))
 
         val validation = ApiError("VALIDATION_ERROR", "Discrepancy requires a reason", mapOf("lines[0].discrepancyReason" to "required"))
-        assertTrue(validation.userText().contains("discrepancyReason: обязательно"))
+        assertTrue(validation.userText().contains("Причина расхождения: обязательно"))
+
+        val shortage = ApiError("CONFLICT", "Insufficient available quantity: requested 25, available 19.5000")
+        assertEquals("Недостаточно остатка", shortage.userTitle())
+        assertEquals("Недостаточно доступного остатка: запрошено 25, доступно 19,5.", shortage.userText())
+
+        val duplicate = ApiError("CONFLICT", "Nomenclature code already exists: TACH-NC-01")
+        assertEquals("Уже существует", duplicate.userTitle())
+        assertEquals("Код «TACH-NC-01» уже существует.", duplicate.userText())
+
+        val badNumber = ApiError("VALIDATION_ERROR", "Invalid decimal value", mapOf("unitPrice" to "format"))
+        assertEquals("Исправьте: Цена: неверный формат.", badNumber.userText())
 
         val russian = ApiError("CONFLICT", "Сверка не пройдена: ИНН не совпадает")
         assertEquals("Сверка не пройдена: ИНН не совпадает", russian.userText())

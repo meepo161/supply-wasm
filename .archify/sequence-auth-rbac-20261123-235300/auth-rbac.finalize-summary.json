@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "sequence",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-auth-rbac-20261123-235300\\candidate.json",
+    "sha256": "0173347312e35fa9e6a2f588e29b9d9c336755eff47f0c91417d0dab9da76957",
+    "bytes": 4443
+  },
+  "artifact": {
+    "path": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-auth-rbac-20261123-235300\\auth-rbac.html",
+    "sha256": "be4183775102b64f369e2776f7bc670a56686dde22f2a8c3f6788ab713cd5810",
+    "bytes": 946692
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-auth-rbac-20261123-235300\\auth-rbac.finalize.json",
+    "summaryReceipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-auth-rbac-20261123-235300\\auth-rbac.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-auth-rbac-20261123-235300\\auth-rbac.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.3.0",
+    "availableVersion": "3.3.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-23T22:53:30.456Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2354,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

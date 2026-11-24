@@ -1,0 +1,67 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Обработка WMS-операций и движений склада",
+    "locale": "ru",
+    "output": ".archify/workflow-wms-operations-20261123-235300/wms-operations.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "intake", "label": "Приёмка и ОТК" },
+    { "id": "stock", "label": "Остатки и перемещения" },
+    { "id": "outbound", "label": "Выдача, возврат и списание" },
+    { "id": "control", "label": "Согласование и аудит", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "inbound", "label": "Приход и контроль", "fromCol": 0, "toCol": 1 },
+    { "id": "storage", "label": "Хранение и резерв", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "dispatch", "label": "Отпуск и закрытие", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["receipt", "qc", "stock", "reservation", "issue"],
+  "nodes": [
+    { "id": "receipt", "lane": "intake", "col": 0, "type": "backend", "label": "ReceiptService", "sublabel": "createReceipt() / счёт", "tag": "приёмка" },
+    { "id": "qc", "lane": "intake", "col": 1, "type": "security", "label": "ReceiptQcService", "sublabel": "getOrInit() -> inspect()", "tag": "ОТК" },
+    { "id": "stock", "lane": "stock", "col": 2, "type": "database", "label": "Складские остатки", "sublabel": "партии, серии, ячейки", "tag": "WmsService" },
+    { "id": "reservation", "lane": "stock", "col": 3, "type": "backend", "label": "Резервирование", "sublabel": "create / release", "tag": "резерв" },
+    { "id": "transfer", "lane": "stock", "col": 4, "type": "backend", "label": "WmsTransferService", "sublabel": "ship -> inTransit -> receive", "tag": "перемещение" },
+    { "id": "issue", "lane": "outbound", "col": 4, "type": "backend", "label": "WmsIssueService", "sublabel": "picks -> issue -> confirm", "tag": "выдача" },
+    { "id": "return_order", "lane": "outbound", "col": 3, "type": "backend", "label": "Возврат (Return)", "sublabel": "receive -> inspectLine", "tag": "возврат" },
+    { "id": "writeoff", "lane": "outbound", "col": 5, "type": "backend", "label": "WmsWriteOffService", "sublabel": "create -> post / cancel", "tag": "списание" },
+    { "id": "approval", "lane": "control", "col": 4, "type": "security", "label": "ApprovalService", "sublabel": "лимит -> согласование", "tag": "контроль" },
+    { "id": "audit", "lane": "control", "col": 5, "type": "database", "label": "AuditService", "sublabel": "движения + аудит", "tag": "лог" }
+  ],
+  "edges": [
+    { "id": "receipt-qc", "from": "receipt", "to": "qc", "label": "входной контроль", "variant": "security" },
+    { "id": "qc-stock", "from": "qc", "to": "stock", "label": "приход на склад", "variant": "emphasis" },
+    { "id": "stock-res", "from": "stock", "to": "reservation", "label": "бронь под заказ", "variant": "default" },
+    { "id": "stock-transfer", "from": "stock", "to": "transfer", "label": "межсклад / ячейки", "variant": "default" },
+    { "id": "res-issue", "from": "reservation", "to": "issue", "label": "подбор и отпуск", "variant": "emphasis" },
+    { "id": "issue-return", "from": "issue", "to": "return_order", "label": "отказ / возврат", "variant": "dashed", "role": "branch" },
+    { "id": "return-stock", "from": "return_order", "to": "stock", "label": "возврат на остаток", "variant": "default" },
+    { "id": "transfer-writeoff", "from": "transfer", "to": "writeoff", "label": "брак / недостача", "variant": "dashed" },
+    { "id": "writeoff-approval", "from": "writeoff", "to": "approval", "label": "превышен лимит?", "variant": "security" },
+    { "id": "approval-writeoff", "from": "approval", "to": "writeoff", "label": "applyApproval()", "variant": "emphasis", "role": "return" },
+    { "id": "writeoff-audit", "from": "writeoff", "to": "audit", "label": "запись движения", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Приход и учёт остатков",
+      "items": [
+        "ReceiptService и ReceiptQcService оформляют приёмку и входной контроль ОТК",
+        "WmsService ведёт остатки по складам, ячейкам, партиям (lots) и серийным номерам",
+        "Каждое движение фиксируется в истории движений (listMovements)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Выдача, возврат и согласование списаний",
+      "items": [
+        "WmsIssueService разделяет создание заявки, подбор (addPicks), выдачу и подтверждение",
+        "WmsWriteOffService проверяет лимиты склада и запускает ApprovalService (WriteOffApprovalTarget)",
+        "Все критичные операции защищены проверкой прав wms:* и версионированием"
+      ]
+    }
+  ]
+}

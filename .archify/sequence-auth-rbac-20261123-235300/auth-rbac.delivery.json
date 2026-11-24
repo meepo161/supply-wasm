@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "79e3b23d-0556-4ca5-8518-e20e02682f7d",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-auth-rbac-20261123-235300\\candidate.json",
+  "output": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\sequence-auth-rbac-20261123-235300\\auth-rbac.html",
+  "specification": {
+    "sha256": "0173347312e35fa9e6a2f588e29b9d9c336755eff47f0c91417d0dab9da76957",
+    "bytes": 4443
+  },
+  "artifact": {
+    "sha256": "be4183775102b64f369e2776f7bc670a56686dde22f2a8c3f6788ab713cd5810",
+    "bytes": 946692
+  }
+}

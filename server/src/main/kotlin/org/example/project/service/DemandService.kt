@@ -498,7 +498,7 @@ class DemandService(
     }
 
     private fun parseQuantity(value: String, field: String): BigDecimal {
-        val parsed = value.trim().toBigDecimalOrNull()
+        val parsed = value.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid quantity: $value", mapOf(field to "invalid"))
         if (parsed.signum() <= 0) {
             throw ValidationException("Quantity must be positive", mapOf(field to "not_positive"))

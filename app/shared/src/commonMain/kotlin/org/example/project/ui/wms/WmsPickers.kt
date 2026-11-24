@@ -240,6 +240,24 @@ internal fun rememberPurchaseOrderLines(orderId: Long?): List<org.example.projec
 }
 
 /**
+ * Ещё не принятое складом по позициям заказа: заказано минус проведённые приёмки
+ * (`orderLineId` → количество). Пустая карта — данные не загружены.
+ */
+@Composable
+internal fun rememberOrderLinesNotAccepted(orderId: Long?): Map<Long, String> {
+    val repository: org.example.project.data.WmsRepository = koinInject()
+    var remaining by remember(orderId) { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    LaunchedEffect(orderId) {
+        if (orderId == null) return@LaunchedEffect
+        when (val result = repository.listExpectedReceipts(orderId)) {
+            is ApiResult.Success -> remaining = result.data.associate { it.orderLineId to it.notAcceptedQuantity }
+            is ApiResult.Error -> remaining = emptyMap()
+        }
+    }
+    return remaining
+}
+
+/**
  * Подписи для карточек складских документов: документы хранят внутренние ID склада,
  * ячейки, позиции и сотрудника, а пользователю нужны код и название.
  */

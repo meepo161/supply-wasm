@@ -578,11 +578,8 @@ private fun StockKpiCard(
     }
 }
 
-private fun formatQtyShort(value: Double): String {
-    val rounded = kotlin.math.round(value * 100.0) / 100.0
-    val asLong = rounded.toLong()
-    return if (rounded == asLong.toDouble()) asLong.toString() else rounded.toString()
-}
+/** Тот же формат, что в таблицах (запятая, группы разрядов), — иначе «397.5» рядом с «19,5». */
+private fun formatQtyShort(value: Double): String = ErpFormat.qty(value)
 
 @Composable
 private fun ReceiptsTab(
@@ -665,24 +662,31 @@ private fun ReceiptsTab(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text("Ожидается к приёмке по заказам поставщикам", style = MaterialTheme.typography.titleSmall)
-                    if (state.expectedReceipts.isEmpty()) {
+                    // Ждём только отправленные поставщику заказы и только то, что склад ещё не принял.
+                    val names = LocalWmsNames.current
+                    val pending = state.expectedReceipts.filter {
+                        it.orderStatus in setOf("SENT", "PARTIALLY_DELIVERED", "DELIVERED") &&
+                            (it.notAcceptedQuantity.toDoubleOrNull() ?: 0.0) > 0.0
+                    }
+                    if (pending.isEmpty()) {
                         Text(
                             "Непринятых позиций по заказам нет.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    state.expectedReceipts.take(20).forEach { line ->
+                    pending.take(20).forEach { line ->
                         Text(
-                            text = "${line.orderNumber} · позиция ${line.lineNo}: " +
-                                "заказано ${ErpFormat.qty(line.orderedQuantity)}, поставлено ${ErpFormat.qty(line.deliveredQuantity)}, " +
+                            text = "${line.orderNumber} · ${names.item(line.nomenclatureId)}: " +
+                                "заказано ${names.qty(line.orderedQuantity, line.nomenclatureId)}, " +
+                                "поставлено ${ErpFormat.qty(line.deliveredQuantity)}, " +
                                 "принято ${ErpFormat.qty(line.acceptedQuantity)}, осталось ${ErpFormat.qty(line.notAcceptedQuantity)}",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    if (state.expectedReceipts.size > 20) {
+                    if (pending.size > 20) {
                         Text(
-                            "Показаны первые 20 из ${state.expectedReceipts.size}.",
+                            "Показаны первые 20 из ${pending.size}.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -872,8 +876,14 @@ private fun ReceiptDetailCard(
                     )
                 }
             }
+            var acceptanceDirty by remember(receipt.id, receipt.version) { mutableStateOf(false) }
             if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
-                ReceiptAcceptance(receipt = receipt, nomenclature = nomenclature, onSave = onAccept)
+                ReceiptAcceptance(
+                    receipt = receipt,
+                    nomenclature = nomenclature,
+                    onSave = onAccept,
+                    onDirtyChange = { acceptanceDirty = it }
+                )
             }
             val wmsRepoForQc: org.example.project.data.WmsRepository = koinInject()
             val qcScope = rememberCoroutineScope()
@@ -885,7 +895,8 @@ private fun ReceiptDetailCard(
                 if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
                     Button(
                         onClick = onPost,
-                        enabled = receipt.lines.none { it.locationId == null }
+                        // Несохранённый факт приёмки проводить нельзя: сервер проведёт старые значения.
+                        enabled = receipt.lines.none { it.locationId == null } && !acceptanceDirty
                     ) { Text("Провести") }
                 }
                 if (receipt.status == ReceiptStatus.POSTED) {
@@ -918,6 +929,8 @@ private fun ReceiptDetailCard(
                     gradient = Gradients.Emerald,
                     width = 560.dp,
                     confirmText = "Принять всё (ОТК)",
+                    // Повторный ОТК сервер отклоняет — после проверки кнопка неактивна.
+                    confirmEnabled = qcInfo?.status.let { it == null || it == org.example.project.dto.ReceiptQcStatus.PENDING },
                     onConfirm = {
                         qcScope.launch {
                             val lines = receipt.lines.map { line ->

@@ -186,7 +186,7 @@ class ReceiptQcService(
     }
 
     private fun parseNonNegative(raw: String, field: String): BigDecimal {
-        val value = raw.trim().toBigDecimalOrNull()
+        val value = raw.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid number for $field", mapOf(field to "invalid"))
         if (value < BigDecimal.ZERO) throw ValidationException("$field must be >= 0", mapOf(field to "negative"))
         return value

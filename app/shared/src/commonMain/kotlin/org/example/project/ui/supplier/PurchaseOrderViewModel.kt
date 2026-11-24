@@ -79,11 +79,19 @@ class PurchaseOrderViewModel(
         }
     }
 
-    private fun loadSelectedOffers() {
+    private fun loadSelectedOffers(preselectId: Long? = null, reportErrors: Boolean = false) {
         viewModelScope.launch {
             when (val result = supplierRepository.listOffers(status = SupplierOfferStatus.SELECTED)) {
-                is ApiResult.Success -> update { it.copy(selectedOffers = result.data) }
-                is ApiResult.Error -> { }
+                is ApiResult.Success -> {
+                    update { it.copy(selectedOffers = result.data) }
+                    // Диалог открыт без предложения, а оно появилось после обновления списка.
+                    val state = _uiState.value
+                    if (state.activeDialog == PurchaseOrderDialog.Create && state.createForm.offerId == null && preselectId == null) {
+                        result.data.firstOrNull()?.let { selectOfferForOrder(it.id) }
+                    }
+                }
+                // При входе ошибка не показывается (нет права — нет и кнопки), в диалоге — показывается.
+                is ApiResult.Error -> if (reportErrors) failWith(result.error)
             }
         }
     }
@@ -165,6 +173,9 @@ class PurchaseOrderViewModel(
                 createForm = formFor(offer)
             )
         }
+        offer?.let { loadOfferLines(it.id) }
+        // Список выбранных предложений мог устареть с момента входа.
+        loadSelectedOffers(preselectId = offer?.id, reportErrors = true)
     }
 
     private fun formFor(offer: org.example.project.dto.SupplierOfferDto?): CreatePurchaseOrderForm {
@@ -192,6 +203,19 @@ class PurchaseOrderViewModel(
     fun selectOfferForOrder(offerId: Long) {
         val offer = _uiState.value.selectedOffers.firstOrNull { it.id == offerId } ?: return
         update { it.copy(createForm = formFor(offer)) }
+        loadOfferLines(offerId)
+    }
+
+    /** Список предложений приходит без позиций — берём их из карточки предложения. */
+    private fun loadOfferLines(offerId: Long) {
+        viewModelScope.launch {
+            when (val result = supplierRepository.getOffer(offerId)) {
+                is ApiResult.Success -> update {
+                    if (it.createForm.offerId == offerId) it.copy(createForm = formFor(result.data)) else it
+                }
+                is ApiResult.Error -> failWith(result.error)
+            }
+        }
     }
 
     fun updateCreateForm(form: CreatePurchaseOrderForm) = update { it.copy(createForm = form) }

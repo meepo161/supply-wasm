@@ -387,19 +387,19 @@ class WmsIssueService(
                 issueRepository.insertReservationHistory(
                     reservation.id, "ISSUED", "ACTIVE", updatedReservation.status,
                     reservation.issuedQuantity, updatedReservation.issuedQuantity,
-                    "Issue ${order.number}", currentUser.userId
+                    "Выдача ${order.number}", currentUser.userId
                 )
                 if (updatedReservation.status == "FULFILLED") {
                     issueRepository.insertReservationHistory(
                         reservation.id, "FULFILLED", "ACTIVE", "FULFILLED",
-                        null, null, "Issue ${order.number}", currentUser.userId
+                        null, null, "Выдача ${order.number}", currentUser.userId
                     )
                 }
                 issueRepository.insertMovement(
                     "ISSUE", line.nomenclatureId, reservation.lotId, reservation.serialId,
                     fromLocationId = reservation.locationId, toLocationId = null,
                     quantity = pickedSum, documentType = "ISSUE", documentId = id,
-                    note = "Issue ${order.number}", createdBy = currentUser.userId
+                    note = "Выдача ${order.number}", createdBy = currentUser.userId
                 )
             } else {
                 for (pick in linePicks) {
@@ -421,7 +421,7 @@ class WmsIssueService(
                         "ISSUE", line.nomenclatureId, pick.lotId, pick.serialId,
                         fromLocationId = pick.locationId, toLocationId = null,
                         quantity = pick.quantity, documentType = "ISSUE", documentId = id,
-                        note = "Issue ${order.number}", createdBy = currentUser.userId
+                        note = "Выдача ${order.number}", createdBy = currentUser.userId
                     )
                 }
             }
@@ -566,7 +566,7 @@ class WmsIssueService(
                 "RETURN", issueLine.nomenclatureId, line.lotId, line.serialId,
                 fromLocationId = null, toLocationId = order.quarantineLocationId,
                 quantity = line.quantity, documentType = "RETURN", documentId = id,
-                note = "Return ${order.number}", createdBy = currentUser.userId
+                note = "Возврат ${order.number}", createdBy = currentUser.userId
             )
         }
         val received = issueRepository.markReturnReceived(id, request.version, currentUser.userId)
@@ -747,7 +747,7 @@ class WmsIssueService(
     }
 
     private fun parseQuantity(value: String, field: String, allowZero: Boolean = false): BigDecimal {
-        val parsed = value.trim().toBigDecimalOrNull()
+        val parsed = value.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid quantity: $value", mapOf(field to "invalid"))
         val valid = if (allowZero) parsed.signum() >= 0 else parsed.signum() > 0
         if (!valid) {

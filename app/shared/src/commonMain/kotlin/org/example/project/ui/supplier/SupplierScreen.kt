@@ -204,7 +204,7 @@ private fun SupplierCardPane(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "${supplier.number} · ${supplier.kind.name}",
+                        text = "${supplier.number} · ${supplier.kind.localizedName()}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -361,7 +361,7 @@ private fun SupplierCardPane(
                             )
                         } else {
                             card.addresses.forEach { address ->
-                                DetailRow(address.kind.name, address.address)
+                                DetailRow(address.kind.localizedName(), address.address)
                             }
                         }
                     }
@@ -473,7 +473,7 @@ private fun ComparisonPane(
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "Статус: ${comparison.demandStatus}" +
+                text = "Статус: ${localizedDemandStatus(comparison.demandStatus)}" +
                     (comparison.requiredDate?.let { " · требуется до ${it.asDate()}" } ?: ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -664,7 +664,7 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                                     text = "${claim.number} · ${claim.supplierName.ifBlank { "#${claim.supplierId}" }}",
                                     style = MaterialTheme.typography.titleMedium
                                 )
-                                PillBadge(text = claim.status.name, accent = Brand.Orange)
+                                PillBadge(text = claim.status.localizedName(), accent = Brand.Orange)
                             }
                             Text(
                                 text = "Тип: ${claim.claimType.name} • Сумма: ${claim.claimAmount} ${claim.currency}",

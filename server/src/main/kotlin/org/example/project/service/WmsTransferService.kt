@@ -197,7 +197,7 @@ class WmsTransferService(
                     toLocationId = request.toLocationId,
                     quantity = quantity,
                     documentId = transfer.id,
-                    note = "Internal transfer $number",
+                    note = "Перемещение $number",
                     createdBy = currentUser.userId
                 )
                 transferRepository.insertEvent(transfer.id, "CREATED", null, "CREATED", quantity, null, request.note?.trim(), currentUser.userId)
@@ -284,7 +284,7 @@ class WmsTransferService(
             toLocationId = transit.id,
             quantity = quantity,
             documentId = id,
-            note = "Ship ${transfer.number}",
+            note = "Отгрузка ${transfer.number}",
             createdBy = currentUser.userId
         )
         transferRepository.insertEvent(id, "SHIPPED", "CREATED", "SHIPPED", quantity, null, null, currentUser.userId)
@@ -361,7 +361,7 @@ class WmsTransferService(
                 toLocationId = transfer.toLocationId,
                 quantity = receivedQuantity,
                 documentId = id,
-                note = "Receive ${transfer.number}",
+                note = "Приёмка перемещения ${transfer.number}",
                 createdBy = currentUser.userId
             )
         }
@@ -499,7 +499,7 @@ class WmsTransferService(
     }
 
     private fun parseQuantity(value: String, field: String, allowZero: Boolean = false): BigDecimal {
-        val parsed = value.trim().toBigDecimalOrNull()
+        val parsed = value.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid quantity: $value", mapOf(field to "invalid"))
         val valid = if (allowZero) parsed.signum() >= 0 else parsed.signum() > 0
         if (!valid) {

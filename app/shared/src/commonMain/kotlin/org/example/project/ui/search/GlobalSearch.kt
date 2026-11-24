@@ -1,5 +1,9 @@
 package org.example.project.ui.search
 
+import org.example.project.dto.DocumentType
+import org.example.project.dto.NomenclatureType
+import org.example.project.ui.documents.localizedName as documentTypeName
+import org.example.project.ui.wms.localizedName as nomenclatureTypeName
 import org.example.project.ui.userText
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -488,7 +492,7 @@ private fun SearchResultRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            val secondary = listOfNotNull(item.number, item.subtitle).joinToString(" · ")
+            val secondary = listOfNotNull(item.number, item.subtitle?.let { searchSubtitleLabel(item.type, it) }).joinToString(" · ")
             if (secondary.isNotBlank()) {
                 Text(
                     text = secondary,
@@ -515,4 +519,11 @@ private fun SizedBoxSeparator() {
             .height(1.dp)
             .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
     )
+}
+
+/** Сервер отдаёт тип позиции/документа кодом (FINISHED_PRODUCT) — пользователю нужен русский текст. */
+private fun searchSubtitleLabel(type: SearchResultType, raw: String): String = when (type) {
+    SearchResultType.NOMENCLATURE -> NomenclatureType.entries.firstOrNull { it.name == raw }?.nomenclatureTypeName() ?: raw
+    SearchResultType.DOCUMENT -> DocumentType.entries.firstOrNull { it.name == raw }?.documentTypeName() ?: raw
+    else -> raw
 }

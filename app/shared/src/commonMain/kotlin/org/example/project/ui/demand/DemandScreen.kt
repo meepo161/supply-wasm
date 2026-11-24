@@ -247,6 +247,7 @@ private fun DemandDetailPage(
         } else {
             DemandLinesGrid(
                 lines = demand.lines,
+                nomenclature = state.nomenclature,
                 modifier = Modifier.fillMaxWidth().height(360.dp)
             )
         }
@@ -346,6 +347,7 @@ private fun DemandCoveragePage(
         } else {
             DemandCoverageGrid(
                 coverage = coverage.lines,
+                nomenclature = state.nomenclature,
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Realtime-чат и вложения (Task / Conversation WS)",
+    "locale": "ru",
+    "output": ".archify/sequence-realtime-chat-20261123-235300/realtime-chat.html",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "ui", "type": "frontend", "label": "Compose UI", "sublabel": "Kotlin/Wasm" },
+    { "id": "ws", "type": "backend", "label": "Ktor Routes", "sublabel": "REST + WebSocket" },
+    { "id": "svc", "type": "backend", "label": "Chat / Conv Service", "sublabel": "бизнес-логика" },
+    { "id": "files", "type": "backend", "label": "AttachmentService", "sublabel": "FileStorage" },
+    { "id": "db", "type": "database", "label": "PostgreSQL", "sublabel": "jOOQ + история" },
+    { "id": "bus", "type": "messagebus", "label": "EventBus", "sublabel": "Chat / Conv / Notify" }
+  ],
+  "segments": [
+    { "from": 135, "to": 265, "label": "1. Подключение WS и догон пропущенных событий" },
+    { "from": 280, "to": 465, "label": "2. Отправка сообщения с файлом и рассылка" },
+    { "from": 480, "to": 575, "label": "3. Индикаторы набора и прочтения" }
+  ],
+  "messages": [
+    { "id": "ws-connect", "from": "ui", "to": "ws", "y": 165, "label": "WS /ws?afterEvent=N (Cookie)", "variant": "emphasis" },
+    { "id": "ws-auth", "from": "ws", "to": "db", "y": 190, "label": "validateSession + canRead/canAccess", "variant": "security" },
+    { "id": "ws-replay", "from": "db", "to": "ws", "y": 222, "label": "пропущенные сообщения", "variant": "return" },
+    { "id": "ws-ready", "from": "ws", "to": "ui", "y": 250, "label": "replay frames + live подписка", "variant": "return" },
+
+    { "id": "post-msg", "from": "ui", "to": "ws", "y": 300, "label": "POST .../messages (multipart)", "variant": "emphasis" },
+    { "id": "prep-file", "from": "ws", "to": "files", "y": 332, "label": "prepareMessageFile()", "variant": "default" },
+    { "id": "save-tx", "from": "svc", "to": "db", "y": 365, "label": "TX: insert message + attachPreparedFile", "variant": "emphasis" },
+    { "id": "tx-ok", "from": "db", "to": "svc", "y": 395, "label": "сохранённое сообщение + ID", "variant": "return" },
+    { "id": "pub-bus", "from": "svc", "to": "bus", "y": 425, "label": "publishEvent(MESSAGE) + Notify", "variant": "dashed" },
+    { "id": "ws-push", "from": "bus", "to": "ui", "y": 455, "label": "revalidate -> WS frameFor(message)", "variant": "return" },
+
+    { "id": "typing-in", "from": "ui", "to": "ws", "y": 505, "label": "WS frame: TYPING / READ", "variant": "default" },
+    { "id": "typing-bus", "from": "ws", "to": "bus", "y": 535, "label": "throttle 3s -> broadcast", "variant": "dashed" },
+    { "id": "typing-out", "from": "bus", "to": "ui", "y": 565, "label": "обновление курсора / статуса", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "ws", "from": 150, "to": 255, "type": "backend" },
+    { "participant": "svc", "from": 355, "to": 435, "type": "backend" },
+    { "participant": "files", "from": 325, "to": 355, "type": "backend" },
+    { "participant": "bus", "from": 420, "to": 462, "type": "messagebus" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Единый и задачный чат (D-50)",
+      "items": [
+        "ChatWebSocketRoutes обслуживает /api/tasks/{taskId}/chat/ws",
+        "ConversationWebSocketRoutes обслуживает /api/conversations/{id}/ws (DIRECT, GROUP, PROJECT)",
+        "HandshakeGuard проверяет Origin и сессионную cookie до апгрейда WS"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Надёжная доставка и файлы",
+      "items": [
+        "Буфер pendingEvents исключает потерю событий между replay и подпиской на EventBus",
+        "При ошибке транзакции подготовленные файлы очищаются через discardMessageFiles()",
+        "Каждое доставляемое событие повторно проверяет актуальность сессии и прав доступа"
+      ]
+    }
+  ]
+}

@@ -14,7 +14,12 @@ fun ApiError.userTitle(): String = when (code) {
     "FORBIDDEN" -> "Недостаточно прав"
     "UNAUTHORIZED" -> if (message.startsWith("Invalid login")) "Вход не выполнен" else "Нужно войти в систему"
     "NOT_FOUND" -> "Объект не найден"
-    "CONFLICT" -> if (isVersionConflict()) "Данные изменил другой пользователь" else "Действие сейчас недоступно"
+    "CONFLICT" -> when {
+        isVersionConflict() -> "Данные изменил другой пользователь"
+        message.startsWith("Insufficient available quantity") -> "Недостаточно остатка"
+        message.contains("already exists") -> "Уже существует"
+        else -> "Действие сейчас недоступно"
+    }
     "VALIDATION_ERROR" -> "Проверьте заполнение"
     "TOO_MANY_REQUESTS" -> "Слишком много попыток"
     "NETWORK_ERROR" -> "Нет связи с сервером"
@@ -93,11 +98,33 @@ private val fieldReasons = mapOf(
     "negative" to "не может быть отрицательным", "duplicate_line_no" to "номера строк повторяются",
     "other_warehouse" to "ячейка другого склада", "inactive" to "неактивно", "location_required" to "укажите ячейку",
     "not_found" to "не найдено", "no_file" to "не загружен файл", "not_invoice" to "документ не является счётом",
-    "scale" to "слишком много знаков после запятой", "range" to "вне допустимого диапазона"
+    "scale" to "слишком много знаков после запятой", "range" to "вне допустимого диапазона",
+    "format" to "неверный формат", "not_positive" to "должно быть больше нуля",
+    "not_quarantine" to "выберите ячейку карантина", "duplicate" to "уже существует"
+)
+
+/** Подписи полей вместо технических имён из ответа сервера. */
+private val fieldLabels = mapOf(
+    "quantity" to "Количество", "expectedQuantity" to "Ожидаемое количество", "receivedQuantity" to "Принято",
+    "unitPrice" to "Цена", "vatRate" to "НДС", "deliveryDays" to "Срок поставки", "email" to "Email",
+    "note" to "Примечание", "discrepancyReason" to "Причина расхождения", "capacity" to "Ёмкость",
+    "quarantineLocationId" to "Карантинная ячейка", "locationId" to "Ячейка", "warehouseId" to "Склад",
+    "nomenclatureId" to "Номенклатура", "inn" to "ИНН", "kpp" to "КПП", "ogrn" to "ОГРН", "code" to "Код",
+    "name" to "Наименование", "currency" to "Валюта", "validUntil" to "Действует до", "reason" to "Причина",
+    "requiredDate" to "Требуемая дата", "lotNumber" to "Партия", "parentId" to "Родительская ячейка"
 )
 
 private fun ApiError.fieldHints(): List<String> =
-    details.orEmpty().map { (field, reason) -> "${field.substringAfterLast('.')}: ${fieldReasons[reason] ?: reason}" }
+    details.orEmpty().map { (field, reason) ->
+        val key = field.substringAfterLast('.')
+        "${fieldLabels[key] ?: key}: ${fieldReasons[reason] ?: reason}"
+    }
+
+/** «9.0000» → «9», «19.5000» → «19,5». */
+private fun String.humanQty(): String {
+    val trimmed = if ('.' in this) trimEnd('0').trimEnd('.') else this
+    return trimmed.replace('.', ',')
+}
 
 /** Частые сообщения сервера, у которых есть точный перевод. */
 private fun ApiError.knownMessage(): String? {
@@ -111,6 +138,28 @@ private fun ApiError.knownMessage(): String? {
         m.contains("Bootstrap is only allowed") -> "Первый администратор уже создан. Войдите под своей учётной записью."
         m.startsWith("Invalid credentials") || m.startsWith("Invalid login") -> "Неверный логин или пароль."
         m.startsWith("Receipt by invoice is created by procurement") -> "Приёмку по счёту оформляет снабжение из карточки счёта."
+        m.startsWith("Insufficient available quantity") -> {
+            val nums = Regex("""requested ([\d.]+), available ([\d.]+)""").find(m)?.groupValues
+            if (nums != null) "Недостаточно доступного остатка: запрошено ${nums[1].humanQty()}, доступно ${nums[2].humanQty()}."
+            else "Недостаточно доступного остатка."
+        }
+        m.contains("already exists") -> {
+            val value = m.substringAfter(": ", "").trim()
+            val subject = when {
+                m.contains("barcode", ignoreCase = true) -> "Штрихкод"
+                m.startsWith("Supplier", ignoreCase = true) -> "Поставщик с такими реквизитами"
+                m.contains("code", ignoreCase = true) -> "Код"
+                else -> "Запись"
+            }
+            if (value.isNotEmpty()) "$subject «$value» уже существует." else "$subject уже существует."
+        }
+        m.startsWith("Delivery time is unknown") ->
+            "У предложения не указан срок поставки: без него нельзя проверить требуемую дату. Внесите предложение со сроком."
+        m.startsWith("Nothing picked") -> "Сначала отберите товар по строкам (кнопка «Отобрать»)."
+        m.startsWith("Quantity must be positive") || m.startsWith("Quantity is invalid") -> "Количество должно быть больше нуля."
+        m.startsWith("Invalid quantity") || m.startsWith("Invalid decimal value") ->
+            "Неверное число: используйте цифры, дробную часть — через запятую."
+        m.startsWith("Email format is invalid") -> "Неверный формат email."
         else -> null
     }
 }

@@ -28,10 +28,10 @@
 
 В `.idea/runConfigurations` сохранены постоянные конфигурации:
 
-- `ERP PostgreSQL` — поднимает контейнер через Docker Compose и ждёт готовности PostgreSQL; используется Git Bash `C:/Program Files/Git/bin/bash.exe`;
-- `ERP Backend 8080` — Gradle `:server:run` с `PORT=8080`;
+- `ERP PostgreSQL` — запускает существующий контейнер `erp-postgres` (или создаёт его через Docker Compose) и ждёт готовности PostgreSQL; скрипт выполняется в PowerShell;
+- `ERP Backend 8080` — Gradle `:server:run` с `PORT=8080`; перед запуском автоматически выполняет `ERP PostgreSQL`;
 - `ERP Web Wasm 8081 Continuous` — Gradle `:app:webApp:wasmJsBrowserDevelopmentRun` с `PORT=8081` и `--continuous`;
-- `ERP Start All` — Compound-запуск всех трёх компонентов.
+- `ERP Start All` — Compound-запуск backend и frontend (PostgreSQL поднимается шагом перед запуском backend).
 
 Для ручного пошагового запуска сначала выполни `ERP PostgreSQL`, затем backend и frontend. Не используй старые временные конфигурации без явного `PORT`.
 

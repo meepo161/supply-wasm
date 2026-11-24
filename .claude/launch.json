@@ -1,0 +1,70 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "erp-backend",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set PORT=8080&& set ERP_DB_URL=jdbc:postgresql://localhost:5434/erp&& C:/Users/meepo/IdeaProjects/supply-wasm/gradlew.bat -p C:/Users/meepo/IdeaProjects/supply-wasm --no-daemon -Perp.db.url=jdbc:postgresql://localhost:5434/erp :server:run"
+      ],
+      "port": 8080,
+      "autoPort": false
+    },
+    {
+      "name": "erp-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set PORT=8081&& C:/Users/meepo/IdeaProjects/supply-wasm/gradlew.bat -p C:/Users/meepo/IdeaProjects/supply-wasm --no-daemon :app:webApp:wasmJsBrowserDevelopmentRun"
+      ],
+      "port": 8081,
+      "autoPort": false
+    },
+    {
+      "name": "ux-backend",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set PORT=8090&& set ERP_DB_URL=jdbc:postgresql://localhost:5434/erp_demo&& set ERP_ALLOWED_ORIGINS=http://localhost:8091&& C:/Users/meepo/IdeaProjects/supply-wasm/.claude/worktrees/ui-ux/gradlew.bat -p C:/Users/meepo/IdeaProjects/supply-wasm/.claude/worktrees/ui-ux --no-daemon -Perp.db.url=jdbc:postgresql://localhost:5434/erp_demo :server:run"
+      ],
+      "port": 8090,
+      "autoPort": false
+    },
+    {
+      "name": "ux-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set PORT=8091&& C:/Users/meepo/IdeaProjects/supply-wasm/.claude/worktrees/ui-ux/gradlew.bat -p C:/Users/meepo/IdeaProjects/supply-wasm/.claude/worktrees/ui-ux --no-daemon -Perp.db.url=jdbc:postgresql://localhost:5434/erp_codegen :app:webApp:wasmJsBrowserDevelopmentRun"
+      ],
+      "port": 8091,
+      "autoPort": false
+    },
+    {
+      "name": "demo-api",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set PORT=8090&& set ERP_DB_URL=jdbc:postgresql://localhost:5434/erp_demo&& set ERP_ALLOWED_ORIGINS=http://localhost:8091&& set ERP_STORAGE_PATH=C:/Users/meepo/IdeaProjects/supply-wasm/.claude/worktrees/ui-ux/server/.local/demo-storage&& cd /d C:/Users/meepo/IdeaProjects/supply-wasm/.claude/worktrees/ui-ux/server/build/install/server/lib&& C:/Users/meepo/.gradle/jdks/azul_systems__inc_-21-amd64-windows.2/bin/java.exe -Xmx768m -cp * org.example.project.ApplicationKt"
+      ],
+      "port": 8090,
+      "autoPort": false
+    },
+    {
+      "name": "demo-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8091",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "C:/Users/meepo/IdeaProjects/supply-wasm/.claude/worktrees/ui-ux/app/webApp/build/dist/wasmJs/developmentExecutable"
+      ],
+      "port": 8091,
+      "autoPort": false
+    }
+  ]
+}

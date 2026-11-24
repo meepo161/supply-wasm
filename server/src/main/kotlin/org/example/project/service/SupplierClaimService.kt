@@ -82,7 +82,7 @@ class SupplierClaimService(
         if (request.description.isBlank()) {
             throw ValidationException("Claim description is required", mapOf("description" to "required"))
         }
-        val amount = request.claimAmount.trim().toBigDecimalOrNull()
+        val amount = request.claimAmount.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid claimAmount", mapOf("claimAmount" to "invalid"))
         if (amount < BigDecimal.ZERO) {
             throw ValidationException("claimAmount must be >= 0", mapOf("claimAmount" to "negative"))

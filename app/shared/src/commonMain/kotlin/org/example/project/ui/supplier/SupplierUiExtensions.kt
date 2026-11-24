@@ -5,6 +5,47 @@ import org.example.project.dto.SupplierOfferCompliance
 import org.example.project.dto.SupplierOfferStatus
 import org.example.project.dto.SupplierVerificationStatus
 import org.example.project.ui.theme.Brand
+import org.example.project.dto.DemandStatus
+import org.example.project.dto.SupplierAddressKind
+import org.example.project.dto.SupplierClaimStatus
+import org.example.project.dto.SupplierDocumentKind
+import org.example.project.dto.SupplierKind
+import org.example.project.ui.demand.localizedName
+
+fun SupplierKind.localizedName(): String = when (this) {
+    SupplierKind.SUPPLIER -> "Поставщик"
+    SupplierKind.CONTRACTOR -> "Подрядчик"
+    SupplierKind.MANUFACTURER -> "Производитель"
+}
+
+fun SupplierAddressKind.localizedName(): String = when (this) {
+    SupplierAddressKind.LEGAL -> "Юридический"
+    SupplierAddressKind.ACTUAL -> "Фактический"
+    SupplierAddressKind.POSTAL -> "Почтовый"
+    SupplierAddressKind.WAREHOUSE -> "Склад"
+    SupplierAddressKind.DELIVERY -> "Доставка"
+}
+
+fun SupplierDocumentKind.localizedName(): String = when (this) {
+    SupplierDocumentKind.CONTRACT -> "Договор"
+    SupplierDocumentKind.CERTIFICATE -> "Сертификат"
+    SupplierDocumentKind.LICENSE -> "Лицензия"
+    SupplierDocumentKind.AGREEMENT -> "Соглашение"
+    SupplierDocumentKind.OTHER -> "Прочее"
+}
+
+fun SupplierClaimStatus.localizedName(): String = when (this) {
+    SupplierClaimStatus.OPEN -> "Открыта"
+    SupplierClaimStatus.SENT -> "Отправлена"
+    SupplierClaimStatus.IN_REVIEW -> "На рассмотрении"
+    SupplierClaimStatus.RESOLVED -> "Решена"
+    SupplierClaimStatus.CLOSED -> "Закрыта"
+    SupplierClaimStatus.CANCELLED -> "Отменена"
+}
+
+/** Статус потребности приходит строкой (сравнение предложений) — показываем по-русски. */
+fun localizedDemandStatus(raw: String): String =
+    runCatching { DemandStatus.valueOf(raw) }.getOrNull()?.localizedName() ?: raw
 
 fun SupplierVerificationStatus.localizedName(): String = when (this) {
     SupplierVerificationStatus.NOT_VERIFIED -> "Не проверен"

@@ -321,8 +321,20 @@ class WmsViewModel(
 
     /** Открывает карточку по id (из остатков и других вкладок раздела). */
     fun openNomenclature(id: Long) {
-        val item = _uiState.value.nomenclature.firstOrNull { it.id == id } ?: return
-        selectNomenclature(item)
+        _uiState.value.nomenclature.firstOrNull { it.id == id }?.let {
+            selectNomenclature(it)
+            return
+        }
+        // Позиция создана после загрузки списка (например, найдена глобальным поиском).
+        viewModelScope.launch {
+            when (val result = repository.listNomenclature()) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(nomenclature = result.data)
+                    result.data.firstOrNull { it.id == id }?.let { selectNomenclature(it) }
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
+            }
+        }
     }
 
     fun updateNomenclatureSearch(value: String) {

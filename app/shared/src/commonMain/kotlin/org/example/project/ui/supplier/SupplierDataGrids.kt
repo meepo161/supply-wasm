@@ -64,7 +64,7 @@ fun SupplierDocumentsGrid(
     modifier: Modifier = Modifier
 ) {
     val data = mapOf(
-        "Вид" to documents.map { it.kind.name },
+        "Вид" to documents.map { it.kind.localizedName() },
         "Название" to documents.map { it.title },
         "Номер" to documents.map { it.documentNo ?: "—" },
         "Действует с" to documents.map { ErpFormat.dateRu(it.validFrom) },

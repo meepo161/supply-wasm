@@ -47,11 +47,12 @@ fun DemandsGrid(
 @Composable
 fun DemandLinesGrid(
     lines: List<DemandLineDto>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    nomenclature: List<org.example.project.dto.NomenclatureDto> = emptyList()
 ) {
     val data = mapOf(
         "№" to lines.map { it.lineNo.toString() },
-        "Номенклатура" to lines.map { "Поз. #${it.nomenclatureId}" },
+        "Номенклатура" to lines.map { nomenclatureLabel(nomenclature, it.nomenclatureId) },
         "Кол-во" to lines.map { ErpFormat.qty(it.quantity) },
         "Ед." to lines.map { it.unit },
         "Покрыто" to lines.map { ErpFormat.qty(it.coveredQuantity) },
@@ -70,11 +71,12 @@ fun DemandLinesGrid(
 @Composable
 fun DemandCoverageGrid(
     coverage: List<DemandCoverageLineDto>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    nomenclature: List<org.example.project.dto.NomenclatureDto> = emptyList()
 ) {
     val data = mapOf(
         "№" to coverage.map { it.lineNo.toString() },
-        "Номенклатура" to coverage.map { "Поз. #${it.nomenclatureId}" },
+        "Номенклатура" to coverage.map { nomenclatureLabel(nomenclature, it.nomenclatureId) },
         "Ед." to coverage.map { it.unit },
         "Требуется" to coverage.map { ErpFormat.qty(it.requiredQuantity) },
         "Доступно" to coverage.map { ErpFormat.qty(it.stockAvailable) },
@@ -91,3 +93,7 @@ fun DemandCoverageGrid(
         onClick = { }
     )
 }
+
+/** «Код · Наименование» вместо внутреннего id; id — только если справочник не загружен. */
+private fun nomenclatureLabel(items: List<org.example.project.dto.NomenclatureDto>, id: Long): String =
+    items.firstOrNull { it.id == id }?.let { "${it.code} · ${it.name}" } ?: "Позиция №$id"

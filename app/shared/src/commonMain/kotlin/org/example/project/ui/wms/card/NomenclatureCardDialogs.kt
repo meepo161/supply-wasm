@@ -301,7 +301,7 @@ internal fun DemandDialog(
         } else {
             Text("Дефицита по порогам нет — укажите количество сами.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        val openDemands = suggestion?.openDemands.orEmpty()
+        val openDemands = card.openDemands.ifEmpty { suggestion?.openDemands.orEmpty() }
         if (openDemands.isNotEmpty()) {
             Text(
                 "По позиции уже есть открытые потребности: ${openDemands.joinToString(", ")}. " +

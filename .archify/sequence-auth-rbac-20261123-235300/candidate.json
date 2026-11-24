@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Авторизация, сессии, RBAC и делегирование",
+    "locale": "ru",
+    "output": ".archify/sequence-auth-rbac-20261123-235300/auth-rbac.html",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "user", "type": "external", "label": "Пользователь", "sublabel": "сотрудник / админ" },
+    { "id": "ui", "type": "frontend", "label": "Compose UI", "sublabel": "Wasm клиент" },
+    { "id": "ktor", "type": "backend", "label": "Ktor Plugins", "sublabel": "SessionContext" },
+    { "id": "auth", "type": "backend", "label": "Auth / User Service", "sublabel": "Throttle + Hasher" },
+    { "id": "session", "type": "security", "label": "Session / Approval", "sublabel": "RBAC + Delegations" },
+    { "id": "db", "type": "database", "label": "PostgreSQL", "sublabel": "sessions, roles, audit" }
+  ],
+  "segments": [
+    { "from": 135, "to": 310, "label": "1. Вход в систему и выдача Cookie" },
+    { "from": 325, "to": 480, "label": "2. Проверка прав (RBAC) и делегирований" },
+    { "from": 495, "to": 595, "label": "3. Смена или сброс пароля" }
+  ],
+  "messages": [
+    { "id": "login-req", "from": "user", "to": "ui", "y": 165, "label": "ввод логина и пароля", "variant": "default" },
+    { "id": "post-login", "from": "ui", "to": "auth", "y": 185, "label": "POST /api/auth/login", "variant": "emphasis" },
+    { "id": "throttle", "from": "auth", "to": "db", "y": 215, "label": "LoginThrottle + findByLogin + verify", "variant": "security" },
+    { "id": "create-sess", "from": "auth", "to": "session", "y": 248, "label": "createSession(userId)", "variant": "default" },
+    { "id": "save-sess", "from": "session", "to": "db", "y": 278, "label": "insert session + audit(LOGIN)", "variant": "dashed" },
+    { "id": "set-cookie", "from": "auth", "to": "ui", "y": 305, "label": "200 OK + Set-Cookie (UUID)", "variant": "return" },
+
+    { "id": "api-call", "from": "ui", "to": "ktor", "y": 345, "label": "API-запрос + Cookie", "variant": "emphasis" },
+    { "id": "val-sess", "from": "ktor", "to": "session", "y": 378, "label": "validateSession(token)", "variant": "security" },
+    { "id": "load-perms", "from": "session", "to": "db", "y": 410, "label": "session + user.active + permissions", "variant": "default" },
+    { "id": "check-deleg", "from": "session", "to": "db", "y": 442, "label": "ApprovalService: active DELEGATIONS", "variant": "dashed" },
+    { "id": "api-resp", "from": "ktor", "to": "ui", "y": 472, "label": "CurrentUser -> 200 / 401 / 403", "variant": "return" },
+
+    { "id": "pwd-req", "from": "user", "to": "auth", "y": 515, "label": "changePassword / admin resetPassword", "variant": "security" },
+    { "id": "pwd-db", "from": "auth", "to": "db", "y": 548, "label": "update password_hash + audit", "variant": "default" },
+    { "id": "pwd-ok", "from": "auth", "to": "user", "y": 580, "label": "пароль обновлён", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "auth", "from": 180, "to": 308, "type": "backend" },
+    { "participant": "session", "from": 245, "to": 285, "type": "security" },
+    { "participant": "ktor", "from": 340, "to": 476, "type": "backend" },
+    { "participant": "session", "from": 375, "to": 450, "type": "security" }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Безопасность входа (AuthService)",
+      "items": [
+        "LoginThrottleService блокирует перебор по паре (normalizedLogin, remoteIp)",
+        "bootstrap() защищён pg_advisory_xact_lock, создаёт первого ADMIN с правами *:*",
+        "Неактивный пользователь (active != true) не проходит validateSession()"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "RBAC и делегирования",
+      "items": [
+        "SessionContextPlugin извлекает UUID из cookie и кладёт CurrentUser в атрибуты вызова",
+        "Маршруты проверяют права независимо от UI через requirePermission(resource, action)",
+        "Делегирования (ErpExtrasService) учитываются в ApprovalService для активных замещений"
+      ]
+    }
+  ]
+}

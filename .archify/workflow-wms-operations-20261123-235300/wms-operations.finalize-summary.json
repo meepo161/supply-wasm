@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\workflow-wms-operations-20261123-235300\\candidate.json",
+    "sha256": "494f689e69e5a15a8be0b2d92e9e246ea1963bcf81d57ef14308ac48c1907efb",
+    "bytes": 5367
+  },
+  "artifact": {
+    "path": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\workflow-wms-operations-20261123-235300\\wms-operations.html",
+    "sha256": "4b2f9dc3bd25bdfa07c8d8df6f417e3ce564e8715cd06f2c86ad1d12d74ebca8",
+    "bytes": 957258
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\workflow-wms-operations-20261123-235300\\wms-operations.finalize.json",
+    "summaryReceipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\workflow-wms-operations-20261123-235300\\wms-operations.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\workflow-wms-operations-20261123-235300\\wms-operations.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.3.0",
+    "availableVersion": "3.3.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-23T22:53:30.456Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2889,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

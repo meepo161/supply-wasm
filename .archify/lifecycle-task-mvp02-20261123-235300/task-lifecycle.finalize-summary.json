@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "lifecycle",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\lifecycle-task-mvp02-20261123-235300\\candidate.json",
+    "sha256": "1e6bbbb6db914069bcbbff5d799ff30d31959be3fe85e8d1543a09e3483900f3",
+    "bytes": 4478
+  },
+  "artifact": {
+    "path": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\lifecycle-task-mvp02-20261123-235300\\task-lifecycle.html",
+    "sha256": "0f4e0705f143268b5878007f37489a6937d1905e0c841408b07dfc98b49c398e",
+    "bytes": 955097
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\lifecycle-task-mvp02-20261123-235300\\task-lifecycle.finalize.json",
+    "summaryReceipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\lifecycle-task-mvp02-20261123-235300\\task-lifecycle.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\meepo\\IdeaProjects\\supply-wasm\\.archify\\lifecycle-task-mvp02-20261123-235300\\task-lifecycle.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.3.0",
+    "availableVersion": "3.3.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-23T22:53:30.456Z",
+    "source": "network",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2618,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

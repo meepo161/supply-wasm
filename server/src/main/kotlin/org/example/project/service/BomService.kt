@@ -668,7 +668,7 @@ class BomService(
     }
 
     private fun parseQuantity(value: String, field: String): BigDecimal {
-        val parsed = value.trim().toBigDecimalOrNull()
+        val parsed = value.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid quantity: $value", mapOf(field to "invalid"))
         if (parsed.signum() <= 0) {
             throw ValidationException("Quantity must be positive", mapOf(field to "not_positive"))
@@ -677,7 +677,7 @@ class BomService(
     }
 
     private fun parseLossPct(value: String): BigDecimal {
-        val parsed = value.trim().toBigDecimalOrNull()
+        val parsed = value.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid loss_pct: $value", mapOf("lossPct" to "invalid"))
         if (parsed.signum() < 0 || parsed.compareTo(HUNDRED) > 0) {
             throw ValidationException("loss_pct must be between 0 and 100", mapOf("lossPct" to "out_of_range"))
@@ -686,7 +686,7 @@ class BomService(
     }
 
     private fun parseConsumptionRate(value: String): BigDecimal {
-        val parsed = value.trim().toBigDecimalOrNull()
+        val parsed = value.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid consumption_rate: $value", mapOf("consumptionRate" to "invalid"))
         if (parsed.signum() < 0) {
             throw ValidationException("consumption_rate must be non-negative", mapOf("consumptionRate" to "negative"))

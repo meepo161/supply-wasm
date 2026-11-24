@@ -141,6 +141,7 @@ class NomenclatureCardService(
                 )
             },
             demandSuggestion = suggestDemand(record, summary, demandUsage),
+            openDemands = openDemandLabels(demandUsage),
             counts = NomenclatureCardCountsDto(
                 activeReservations = cardRepository.countActiveReservations(id),
                 movements = cardRepository.countMovements(id),
@@ -533,6 +534,12 @@ class NomenclatureCardService(
         )
     }
 
+    /** Незакрытые потребности — показываются в «Сформировать потребность», чтобы не завести дубль. */
+    internal fun openDemandLabels(demandUsage: List<NomenclatureCardRepository.DemandUsageRow>): List<String> =
+        demandUsage
+            .filter { it.status !in setOf("COVERED", "CANCELLED") }
+            .map { "${it.number} · ${it.quantity.plain()} ${it.unit}" }
+
     internal fun suggestDemand(
         record: NomenclatureRecord,
         summary: NomenclatureStockSummaryDto,
@@ -551,9 +558,7 @@ class NomenclatureCardService(
         // результат кратен заказу, даже если минимальная партия ему не кратна.
         val suggested = deficit.max(minOrder).divide(multiple, 0, RoundingMode.CEILING).multiply(multiple)
         val leadTime = record.leadTimeDays ?: 0
-        val openDemands = demandUsage
-            .filter { it.status !in setOf("COVERED", "CANCELLED") }
-            .map { "${it.number} · ${it.quantity.plain()} ${it.unit}" }
+        val openDemands = openDemandLabels(demandUsage)
         return NomenclatureDemandSuggestionDto(
             targetQty = target.plain(),
             deficitQty = deficit.plain(),

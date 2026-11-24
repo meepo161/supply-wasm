@@ -287,11 +287,14 @@ fun MainScaffold(
         projectViewModel.selectDetailTab(ProjectTab.DISCUSSION)
         selected = NavigationDestination.PROJECTS
     }
-    val onOpenDocument: (Long) -> Unit = { _ ->
+    val onOpenDocument: (Long) -> Unit = { documentId ->
+        documentViewModel.selectDocument(documentId)
         selected = NavigationDestination.DOCUMENTS
     }
-    val onOpenNomenclature: (Long) -> Unit = { _ ->
+    val onOpenNomenclature: (Long) -> Unit = { nomenclatureId ->
         if (NavigationDestination.WMS in destinations) {
+            // Найденная позиция открывается карточкой, а не просто разделом.
+            wmsViewModel?.openNomenclature(nomenclatureId)
             selected = NavigationDestination.WMS
         } else if (NavigationDestination.BOM in destinations) {
             selected = NavigationDestination.BOM

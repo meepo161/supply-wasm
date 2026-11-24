@@ -1,0 +1,66 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Жизненный цикл задачи (MVP-02)",
+    "locale": "ru",
+    "output": ".archify/lifecycle-task-mvp02-20261123-235300/task-lifecycle.html",
+    "quality_profile": "showcase"
+  },
+  "mainPath": ["new", "assigned", "in_progress", "on_review", "closed"],
+  "states": [
+    { "id": "new", "type": "start", "label": "NEW", "sublabel": "без исполнителя", "tag": "создана", "step": "01" },
+    { "id": "assigned", "type": "waiting", "label": "ASSIGNED", "sublabel": "назначен исполнитель", "tag": "ожидает", "step": "02" },
+    { "id": "in_progress", "type": "active", "label": "IN_PROGRESS", "sublabel": "dueDate обязателен", "tag": "в работе", "step": "03" },
+    { "id": "on_review", "type": "decision", "label": "ON_REVIEW", "sublabel": "только тип REVIEWED", "tag": "проверка", "step": "04" },
+    { "id": "closed", "type": "success", "label": "CLOSED", "sublabel": "принята или закрыта", "tag": "завершена", "step": "05" },
+    { "id": "rework", "type": "active", "label": "REWORK", "sublabel": "возврат с причиной", "tag": "доработка" },
+    { "id": "blocked", "type": "waiting", "label": "BLOCKED", "sublabel": "причина + ответственный", "tag": "блок" },
+    { "id": "cancelled", "type": "failure", "label": "CANCELLED", "sublabel": "отменена инициатором", "tag": "отмена" }
+  ],
+  "transitions": [
+    { "id": "new-assigned", "from": "new", "to": "assigned", "label": "assign()" },
+    { "id": "assigned-progress", "from": "assigned", "to": "in_progress", "label": "accept() / start()" },
+    { "id": "progress-review", "from": "in_progress", "to": "on_review", "label": "sendToReview()" },
+    { "id": "review-closed", "from": "on_review", "to": "closed", "label": "review(ACCEPT)" },
+    { "id": "progress-closed", "from": "in_progress", "to": "closed", "label": "closeWithoutReview() [GENERAL]", "variant": "emphasis" },
+    { "id": "review-rework", "from": "on_review", "to": "rework", "label": "review(RETURN)", "variant": "security" },
+    { "id": "rework-progress", "from": "rework", "to": "in_progress", "label": "start() / submitResult()" },
+    { "id": "rework-review", "from": "rework", "to": "on_review", "label": "sendToReview()" },
+    { "id": "progress-blocked", "from": "in_progress", "to": "blocked", "label": "block()", "variant": "dashed" },
+    { "id": "blocked-progress", "from": "blocked", "to": "in_progress", "label": "unblock() [restored]" },
+    { "id": "closed-new", "from": "closed", "to": "new", "label": "reopen()", "variant": "dashed" },
+    { "id": "new-cancelled", "from": "new", "to": "cancelled", "label": "cancel()", "variant": "security" },
+    { "id": "assigned-cancelled", "from": "assigned", "to": "cancelled", "label": "cancel()", "variant": "security" },
+    { "id": "progress-cancelled", "from": "in_progress", "to": "cancelled", "label": "cancel()", "variant": "security" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Основной поток (TaskService)",
+      "items": [
+        "При create() с assigneeId или PERSONAL задача сразу получает ASSIGNED",
+        "start() требует заполненный dueDate и переводит в IN_PROGRESS",
+        "Для типа GENERAL доступно закрытие без проверки (closeWithoutReview)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Проверка, доработка и блокировка",
+      "items": [
+        "sendToReview() требует тип REVIEWED, result, reviewerId и acceptanceCriteria",
+        "review(RETURN) требует причину и переводит в REWORK",
+        "block() фиксирует причину и unblockResponsibleId; unblock() восстанавливает прошлый статус"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Права и защита от гонок",
+      "items": [
+        "Все переходы проверяют version (optimistic locking) и права роли/участника",
+        "Каждое изменение пишется в task_status_history и audit_log",
+        "cancel() и reopen() требуют обязательную текстовую причину"
+      ]
+    }
+  ]
+}

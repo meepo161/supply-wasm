@@ -126,7 +126,7 @@ class ProductionExtrasService(
             .and(PRODUCTION_ORDER_MATERIALS.PRODUCTION_ORDER_ID.eq(orderId))
             .fetchOne() ?: throw NotFoundException("production_order_material", materialId)
         if ((mat.version ?: 0L) != request.version) throw ConflictException("Material version conflict")
-        val qty = request.quantity.trim().toBigDecimalOrNull()
+        val qty = request.quantity.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid quantity")
         if (qty <= BigDecimal.ZERO) throw ValidationException("Quantity must be > 0")
 
@@ -212,7 +212,7 @@ class ProductionExtrasService(
             .and(PRODUCTION_ORDER_MATERIALS.PRODUCTION_ORDER_ID.eq(orderId))
             .fetchOne() ?: throw NotFoundException("production_order_material", materialId)
         if ((mat.version ?: 0L) != request.version) throw ConflictException("Material version conflict")
-        val qty = request.quantity.trim().toBigDecimalOrNull()
+        val qty = request.quantity.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid quantity")
         if (qty <= BigDecimal.ZERO) throw ValidationException("Quantity must be > 0")
         if (mat.consumedQty + qty > mat.allocatedQty) {

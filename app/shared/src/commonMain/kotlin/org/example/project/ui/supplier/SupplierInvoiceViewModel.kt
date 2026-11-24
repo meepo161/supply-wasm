@@ -190,7 +190,9 @@ class SupplierInvoiceViewModel(
                     nomenclatureId = line.nomenclatureId,
                     purchaseOrderLineId = line.id,
                     nomenclatureLabel = listOfNotNull(line.nomenclatureCode, line.nomenclatureName).joinToString(" · "),
-                    quantity = line.remainingQuantity.trimQty().ifEmpty { line.quantity.trimQty() },
+                    // Остаток к поставке «0» у полностью поставленного заказа — тогда счёт на заказанное.
+                    quantity = line.remainingQuantity.takeIf { (it.toDoubleOrNull() ?: 0.0) > 0.0 }?.trimQty()
+                        ?: line.quantity.trimQty(),
                     unit = line.unit,
                     unitPrice = line.unitPrice.trimMoney(),
                     vatRate = line.vatRate.trimQty()

@@ -467,6 +467,8 @@ fun CreateReceiptDialog(
         )
 
         val orderLines = rememberPurchaseOrderLines(form.purchaseOrderId)
+        val notAccepted = rememberOrderLinesNotAccepted(form.purchaseOrderId)
+        var fillHint by remember(form.purchaseOrderId) { mutableStateOf<String?>(null) }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -480,17 +482,26 @@ fun CreateReceiptDialog(
                             val defaultLocationId = locations.firstOrNull()?.id
                             val existingOrderLineIds = form.lines.mapNotNull { it.purchaseOrderLineId }.toSet()
                             val startNo = (form.lines.maxOfOrNull { it.lineNo } ?: 0) + 1
+                            // Подставляем то, что склад ещё не принял по заказу;
+                            // полностью принятые позиции пропускаем.
                             val appended = orderLines
                                 .filter { it.id !in existingOrderLineIds }
-                                .mapIndexed { idx, orderLine ->
+                                .map { it to (notAccepted[it.id] ?: it.quantity) }
+                                .filter { (_, qty) -> (qty.toDoubleOrNull() ?: 0.0) > 0.0 }
+                                .mapIndexed { idx, (orderLine, qty) ->
                                     CreateReceiptLineForm(
                                         lineNo = startNo + idx,
                                         nomenclatureId = orderLine.nomenclatureId,
-                                        expectedQuantity = org.example.project.ui.theme.ErpFormat.qty(orderLine.quantity),
+                                        expectedQuantity = org.example.project.ui.theme.ErpFormat.qty(qty),
                                         locationId = defaultLocationId,
                                         purchaseOrderLineId = orderLine.id
                                     )
                                 }
+                            fillHint = if (appended.isEmpty() && existingOrderLineIds.isEmpty()) {
+                                "Все позиции заказа уже приняты складом"
+                            } else {
+                                null
+                            }
                             if (appended.isNotEmpty()) {
                                 onFormChange(form.copy(lines = form.lines + appended))
                             }
@@ -504,8 +515,11 @@ fun CreateReceiptDialog(
                 }
             }
         }
+        fillHint?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (form.lines.isEmpty()) {
-            Text("Строки не добавлены.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Строки не добавлены.",style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         form.lines.forEachIndexed { index, line ->
             ReceiptLineRow(

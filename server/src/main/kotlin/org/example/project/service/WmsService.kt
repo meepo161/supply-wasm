@@ -424,7 +424,7 @@ class WmsService(
     }
 
     private fun parseNonNegative(raw: String, field: String): BigDecimal {
-        val value = raw.trim().toBigDecimalOrNull()
+        val value = raw.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid number for $field", mapOf(field to "invalid"))
         if (value < BigDecimal.ZERO) throw ValidationException("$field must be >= 0", mapOf(field to "negative"))
         return value
@@ -790,7 +790,7 @@ class WmsService(
     }
 
     private fun parseQuantity(value: String, field: String, allowZero: Boolean = false): BigDecimal {
-        val parsed = value.trim().toBigDecimalOrNull()
+        val parsed = value.trim().replace(" ", "").replace(',', '.').toBigDecimalOrNull()
             ?: throw ValidationException("Invalid quantity: $value", mapOf(field to "invalid"))
         val valid = if (allowZero) parsed.signum() >= 0 else parsed.signum() > 0
         if (!valid) {
