@@ -183,7 +183,20 @@ data class NomenclatureDto(
     val createdAt: String? = null,
     val createdBy: Long,
     val version: Long = 0,
-    val barcodes: List<NomenclatureBarcodeDto> = emptyList()
+    val barcodes: List<NomenclatureBarcodeDto> = emptyList(),
+    // Атрибуты карточки (§8.2, D-63). Масса — кг, габариты — мм.
+    val categoryId: Long? = null,
+    val article: String? = null,
+    val manufacturer: String? = null,
+    val manufacturerModel: String? = null,
+    val weightKg: String? = null,
+    val lengthMm: String? = null,
+    val widthMm: String? = null,
+    val heightMm: String? = null,
+    val storageConditions: String? = null,
+    val productModelId: Long? = null,
+    val minOrderQty: String = "1",
+    val orderMultiple: String = "1"
 )
 
 @Serializable
@@ -295,7 +308,8 @@ data class NomenclatureAnalogDto(
     val conversionFactor: String = "1",
     val applicabilityCondition: String? = null,
     val priority: Int = 1,
-    val active: Boolean = true
+    val active: Boolean = true,
+    val requiresApproval: Boolean = false
 )
 
 @Serializable
@@ -303,7 +317,8 @@ data class CreateNomenclatureAnalogRequest(
     val analogNomenclatureId: Long,
     val conversionFactor: String = "1",
     val applicabilityCondition: String? = null,
-    val priority: Int = 1
+    val priority: Int = 1,
+    val requiresApproval: Boolean = false
 )
 
 @Serializable

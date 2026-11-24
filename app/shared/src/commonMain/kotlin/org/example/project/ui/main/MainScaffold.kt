@@ -1107,7 +1107,7 @@ private fun MainContent(
         NavigationDestination.ANALYTICS -> org.example.project.ui.analytics.AnalyticsScreen()
 
         NavigationDestination.WMS -> wmsViewModel?.let {
-            WmsScreen(viewModel = it)
+            WmsScreen(viewModel = it, currentUser = user)
         }
 
         NavigationDestination.BOM -> bomViewModel?.let {

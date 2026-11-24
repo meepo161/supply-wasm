@@ -58,4 +58,5 @@ fun DocumentLinkType.localizedName(): String = when (this) {
     DocumentLinkType.PRODUCT_MODEL -> "Модель изделия"
     DocumentLinkType.BOM_REVISION -> "Ревизия BOM"
     DocumentLinkType.DEMAND -> "Потребность"
+    DocumentLinkType.NOMENCLATURE -> "Номенклатура"
 }

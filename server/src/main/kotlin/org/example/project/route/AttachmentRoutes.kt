@@ -50,6 +50,25 @@ fun Route.attachmentRoutes(attachmentService: AttachmentService) {
             }
         }
 
+        // Изображения и файлы карточки номенклатуры (D-63).
+        route("/wms/nomenclature/{nomenclatureId}/attachments") {
+            install(RequireAuthPlugin) {}
+
+            get {
+                val nomenclatureId = call.parameters["nomenclatureId"]?.toLongOrNull()
+                    ?: throw ValidationException("Invalid nomenclature id", mapOf("nomenclatureId" to "invalid"))
+                val attachments = attachmentService.list(AttachmentEntityType.NOMENCLATURE, nomenclatureId, call.currentUser())
+                call.respond(HttpStatusCode.OK, ApiResponse.success(attachments))
+            }
+
+            post {
+                val nomenclatureId = call.parameters["nomenclatureId"]?.toLongOrNull()
+                    ?: throw ValidationException("Invalid nomenclature id", mapOf("nomenclatureId" to "invalid"))
+                val attachment = uploadFromMultipart(attachmentService, AttachmentEntityType.NOMENCLATURE, nomenclatureId)
+                call.respond(HttpStatusCode.Created, ApiResponse.success(attachment))
+            }
+        }
+
         route("/attachments") {
             install(RequireAuthPlugin) {}
 

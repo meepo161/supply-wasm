@@ -231,9 +231,11 @@ class WmsService(
         if (wmsRepository.findNomenclatureById(id) == null) {
             throw NotFoundException("nomenclature", id)
         }
-        val activeRef = wmsRepository.findActiveNomenclatureReference(id)
-        if (activeRef != null) {
-            throw ConflictException("Cannot archive nomenclature with active references ($activeRef)")
+        val activeRefs = wmsRepository.findActiveNomenclatureReferences(id)
+        if (activeRefs.isNotEmpty()) {
+            throw ConflictException(
+                "Нельзя архивировать: " + activeRefs.joinToString("; ") { nomenclatureReferenceLabel(it) }
+            )
         }
         return dsl.transactionResult(TransactionalCallable {
             val archived = wmsRepository.archiveNomenclature(id)
@@ -323,8 +325,23 @@ class WmsService(
         if (request.fromUnit.isBlank() || request.toUnit.isBlank()) {
             throw ValidationException("Units are required")
         }
+        val fromUnit = request.fromUnit.trim()
+        val toUnit = request.toUnit.trim()
+        if (fromUnit == toUnit) {
+            throw ValidationException("Единицы пересчёта должны различаться", mapOf("toUnit" to "same_as_from"))
+        }
         val factor = parseQuantity(request.factor, "factor")
-        val rec = wmsRepository.createUnitConversion(id, request.fromUnit.trim(), request.toUnit.trim(), factor, currentUser.userId)
+        if (wmsRepository.unitConversionExists(id, fromUnit, toUnit)) {
+            throw ConflictException("Пересчёт $fromUnit → $toUnit уже задан")
+        }
+        val rec = dsl.transactionResult(TransactionalCallable {
+            val created = wmsRepository.createUnitConversion(id, fromUnit, toUnit, factor, currentUser.userId)
+            auditService.log(
+                currentUser.userId, "ADD_UNIT_CONVERSION", "NOMENCLATURE", id,
+                mapOf("fromUnit" to fromUnit, "toUnit" to toUnit, "factor" to factor.stripTrailingZeros().toPlainString())
+            )
+            created
+        })
         return NomenclatureUnitConversionDto(
             id = rec.id,
             nomenclatureId = rec.nomenclatureId,
@@ -347,9 +364,33 @@ class WmsService(
                 conversionFactor = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.CONVERSION_FACTOR)!!.stripTrailingZeros().toPlainString(),
                 applicabilityCondition = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.APPLICABILITY_CONDITION),
                 priority = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.PRIORITY)!!,
-                active = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.ACTIVE)!!
+                active = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.ACTIVE)!!,
+                requiresApproval = row.get(org.example.project.generated.jooq.tables.NomenclatureAnalogs.NOMENCLATURE_ANALOGS.REQUIRES_APPROVAL) ?: false
             )
         }
+    }
+
+    fun deleteAnalog(id: Long, analogId: Long, currentUser: CurrentUser): List<NomenclatureAnalogDto> {
+        currentUser.requirePermission("wms", "manage")
+        if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
+        dsl.transaction { _ ->
+            if (!wmsRepository.deleteAnalog(id, analogId)) throw NotFoundException("analog", analogId)
+            auditService.log(currentUser.userId, "DELETE_ANALOG", "NOMENCLATURE", id, mapOf("analogId" to analogId))
+        }
+        return listAnalogs(id, currentUser)
+    }
+
+    fun deleteUnitConversion(id: Long, conversionId: Long, currentUser: CurrentUser): List<NomenclatureUnitConversionDto> {
+        currentUser.requirePermission("wms", "manage")
+        if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
+        dsl.transaction { _ ->
+            if (!wmsRepository.deleteUnitConversion(id, conversionId)) throw NotFoundException("unit_conversion", conversionId)
+            auditService.log(
+                currentUser.userId, "DELETE_UNIT_CONVERSION", "NOMENCLATURE", id,
+                mapOf("conversionId" to conversionId)
+            )
+        }
+        return listUnitConversions(id, currentUser)
     }
 
     fun createAnalog(
@@ -360,11 +401,25 @@ class WmsService(
         currentUser.requirePermission("wms", "manage")
         if (wmsRepository.findNomenclatureById(id) == null) throw NotFoundException("nomenclature", id)
         if (request.analogNomenclatureId == id) throw ValidationException("Analog cannot be the same nomenclature")
-        if (wmsRepository.findNomenclatureById(request.analogNomenclatureId) == null) {
-            throw NotFoundException("nomenclature", request.analogNomenclatureId)
+        val analog = wmsRepository.findNomenclatureById(request.analogNomenclatureId)
+            ?: throw NotFoundException("nomenclature", request.analogNomenclatureId)
+        if (analog.archived == true) {
+            throw ValidationException("Архивную позицию нельзя указать аналогом", mapOf("analogNomenclatureId" to "archived"))
+        }
+        if (wmsRepository.analogExists(id, request.analogNomenclatureId)) {
+            throw ConflictException("Аналог ${analog.code} уже указан")
         }
         val factor = parseQuantity(request.conversionFactor, "conversionFactor")
-        wmsRepository.createAnalog(id, request.analogNomenclatureId, factor, request.applicabilityCondition?.trim(), request.priority.coerceAtLeast(1), currentUser.userId)
+        dsl.transaction { _ ->
+            wmsRepository.createAnalog(
+                id, request.analogNomenclatureId, factor, request.applicabilityCondition?.trim()?.takeIf { it.isNotEmpty() },
+                request.priority.coerceAtLeast(1), currentUser.userId, request.requiresApproval
+            )
+            auditService.log(
+                currentUser.userId, "ADD_ANALOG", "NOMENCLATURE", id,
+                mapOf("analogCode" to analog.code, "requiresApproval" to request.requiresApproval.toString())
+            )
+        }
         return listAnalogs(id, currentUser)
     }
 
@@ -803,8 +858,37 @@ private fun NomenclatureRecord.toDto(barcodes: Map<Long, List<NomenclatureBarcod
     createdAt = this.createdAt?.toString(),
     createdBy = this.createdBy,
     version = this.version ?: 0,
-    barcodes = barcodes[this.id] ?: emptyList()
+    barcodes = barcodes[this.id] ?: emptyList(),
+    categoryId = this.categoryId,
+    article = this.article,
+    manufacturer = this.manufacturer,
+    manufacturerModel = this.manufacturerModel,
+    weightKg = this.weightKg?.stripTrailingZeros()?.toPlainString(),
+    lengthMm = this.lengthMm?.stripTrailingZeros()?.toPlainString(),
+    widthMm = this.widthMm?.stripTrailingZeros()?.toPlainString(),
+    heightMm = this.heightMm?.stripTrailingZeros()?.toPlainString(),
+    storageConditions = this.storageConditions,
+    productModelId = this.productModelId,
+    minOrderQty = (this.minOrderQty ?: BigDecimal.ONE).stripTrailingZeros().toPlainString(),
+    orderMultiple = (this.orderMultiple ?: BigDecimal.ONE).stripTrailingZeros().toPlainString()
 )
+
+/** Подпись причины, по которой позицию нельзя архивировать (BOM-20, D-63). */
+internal fun nomenclatureReferenceLabel(code: String): String = when (code) {
+    "stock_balance" -> "есть остаток на складе"
+    "reservations" -> "есть активные резервы"
+    "bom_lines" -> "входит в действующие ревизии BOM"
+    "demand_lines" -> "есть в открытых потребностях"
+    "purchase_order_lines" -> "есть в незакрытых заказах поставщикам"
+    "production_order_materials" -> "есть в активных производственных заказах"
+    else -> code
+}
+
+/** Общий маппинг записи номенклатуры для сервиса карточки (тот же, что в WMS). */
+internal fun NomenclatureRecord.toNomenclatureDto(barcodes: Map<Long, List<NomenclatureBarcodeDto>>): NomenclatureDto =
+    this.toDto(barcodes)
+
+internal fun NomenclatureBarcodesRecord.toBarcodeDto(): NomenclatureBarcodeDto = this.toDto()
 
 private fun WmsRepository.StockRow.toDto(): StockBalanceDto = StockBalanceDto(
     id = this.balance.id,

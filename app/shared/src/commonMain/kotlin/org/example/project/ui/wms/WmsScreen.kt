@@ -83,10 +83,29 @@ import org.example.project.ui.theme.PageHeader
 @Composable
 fun WmsScreen(
     viewModel: WmsViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    currentUser: org.example.project.dto.UserDto? = null
 ) {
     val state by viewModel.uiState.collectAsState()
     val names = rememberWmsNames(state.warehouses, state.nomenclature, state.issues)
+    // Карточка номенклатуры открывается на месте раздела (NSI-001, D-63).
+    val openedNomenclature = state.selectedNomenclature
+    if (openedNomenclature != null) {
+        org.example.project.ui.wms.card.NomenclatureCardScreen(
+            nomenclatureId = openedNomenclature.id,
+            currentUser = currentUser,
+            onBack = {
+                viewModel.selectNomenclature(null)
+                viewModel.loadNomenclature()
+            },
+            onArchived = {
+                viewModel.selectNomenclature(null)
+                viewModel.loadNomenclature()
+            },
+            modifier = modifier
+        )
+        return
+    }
     androidx.compose.runtime.CompositionLocalProvider(LocalWmsNames provides names) {
 
         Column(modifier = modifier.fillMaxSize()) {
@@ -403,300 +422,6 @@ private fun NomenclatureTab(
                 modifier = Modifier.fillMaxWidth().weight(1f)
             )
         }
-        if (state.selectedNomenclature != null) {
-            NomenclatureDetailDialog(
-                item = state.selectedNomenclature!!,
-                details = state.nomenclatureDetails,
-                loading = state.nomenclatureDetailsLoading,
-                error = state.operationError,
-                warehouses = state.warehouses,
-                onArchive = { viewModel.archiveNomenclature(state.selectedNomenclature!!) },
-                onRetry = { viewModel.selectNomenclature(state.selectedNomenclature!!) },
-                onClose = { viewModel.selectNomenclature(null) },
-                allNomenclature = state.nomenclature
-            )
-        }
-    }
-}
-
-@Composable
-private fun NomenclatureDetailDialog(
-    item: org.example.project.dto.NomenclatureDto,
-    details: org.example.project.dto.NomenclatureDetailsDto?,
-    loading: Boolean,
-    error: org.example.project.dto.ApiError?,
-    warehouses: List<WarehouseDto>,
-    onArchive: () -> Unit,
-    onRetry: () -> Unit,
-    onClose: () -> Unit,
-    allNomenclature: List<NomenclatureDto> = emptyList()
-) {
-    val wmsRepo: org.example.project.data.WmsRepository = koinInject()
-    var confirmArchive by remember(item.id) { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    var minStock by remember(item.id) { mutableStateOf(item.minStock) }
-    var safetyStock by remember(item.id) { mutableStateOf(item.safetyStock) }
-    var leadTimeDays by remember(item.id) { mutableStateOf(item.leadTimeDays.toString()) }
-    var newBarcode by remember(item.id) { mutableStateOf("") }
-    var localStatus by remember(item.id) { mutableStateOf<String?>(null) }
-
-    org.example.project.ui.theme.ErpDialog(
-        title = "${item.code} · ${item.name}",
-        glyph = ErpIconGlyph.Layers,
-        gradient = Gradients.Emerald,
-        width = 720.dp,
-        confirmText = if (!item.archived) "Архивировать" else null,
-        onConfirm = if (!item.archived) { { confirmArchive = true } } else null,
-        confirmEnabled = !loading,
-        confirmGradient = Gradients.Sunset,
-        dismissText = "Закрыть",
-        onDismiss = onClose
-    ) {
-        Text(text = "Тип: ${item.type.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Единица измерения: ${item.unit}", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Статус: ${if (item.archived) "Архив" else "Активна"}")
-                item.description?.takeIf { it.isNotBlank() }?.let { Text(it) }
-                localStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-                HorizontalDivider()
-                Text("Пороги запаса и срок поставки", style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedTextField(
-                        value = minStock,
-                        onValueChange = { minStock = it },
-                        label = { Text("Мин. запас") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = safetyStock,
-                        onValueChange = { safetyStock = it },
-                        label = { Text("Страх. запас") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = leadTimeDays,
-                        onValueChange = { leadTimeDays = it },
-                        label = { Text("Срок (дн)") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Button(onClick = {
-                    scope.launch {
-                        val res = wmsRepo.updateNomenclatureThresholds(
-                            item.id,
-                            org.example.project.dto.UpdateNomenclatureThresholdsRequest(
-                                minStock = minStock.trim().ifEmpty { "0" },
-                                safetyStock = safetyStock.trim().ifEmpty { "0" },
-                                leadTimeDays = leadTimeDays.trim().toIntOrNull() ?: 0,
-                                version = item.version
-                            )
-                        )
-                        localStatus = when (res) {
-                            is org.example.project.data.ApiResult.Success -> "Пороги обновлены"
-                            is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.userText()}"
-                        }
-                    }
-                }) { Text("Сохранить пороги") }
-                HorizontalDivider()
-                Text("Штрихкоды (${item.barcodes.size})", style = MaterialTheme.typography.titleSmall)
-                item.barcodes.forEach { barcode ->
-                    Text(
-                        text = "${barcode.barcode} · ${barcode.packageType.localizedName()} · ${ErpFormat.qty(barcode.quantityInPackage)} ${item.unit}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newBarcode,
-                        onValueChange = { newBarcode = it },
-                        label = { Text("Новый штрихкод") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(onClick = {
-                        val code = newBarcode.trim()
-                        if (code.isNotEmpty()) {
-                            scope.launch {
-                                val res = wmsRepo.addBarcode(
-                                    item.id,
-                                    org.example.project.dto.CreateNomenclatureBarcodeRequest(barcode = code)
-                                )
-                                localStatus = when (res) {
-                                    is org.example.project.data.ApiResult.Success -> {
-                                        newBarcode = ""
-                                        "Штрихкод $code добавлен"
-                                    }
-                                    is org.example.project.data.ApiResult.Error -> "Ошибка: ${res.error.userText()}"
-                                }
-                            }
-                        }
-                    }, enabled = newBarcode.isNotBlank()) { Text("Добавить") }
-                }
-                var analogs by remember(item.id) {
-                    mutableStateOf<List<org.example.project.dto.NomenclatureAnalogDto>>(emptyList())
-                }
-                var analogSelected by remember(item.id) { mutableStateOf<NomenclatureDto?>(null) }
-                androidx.compose.runtime.LaunchedEffect(item.id) {
-                    val res = wmsRepo.listAnalogs(item.id)
-                    if (res is org.example.project.data.ApiResult.Success<*>) {
-                        analogs = (res as org.example.project.data.ApiResult.Success<List<org.example.project.dto.NomenclatureAnalogDto>>).data
-                    }
-                }
-                HorizontalDivider()
-                Text("Аналоги (${analogs.size})", style = MaterialTheme.typography.titleSmall)
-                analogs.forEach { a ->
-                    Text(
-                        text = "${a.analogCode} · ${a.analogName} (коэф. ${ErpFormat.qty(a.conversionFactor)})",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    NomenclatureDropdown(
-                        items = allNomenclature.filter { candidate ->
-                            candidate.id != item.id && !candidate.archived &&
-                                analogs.none { it.analogNomenclatureId == candidate.id }
-                        },
-                        selected = analogSelected,
-                        onSelect = { analogSelected = it },
-                        label = "Позиция-аналог",
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(enabled = analogSelected != null, onClick = {
-                        val chosen = analogSelected
-                        val aId = chosen?.id
-                        if (aId != null) {
-                            scope.launch {
-                                val res = wmsRepo.createAnalog(
-                                    item.id,
-                                    org.example.project.dto.CreateNomenclatureAnalogRequest(analogNomenclatureId = aId)
-                                )
-                                when (res) {
-                                    is org.example.project.data.ApiResult.Success<*> -> {
-                                        analogs = (res as org.example.project.data.ApiResult.Success<List<org.example.project.dto.NomenclatureAnalogDto>>).data
-                                        analogSelected = null
-                                        localStatus = "Аналог ${chosen.code} добавлен"
-                                    }
-                                    is org.example.project.data.ApiResult.Error -> localStatus = "Ошибка: ${res.error.userText()}"
-                                }
-                            }
-                        }
-                    }) { Text("Добавить аналог") }
-                }
-                if (loading) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
-                } else if (details == null) {
-                    error?.let { Text(it.message, color = MaterialTheme.colorScheme.error) }
-                    Button(onClick = onRetry) { Text("Загрузить данные") }
-                } else {
-                    HorizontalDivider()
-                    Text("Остатки", style = MaterialTheme.typography.titleMedium)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Физически", style = MaterialTheme.typography.labelMedium)
-                            Text("${ErpFormat.qty(details.physicalQty)} ${item.unit}", style = MaterialTheme.typography.titleSmall)
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Резерв", style = MaterialTheme.typography.labelMedium)
-                            Text("${ErpFormat.qty(details.reservedQty)} ${item.unit}", style = MaterialTheme.typography.titleSmall)
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Доступно", style = MaterialTheme.typography.labelMedium)
-                            Text("${ErpFormat.qty(details.availableQty)} ${item.unit}", style = MaterialTheme.typography.titleSmall)
-                        }
-                    }
-                    if (details.stock.isEmpty()) {
-                        Text("На складах остатка нет.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        details.stock.forEach { stock ->
-                            val warehouse = warehouses.find { it.id == stock.warehouseId }
-                            Text(
-                                text = "${warehouse?.name ?: "Склад ${stock.warehouseId}"} · ${stock.locationCode} · ${stock.locationPurpose.localizedName()}\n" +
-                                    "Физ. ${ErpFormat.qty(stock.physicalQty)}, резерв ${ErpFormat.qty(stock.reservedQty)}, доступно ${ErpFormat.qty(stock.availableQty)} ${item.unit}" +
-                                    (stock.lotNumber?.let { "\nПартия: $it" } ?: "") +
-                                    (stock.serialNumber?.let { "\nСерия: $it" } ?: ""),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                    Text("Партии (${details.lots.size})", style = MaterialTheme.typography.titleMedium)
-                    details.lots.forEach { lot ->
-                        Text(
-                            text = lot.lotNumber +
-                                (lot.manufactureDate?.let { " · изготовлена ${ErpFormat.dateRu(it)}" } ?: "") +
-                                (lot.expiryDate?.let { " · годна до ${ErpFormat.dateRu(it)}" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (item.lotTracked && details.lots.isEmpty()) {
-                        Text("Партии ещё не зарегистрированы.", style = MaterialTheme.typography.bodySmall)
-                    }
-                    if (item.serialTracked) {
-                        Text("Серийные номера (${details.serials.size})", style = MaterialTheme.typography.titleMedium)
-                        if (details.serials.isEmpty()) {
-                            Text("Серийные номера ещё не зарегистрированы.", style = MaterialTheme.typography.bodySmall)
-                        } else {
-                            details.serials.forEach { serial ->
-                                Text(serial.serialNumber, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                    HorizontalDivider()
-                    Text("Журнал движений (${details.movements.size})", style = MaterialTheme.typography.titleMedium)
-                    if (details.movements.isEmpty()) {
-                        Text("Движений пока нет.", style = MaterialTheme.typography.bodySmall)
-                    } else {
-                        details.movements.forEach { movement ->
-                            val direction = when {
-                                movement.fromLocationCode != null && movement.toLocationCode != null ->
-                                    "${movement.fromLocationCode} → ${movement.toLocationCode}"
-                                movement.fromLocationCode != null -> "из ${movement.fromLocationCode}"
-                                movement.toLocationCode != null -> "в ${movement.toLocationCode}"
-                                else -> ""
-                            }
-                            Text(
-                                text = "${movement.createdAt.toShortDate()} · ${movement.type.localizedName()} · ${ErpFormat.qty(movement.quantity)} ${item.unit}\n" +
-                                    listOf(
-                                        direction,
-                                        "${movementDocTypeLabel(movement.documentType)} #${movement.documentId}",
-                                        movement.createdByName,
-                                        movement.note.orEmpty()
-                                    ).filter { it.isNotBlank() }.joinToString(" · "),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
-    }
-    if (confirmArchive) {
-        org.example.project.ui.theme.ErpDialog(
-            title = "Архивировать позицию?",
-            glyph = ErpIconGlyph.Alert,
-            gradient = Gradients.Sunset,
-            width = 500.dp,
-            confirmText = "Архивировать",
-            onConfirm = {
-                confirmArchive = false
-                onArchive()
-            },
-            confirmGradient = Gradients.Sunset,
-            onDismiss = { confirmArchive = false }
-        ) {
-            Text("${item.code} · ${item.name} перестанет предлагаться в новых документах. История и остатки сохранятся.")
-        }
     }
 }
 
@@ -817,7 +542,8 @@ private fun StockTab(
                 stock = filteredStock,
                 warehouses = state.warehouses,
                 nomenclature = state.nomenclature,
-                modifier = Modifier.fillMaxWidth().weight(1f)
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                onClick = { viewModel.openNomenclature(it.nomenclatureId) }
             )
         }
     }

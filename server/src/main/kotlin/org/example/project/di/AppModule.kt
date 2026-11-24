@@ -106,6 +106,8 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { UnifiedChatListService(get(), get(), get(), get(), get()) }
     single { SearchService(get(), get()) }
     single { WmsService(get(), get(), get()) }
+    single { org.example.project.repository.NomenclatureCardRepository(get()) }
+    single { NomenclatureCardService(get(), get(), get(), get()) }
     single { ReceiptService(get(), get(), get(), get()) }
     single { ReceiptQcService(get(), get()) }
     single { WmsTransferService(get(), get(), get()) }

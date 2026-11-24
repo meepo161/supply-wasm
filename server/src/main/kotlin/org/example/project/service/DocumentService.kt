@@ -90,6 +90,24 @@ class DocumentService(
             .map { it.toDto() }
     }
 
+    /**
+     * Документы номенклатуры для карточки (D-63). Право `wms:read` открывает
+     * вкладку, но не расширяет видимость DMS: закрытый документ остаётся закрытым.
+     */
+    fun listByNomenclature(nomenclatureId: Long, currentUser: CurrentUser): List<DocumentDto> {
+        currentUser.requirePermission("wms", "read")
+        if (!documentRepository.linkTargetExists("NOMENCLATURE", nomenclatureId)) {
+            throw NotFoundException("nomenclature", nomenclatureId)
+        }
+        return documentRepository
+            .listByNomenclature(
+                nomenclatureId = nomenclatureId,
+                userId = currentUser.userId,
+                hasReadAny = currentUser.hasPermission("documents", "read_any")
+            )
+            .map { it.toDto() }
+    }
+
     fun get(id: Long, currentUser: CurrentUser): DocumentDto {
         loadReadable(id, currentUser)
         return loadFull(id)
@@ -410,6 +428,8 @@ class DocumentService(
             DocumentLinkType.PRODUCT_MODEL, DocumentLinkType.BOM_REVISION ->
                 currentUser.hasPermission("bom", "read_any")
             DocumentLinkType.DEMAND -> currentUser.hasPermission("demands", "read_any")
+            // Привязка меняет состав карточки номенклатуры, поэтому нужно право её изменять.
+            DocumentLinkType.NOMENCLATURE -> currentUser.hasPermission("wms", "manage")
         }
         if (!allowed) {
             throw ForbiddenException("Access to the linked entity denied")

@@ -190,7 +190,7 @@ fun filterNomenclature(
     val normalized = query.trim().lowercase()
     if (normalized.isEmpty()) return items
     return items.filter { item ->
-        listOfNotNull(item.code, item.name, item.description)
+        listOfNotNull(item.code, item.name, item.description, item.article, item.manufacturer)
             .plus(item.barcodes.map { it.barcode })
             .any { it.lowercase().contains(normalized) }
     }

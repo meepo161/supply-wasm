@@ -27,7 +27,7 @@ enum class DocumentVersionStatus {
 
 @Serializable
 enum class DocumentLinkType {
-    PROJECT, TASK, PRODUCT_MODEL, BOM_REVISION, DEMAND
+    PROJECT, TASK, PRODUCT_MODEL, BOM_REVISION, DEMAND, NOMENCLATURE
 }
 
 @Serializable

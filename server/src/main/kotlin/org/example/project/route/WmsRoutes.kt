@@ -100,6 +100,22 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             call.respond(HttpStatusCode.Created, ApiResponse.success(wmsService.createUnitConversion(id, request, call.currentUser())))
         }
 
+        delete("/nomenclature/{id}/unit-conversions/{conversionId}") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            val conversionId = call.parameters["conversionId"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid conversion id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.deleteUnitConversion(id, conversionId, call.currentUser())))
+        }
+
+        delete("/nomenclature/{id}/analogs/{analogId}") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclature id")
+            val analogId = call.parameters["analogId"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid analog id")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.deleteAnalog(id, analogId, call.currentUser())))
+        }
+
         get("/nomenclature/{id}/analogs") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid nomenclature id")
