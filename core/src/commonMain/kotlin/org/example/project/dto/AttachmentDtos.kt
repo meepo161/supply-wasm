@@ -5,7 +5,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class AttachmentEntityType {
     TASK,
-    PROJECT
+    PROJECT,
+    NOMENCLATURE
 }
 
 @Serializable

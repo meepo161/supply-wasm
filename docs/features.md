@@ -60,7 +60,7 @@ The D-51 **Task Chat workspace** provides a 280dp dialog list, flexible message 
 
 Task and project cards contain a real attachment section: the user picks a browser file, uploads/downloads/deletes it through the authorized API, with read-only behavior for closed tasks. WMS, BOM, demand and document screens are connected to their real API clients. Their full business acceptance is tracked separately; implementation presence is not presented as a completed ERP.
 
-The WMS nomenclature list supports search by code, name, description and barcode. Opening an item loads `GET /api/wms/nomenclature/{id}/details`: exact physical/reserved/available totals, stock by warehouse and location, lots, serial numbers and the immutable movement journal with source document and author. The card follows the product-detail workflow of the reference `supply2` project without importing its database or duplicating the ERP nomenclature.
+The WMS nomenclature list supports search by code, name, description, article, manufacturer and barcode. Clicking an item in the nomenclature list or a row in the stock table opens the full nomenclature card (D-63) in place of the section; see «Карточка номенклатуры» below.
 
 The demand card contains a reusable approval panel (`ApprovalsSection`): route list for the selected demand (`targetType=DEMAND`), route card with stages, ALL/ANY policy, assignees and decision history (author/time/comment), start of a route by template for a `PENDING_APPROVAL` demand with `approvals:start` and a per-attempt idempotency key, APPROVE/REJECT/RETURN decisions for the current stage (comment required for REJECT/RETURN on client and server) and route cancellation with a mandatory reason under `approvals:cancel`. After an action the panel reloads the route and the demand card refreshes so the final APPROVED status is visible. There is no global approval queue and no template editor in this increment.
 
@@ -135,6 +135,18 @@ Relevant sources:
 - [`SupplierRoutes.kt`](../server/src/main/kotlin/org/example/project/route/SupplierRoutes.kt)
 - [`PurchaseOrderRoutes.kt`](../server/src/main/kotlin/org/example/project/route/PurchaseOrderRoutes.kt)
 - [`ReceiptRoutes.kt`](../server/src/main/kotlin/org/example/project/route/ReceiptRoutes.kt)
+
+## Карточка номенклатуры (NSI-001, D-63)
+
+Одна карточка для всех типов номенклатуры (`ui/wms/card`). Шапка: фото (первое изображение среди вложений), код, тип, признаки учёта, плашки «Ниже минимального/страхового запаса», категория, артикул, производитель. Под шапкой семь видов остатка §8.3 по единому правилу: физический (все ячейки), доступный (свободный вне карантина, брака и временных ячеек), резерв, ожидаемый (заказано минус принято по заказам `SENT`/`PARTIALLY_DELIVERED`), в пути (перемещения `SHIPPED`/`IN_TRANSIT`), карантин, брак.
+
+Вкладки: «Обзор» (атрибуты §8.2, характеристики, штрихкоды, пересчёт единиц), «Остатки» (ступенчатый график физического остатка за 30/90/365 дней по журналу движений, по складам, по ячейкам, партии, серии), «Снабжение» (пороги, кратность и минимальная партия, расчёт дефицита, ожидаемые поставки, аналоги с признаком «требует согласования», условия хранения, допустимые склады), «Резервы», «Движения» (фильтр по типу, постраничная загрузка), «Применяемость» (BOM как компонент и как сборка, потребности, заказы поставщикам, производственные заказы и причины, по которым нельзя архивировать), «Изделие» (только при связи с моделью изделия), «Документы и файлы» (вложения и привязка документов DMS), «История» (`audit_log` с русскими подписями и перечнем изменённых полей).
+
+Действия: «Редактировать» (`wms:manage`; код, тип, единица и признаки учёта не меняются; устаревшая версия → 409), «В архив» (сервер перечисляет все активные ссылки), «Сформировать потребность» (`demands:create`, ручная или на задел, количество предлагается до страхового запаса с учётом кратности и минимальной партии, ключ идемпотентности защищает от двойного нажатия; открытые потребности показываются, но в расчёт не входят). Все вкладки доступны каждому держателю `wms:read`.
+
+API: `GET /api/wms/nomenclature/{id}/card`, `PUT /api/wms/nomenclature/{id}`, `GET …/stock-history`, `…/movements`, `…/reservations`, `…/usage`, `…/history`, `…/documents`, `GET/POST …/attachments`, `DELETE …/analogs/{id}`, `DELETE …/unit-conversions/{id}`, `GET/POST/PUT /api/wms/nomenclature-categories`. Миграция `V44__nomenclature_card.sql`. Проверки: `NomenclatureCardRoutesTest` (8 сценариев) и визуальная проверка в браузере на реальных записях.
+
+Ограничения: допустимые склады и условия хранения справочные и приёмку не блокируют; печатной формы карточки нет; загрузка фото выполняется общей секцией вложений, шапка обновляется кнопкой «Обновить фото и вложения».
 
 ## Not yet implemented
 

@@ -309,35 +309,20 @@ class WmsViewModel(
         }
     }
 
+    /** Открывает карточку номенклатуры; данные карточка загружает сама (D-63). */
     fun selectNomenclature(nomenclature: NomenclatureDto?) {
         _uiState.value = _uiState.value.copy(
             selectedNomenclature = nomenclature,
             nomenclatureDetails = null,
-            nomenclatureDetailsLoading = nomenclature != null,
+            nomenclatureDetailsLoading = false,
             operationError = null
         )
-        nomenclature ?: return
-        viewModelScope.launch {
-            when (val result = repository.getNomenclatureDetails(nomenclature.id)) {
-                is ApiResult.Success -> {
-                    if (_uiState.value.selectedNomenclature?.id == nomenclature.id) {
-                        _uiState.value = _uiState.value.copy(
-                            selectedNomenclature = result.data.item,
-                            nomenclatureDetails = result.data,
-                            nomenclatureDetailsLoading = false
-                        )
-                    }
-                }
-                is ApiResult.Error -> {
-                    if (_uiState.value.selectedNomenclature?.id == nomenclature.id) {
-                        _uiState.value = _uiState.value.copy(
-                            nomenclatureDetailsLoading = false,
-                            operationError = result.error
-                        )
-                    }
-                }
-            }
-        }
+    }
+
+    /** Открывает карточку по id (из остатков и других вкладок раздела). */
+    fun openNomenclature(id: Long) {
+        val item = _uiState.value.nomenclature.firstOrNull { it.id == id } ?: return
+        selectNomenclature(item)
     }
 
     fun updateNomenclatureSearch(value: String) {

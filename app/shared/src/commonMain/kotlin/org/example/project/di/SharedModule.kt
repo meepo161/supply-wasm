@@ -1,6 +1,8 @@
 package org.example.project.di
 
 import org.example.project.data.AttachmentApiClient
+import org.example.project.data.NomenclatureCardApiClient
+import org.example.project.data.NomenclatureCardRepository
 import org.example.project.data.AttachmentRepository
 import org.example.project.data.AdminApiClient
 import org.example.project.data.AdminRepository
@@ -57,6 +59,7 @@ val sharedModule = module {
     singleOf(::ChatApiClient) bind ChatRepository::class
     singleOf(::ConversationApiClient) bind ConversationRepository::class
     singleOf(::WmsApiClient) bind WmsRepository::class
+    singleOf(::NomenclatureCardApiClient) bind NomenclatureCardRepository::class
     singleOf(::BomApiClient) bind BomRepository::class
     singleOf(::DemandApiClient) bind DemandRepository::class
     singleOf(::DocumentApiClient) bind DocumentRepository::class

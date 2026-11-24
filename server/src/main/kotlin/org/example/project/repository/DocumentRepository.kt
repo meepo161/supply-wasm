@@ -133,6 +133,24 @@ class DocumentRepository(private val dsl: DSLContext) {
         return rows.map { mapDocument(it) }
     }
 
+    /** Документы, привязанные к номенклатуре (D-63), с теми же правилами видимости DMS. */
+    fun listByNomenclature(nomenclatureId: Long, userId: Long, hasReadAny: Boolean): List<DocumentRow> {
+        val visibility = if (hasReadAny) {
+            ""
+        } else {
+            " AND (d.confidentiality IN ('PUBLIC', 'INTERNAL') OR d.owner_id = ?)"
+        }
+        val sql = """
+            SELECT d.*
+            FROM documents d
+            JOIN document_links l ON l.document_id = d.id
+            WHERE l.nomenclature_id = ?$visibility
+            ORDER BY d.created_at DESC
+        """.trimIndent()
+        val rows = if (hasReadAny) dsl.fetch(sql, nomenclatureId) else dsl.fetch(sql, nomenclatureId, userId)
+        return rows.map { mapDocument(it) }
+    }
+
     fun updateDocument(
         id: Long,
         name: String?,
@@ -317,6 +335,7 @@ class DocumentRepository(private val dsl: DSLContext) {
             "PRODUCT_MODEL" -> "product_model_id"
             "BOM_REVISION" -> "bom_revision_id"
             "DEMAND" -> "demand_id"
+            "NOMENCLATURE" -> "nomenclature_id"
             else -> throw IllegalArgumentException("Unsupported link type: $linkType")
         }
         return dsl.fetch(
@@ -347,6 +366,10 @@ class DocumentRepository(private val dsl: DSLContext) {
             "PRODUCT_MODEL" -> dsl.fetchExists(dsl.selectOne().from(PRODUCT_MODELS).where(PRODUCT_MODELS.ID.eq(targetId)))
             "BOM_REVISION" -> dsl.fetchExists(dsl.selectOne().from(PRODUCT_REVISIONS).where(PRODUCT_REVISIONS.ID.eq(targetId)))
             "DEMAND" -> dsl.fetchExists(dsl.selectOne().from(DEMANDS).where(DEMANDS.ID.eq(targetId)))
+            "NOMENCLATURE" -> dsl.fetchExists(
+                dsl.selectOne().from(org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE)
+                    .where(org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE.ID.eq(targetId))
+            )
             else -> false
         }
     }
@@ -414,9 +437,10 @@ class DocumentRepository(private val dsl: DSLContext) {
                     WHEN task_id IS NOT NULL THEN 'TASK'
                     WHEN product_model_id IS NOT NULL THEN 'PRODUCT_MODEL'
                     WHEN bom_revision_id IS NOT NULL THEN 'BOM_REVISION'
-                    ELSE 'DEMAND'
+                    WHEN demand_id IS NOT NULL THEN 'DEMAND'
+                    ELSE 'NOMENCLATURE'
                 END AS link_type,
-                COALESCE(project_id, task_id, product_model_id, bom_revision_id, demand_id) AS target_id,
+                COALESCE(project_id, task_id, product_model_id, bom_revision_id, demand_id, nomenclature_id) AS target_id,
                 created_by, created_at
             FROM document_links
         """

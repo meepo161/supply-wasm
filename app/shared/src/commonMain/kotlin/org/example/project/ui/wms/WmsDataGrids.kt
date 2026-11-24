@@ -107,7 +107,8 @@ fun StockGrid(
     stock: List<StockBalanceDto>,
     warehouses: List<WarehouseDto> = emptyList(),
     nomenclature: List<NomenclatureDto> = emptyList(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (StockBalanceDto) -> Unit = {}
 ) {
     val hasLot = stock.any { !it.lotNumber.isNullOrBlank() }
     val hasSerial = stock.any { !it.serialNumber.isNullOrBlank() }
@@ -129,7 +130,9 @@ fun StockGrid(
         modifier = modifier,
         tableKey = "wms-stock",
         config = gridConfig,
-        onClick = { }
+        onClick = { selected ->
+            selected.firstOrNull()?.first?.let { idx -> stock.getOrNull(idx)?.let(onClick) }
+        }
     )
 }
 

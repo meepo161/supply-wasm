@@ -189,6 +189,13 @@ class AttachmentService(
         return deleted
     }
 
+    private fun requireNomenclatureExists(id: Long) {
+        val nomenclature = org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
+        if (!dsl.fetchExists(dsl.selectOne().from(nomenclature).where(nomenclature.ID.eq(id)))) {
+            throw NotFoundException("nomenclature", id)
+        }
+    }
+
     private fun requireReadAccess(entityType: String, entityId: Long, currentUser: CurrentUser) {
         when (entityType) {
             "TASK" -> {
@@ -205,6 +212,13 @@ class AttachmentService(
                     projectRepository.isMember(entityId, currentUser.userId)
                 if (!allowed) {
                     throw ForbiddenException("Access to project attachments denied")
+                }
+            }
+            // Изображения и файлы карточки номенклатуры видит любой держатель wms:read (D-63).
+            "NOMENCLATURE" -> {
+                requireNomenclatureExists(entityId)
+                if (!currentUser.hasPermission("wms", "read")) {
+                    throw ForbiddenException("Access to nomenclature attachments denied")
                 }
             }
             "TASK_CHAT_MESSAGE" -> {
@@ -244,6 +258,12 @@ class AttachmentService(
                     currentUser.hasPermission("projects", "manage_members")
                 if (!allowed) {
                     throw ForbiddenException("Upload/delete of project attachments denied")
+                }
+            }
+            "NOMENCLATURE" -> {
+                requireNomenclatureExists(entityId)
+                if (!currentUser.hasPermission("wms", "manage")) {
+                    throw ForbiddenException("Upload/delete of nomenclature attachments denied")
                 }
             }
             "TASK_CHAT_MESSAGE" -> {

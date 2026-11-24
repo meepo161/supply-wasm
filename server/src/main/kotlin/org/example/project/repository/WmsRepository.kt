@@ -254,28 +254,57 @@ class WmsRepository(private val dsl: DSLContext) {
             .fetchOne()
     }
 
-    fun findActiveNomenclatureReference(id: Long): String? {
+    fun findActiveNomenclatureReference(id: Long): String? = findActiveNomenclatureReferences(id).firstOrNull()
+
+    /**
+     * Все активные ссылки, которые запрещают архивирование (BOM-20).
+     * Коды стабильны: подписи для пользователя формирует сервис карточки.
+     */
+    fun findActiveNomenclatureReferences(id: Long): List<String> {
+        val result = mutableListOf<String>()
         val hasStock = dsl.fetchExists(
             dsl.selectOne().from(STOCK_BALANCE)
                 .where(STOCK_BALANCE.NOMENCLATURE_ID.eq(id))
                 .and(STOCK_BALANCE.PHYSICAL_QTY.gt(BigDecimal.ZERO))
         )
-        if (hasStock) return "stock_balance"
+        if (hasStock) result += "stock_balance"
+        val hasActiveReservation = dsl.fetchExists(
+            dsl.selectOne().from(RESERVATIONS)
+                .where(RESERVATIONS.NOMENCLATURE_ID.eq(id))
+                .and(RESERVATIONS.STATUS.eq("ACTIVE"))
+        )
+        if (hasActiveReservation) result += "reservations"
         val hasActiveBom = dsl.fetchExists(
             dsl.selectOne().from(BOM_LINES)
                 .join(PRODUCT_REVISIONS).on(PRODUCT_REVISIONS.ID.eq(BOM_LINES.REVISION_ID))
                 .where(BOM_LINES.CHILD_NOMENCLATURE_ID.eq(id).or(BOM_LINES.PARENT_NOMENCLATURE_ID.eq(id)))
                 .and(PRODUCT_REVISIONS.STATUS.notIn("CANCELLED", "REPLACED"))
         )
-        if (hasActiveBom) return "bom_lines"
+        if (hasActiveBom) result += "bom_lines"
         val hasOpenDemand = dsl.fetchExists(
             dsl.selectOne().from(DEMAND_LINES)
                 .join(DEMANDS).on(DEMANDS.ID.eq(DEMAND_LINES.DEMAND_ID))
                 .where(DEMAND_LINES.NOMENCLATURE_ID.eq(id))
                 .and(DEMANDS.STATUS.notIn("COVERED", "CANCELLED"))
         )
-        if (hasOpenDemand) return "demand_lines"
-        return null
+        if (hasOpenDemand) result += "demand_lines"
+        val hasOpenPurchaseOrder = dsl.fetchExists(
+            dsl.selectOne().from(PURCHASE_ORDER_LINES)
+                .join(PURCHASE_ORDERS).on(PURCHASE_ORDERS.ID.eq(PURCHASE_ORDER_LINES.ORDER_ID))
+                .where(PURCHASE_ORDER_LINES.NOMENCLATURE_ID.eq(id))
+                .and(PURCHASE_ORDERS.STATUS.notIn("DELIVERED", "CLOSED", "CANCELLED"))
+        )
+        if (hasOpenPurchaseOrder) result += "purchase_order_lines"
+        val pom = org.example.project.generated.jooq.tables.ProductionOrderMaterials.PRODUCTION_ORDER_MATERIALS
+        val po = org.example.project.generated.jooq.tables.ProductionOrders.PRODUCTION_ORDERS
+        val hasActiveProduction = dsl.fetchExists(
+            dsl.selectOne().from(pom)
+                .join(po).on(po.ID.eq(pom.PRODUCTION_ORDER_ID))
+                .where(pom.NOMENCLATURE_ID.eq(id))
+                .and(po.STATUS.notIn("COMPLETED", "CLOSED", "CANCELLED"))
+        )
+        if (hasActiveProduction) result += "production_order_materials"
+        return result
     }
 
     fun findNomenclatureByBarcode(barcode: String): NomenclatureRecord? {
@@ -325,7 +354,8 @@ class WmsRepository(private val dsl: DSLContext) {
             NOMENCLATURE_ANALOGS.CONVERSION_FACTOR,
             NOMENCLATURE_ANALOGS.APPLICABILITY_CONDITION,
             NOMENCLATURE_ANALOGS.PRIORITY,
-            NOMENCLATURE_ANALOGS.ACTIVE
+            NOMENCLATURE_ANALOGS.ACTIVE,
+            NOMENCLATURE_ANALOGS.REQUIRES_APPROVAL
         )
             .from(NOMENCLATURE_ANALOGS)
             .join(NOMENCLATURE).on(NOMENCLATURE.ID.eq(NOMENCLATURE_ANALOGS.ANALOG_NOMENCLATURE_ID))
@@ -333,22 +363,51 @@ class WmsRepository(private val dsl: DSLContext) {
             .orderBy(NOMENCLATURE_ANALOGS.PRIORITY.asc(), NOMENCLATURE_ANALOGS.ID.asc())
             .fetch()
 
+    fun analogExists(nomenclatureId: Long, analogNomenclatureId: Long): Boolean =
+        dsl.fetchExists(
+            dsl.selectOne().from(NOMENCLATURE_ANALOGS)
+                .where(NOMENCLATURE_ANALOGS.NOMENCLATURE_ID.eq(nomenclatureId))
+                .and(NOMENCLATURE_ANALOGS.ANALOG_NOMENCLATURE_ID.eq(analogNomenclatureId))
+        )
+
     fun createAnalog(
         nomenclatureId: Long,
         analogNomenclatureId: Long,
         factor: BigDecimal,
         condition: String?,
         priority: Int,
-        createdBy: Long
+        createdBy: Long,
+        requiresApproval: Boolean = false
     ) = dsl.insertInto(NOMENCLATURE_ANALOGS)
         .set(NOMENCLATURE_ANALOGS.NOMENCLATURE_ID, nomenclatureId)
         .set(NOMENCLATURE_ANALOGS.ANALOG_NOMENCLATURE_ID, analogNomenclatureId)
         .set(NOMENCLATURE_ANALOGS.CONVERSION_FACTOR, factor)
         .set(NOMENCLATURE_ANALOGS.APPLICABILITY_CONDITION, condition)
         .set(NOMENCLATURE_ANALOGS.PRIORITY, priority)
+        .set(NOMENCLATURE_ANALOGS.REQUIRES_APPROVAL, requiresApproval)
         .set(NOMENCLATURE_ANALOGS.CREATED_BY, createdBy)
         .returning()
         .fetchOne()!!
+
+    fun deleteAnalog(nomenclatureId: Long, analogId: Long): Boolean =
+        dsl.deleteFrom(NOMENCLATURE_ANALOGS)
+            .where(NOMENCLATURE_ANALOGS.ID.eq(analogId))
+            .and(NOMENCLATURE_ANALOGS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .execute() > 0
+
+    fun unitConversionExists(nomenclatureId: Long, fromUnit: String, toUnit: String): Boolean =
+        dsl.fetchExists(
+            dsl.selectOne().from(NOMENCLATURE_UNIT_CONVERSIONS)
+                .where(NOMENCLATURE_UNIT_CONVERSIONS.NOMENCLATURE_ID.eq(nomenclatureId))
+                .and(NOMENCLATURE_UNIT_CONVERSIONS.FROM_UNIT.eq(fromUnit))
+                .and(NOMENCLATURE_UNIT_CONVERSIONS.TO_UNIT.eq(toUnit))
+        )
+
+    fun deleteUnitConversion(nomenclatureId: Long, conversionId: Long): Boolean =
+        dsl.deleteFrom(NOMENCLATURE_UNIT_CONVERSIONS)
+            .where(NOMENCLATURE_UNIT_CONVERSIONS.ID.eq(conversionId))
+            .and(NOMENCLATURE_UNIT_CONVERSIONS.NOMENCLATURE_ID.eq(nomenclatureId))
+            .execute() > 0
 
     fun archiveNomenclature(id: Long): NomenclatureRecord? {
         return dsl.update(NOMENCLATURE)

@@ -81,6 +81,7 @@ class AttachmentApiClient(private val client: HttpClient) : AttachmentRepository
     private fun basePath(entityType: AttachmentEntityType): String = when (entityType) {
         AttachmentEntityType.TASK -> "/api/tasks"
         AttachmentEntityType.PROJECT -> "/api/projects"
+        AttachmentEntityType.NOMENCLATURE -> "/api/wms/nomenclature"
     }
 
     private fun String.dispositionSafe(): String =
