@@ -22,6 +22,20 @@ private val gridConfig = Un7KCMPDataGridConfig(
     defaultPageSizeListIndex = 0
 )
 
+/** Сводка по строкам документа для ячейки таблицы: одно значение или «первое и ещё N». */
+private fun <T> List<T>.summary(text: (T) -> String): String {
+    val values = map(text).distinct()
+    return when {
+        values.isEmpty() -> "—"
+        values.size == 1 -> values[0]
+        else -> "${values[0]} и ещё ${values.size - 1}"
+    }
+}
+
+/** Служебную транзитную ячейку показываем понятным названием, а не кодом. */
+private fun locationLabel(code: String): String =
+    if (code == TRANSIT_LOCATION_CODE) "Транзит (в пути)" else code
+
 @Composable
 fun WarehousesGrid(
     warehouses: List<WarehouseDto>,
@@ -114,7 +128,7 @@ fun StockGrid(
     val hasSerial = stock.any { !it.serialNumber.isNullOrBlank() }
     val data = buildMap<String, List<Any?>> {
         put("Склад", stock.map { s -> warehouses.find { it.id == s.warehouseId }?.name ?: "Склад #${s.warehouseId}" })
-        put("Ячейка", stock.map { it.locationCode })
+        put("Ячейка", stock.map { locationLabel(it.locationCode) })
         put("Номенклатура", stock.map { s ->
             nomenclature.find { it.id == s.nomenclatureId }?.let { "${it.code} · ${it.name}" } ?: "Поз. #${s.nomenclatureId}"
         })
@@ -144,13 +158,15 @@ fun ReservationsGrid(
     warehouses: List<WarehouseDto> = emptyList(),
     nomenclature: List<NomenclatureDto> = emptyList()
 ) {
+    val names = LocalWmsNames.current
     val data = mapOf(
         "Номер" to reservations.map { it.number },
         "Номенклатура" to reservations.map { r ->
             nomenclature.find { it.id == r.nomenclatureId }?.let { "${it.code} · ${it.name}" } ?: "Поз. #${r.nomenclatureId}"
         },
         "Склад" to reservations.map { r -> warehouses.find { it.id == r.warehouseId }?.name ?: "Склад #${r.warehouseId}" },
-        "Основание" to reservations.map { it.reasonType.localizedName() },
+        "Ячейка" to reservations.map { r -> r.locationId?.let { names.location(it) } ?: "—" },
+        "Основание" to reservations.map { names.basis(it.reasonType, it.projectId, it.taskId) },
         "Кол-во" to reservations.map { ErpFormat.qty(it.quantity) },
         "Выдано" to reservations.map { ErpFormat.qty(it.issuedQuantity) },
         "Статус" to reservations.map { it.status.localizedName() }
@@ -174,10 +190,14 @@ fun TransfersGrid(
     onClick: (TransferDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val names = LocalWmsNames.current
     val data = mapOf(
         "Номер" to transfers.map { it.number },
         "Вид" to transfers.map { it.kind.localizedName() },
-        "Кол-во" to transfers.map { ErpFormat.qty(it.quantity) },
+        "Номенклатура" to transfers.map { names.item(it.nomenclatureId) },
+        "Из ячейки" to transfers.map { names.location(it.fromLocationId) },
+        "В ячейку" to transfers.map { names.location(it.toLocationId) },
+        "Кол-во" to transfers.map { names.qty(it.quantity, it.nomenclatureId) },
         "Принято" to transfers.map { ErpFormat.qty(it.receivedQuantity) },
         "Расхождение" to transfers.map { ErpFormat.qty(it.discrepancyQuantity) },
         "Статус" to transfers.map { it.status.localizedName() }
@@ -201,9 +221,13 @@ fun IssuesGrid(
     onClick: (IssueOrderDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val names = LocalWmsNames.current
     val data = mapOf(
         "Номер" to issues.map { it.number },
-        "Основание" to issues.map { it.reasonType.localizedName() },
+        "Основание" to issues.map { names.basis(it.reasonType, it.projectId, it.taskId) },
+        "Склад" to issues.map { names.warehouse(it.warehouseId) },
+        "Получатель" to issues.map { names.user(it.recipientId) },
+        "Номенклатура" to issues.map { issue -> issue.lines.summary { names.item(it.nomenclatureId) } },
         "Статус" to issues.map { it.status.localizedName() },
         "Выдано" to issues.map { ErpFormat.dateRu(it.issuedAt) }
     )
@@ -226,8 +250,10 @@ fun ReturnsGrid(
     onClick: (ReturnOrderDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val names = LocalWmsNames.current
     val data = mapOf(
         "Номер" to returns.map { it.number },
+        "Выдача" to returns.map { names.issue(it.issueOrderId) },
         "Причина" to returns.map { it.reason },
         "Статус" to returns.map { it.status.localizedName() },
         "Принято" to returns.map { ErpFormat.dateRu(it.receivedAt) }
@@ -251,10 +277,16 @@ fun WriteOffsGrid(
     onClick: (WriteOffDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val names = LocalWmsNames.current
     val data = mapOf(
         "Номер" to writeOffs.map { it.number },
+        "Склад" to writeOffs.map { names.warehouse(it.warehouseId) },
+        "Номенклатура" to writeOffs.map { w -> w.lines.summary { names.item(it.nomenclatureId) } },
+        "Ячейка" to writeOffs.map { w -> w.lines.summary { names.location(it.locationId) } },
         "Причина" to writeOffs.map { it.reasonType.localizedName() },
         "Количество" to writeOffs.map { ErpFormat.qty(it.totalQuantity) },
+        // Единица берётся у позиции; если в списании разные единицы, ячейка остаётся пустой.
+        "Ед." to writeOffs.map { w -> w.lines.map { names.unit(it.nomenclatureId) }.distinct().singleOrNull().orEmpty() },
         "Сверх лимита" to writeOffs.map { if (it.overLimit) "Да" else "Нет" },
         "Статус" to writeOffs.map { it.status.localizedName() },
         "Проведено" to writeOffs.map { ErpFormat.dateRu(it.postedAt) }

@@ -244,7 +244,9 @@ data class StockMovementDto(
     val note: String? = null,
     val createdBy: Long,
     val createdByName: String,
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    /** Номер документа-основания (WOF-2026-00001); null, если документ не найден. */
+    val documentNumber: String? = null
 )
 
 @Serializable
@@ -508,7 +510,9 @@ data class ReceiptLinkDto(
     val id: Long,
     val receiptId: Long,
     val purchaseOrderId: Long? = null,
+    val purchaseOrderNumber: String? = null,
     val purchaseDeliveryId: Long? = null,
+    val purchaseDeliveryNumber: String? = null,
     /** Номер документа, пришедшего позже: накладная, УПД, счёт. */
     val sourceDocumentNo: String? = null,
     val reason: String,

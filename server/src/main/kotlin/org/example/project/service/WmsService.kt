@@ -204,7 +204,9 @@ class WmsService(
                     createdAt = serial.createdAt?.toString()
                 )
             },
-            movements = wmsRepository.listMovements(id).map { row ->
+            movements = wmsRepository.listMovements(id).let { rows ->
+                val numbers = wmsRepository.documentNumbers(rows.map { it.movement.documentType to it.movement.documentId })
+                rows.map { row ->
                 val movement = row.movement
                 StockMovementDto(
                     id = movement.id,
@@ -220,8 +222,10 @@ class WmsService(
                     note = movement.note,
                     createdBy = movement.createdBy,
                     createdByName = row.createdByName,
-                    createdAt = movement.createdAt?.toString()
+                    createdAt = movement.createdAt?.toString(),
+                    documentNumber = numbers[movement.documentType.uppercase() to movement.documentId]
                 )
+                }
             }
         )
     }
@@ -505,6 +509,10 @@ class WmsService(
                     createdByName = r.get(u.FULL_NAME)!!,
                     createdAt = r.get(sm.CREATED_AT)?.toString()
                 )
+            }
+            .let { movements ->
+                val numbers = wmsRepository.documentNumbers(movements.map { it.documentType to it.documentId })
+                movements.map { it.copy(documentNumber = numbers[it.documentType.uppercase() to it.documentId]) }
             }
     }
 

@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -123,14 +124,16 @@ fun ReceiptAcceptance(
                     OutlinedTextField(
                         value = row.received,
                         onValueChange = { rows[index] = row.copy(received = it) },
-                        label = { Text("Принято") },
+                        label = { Text("Принято *") },
                         singleLine = true,
+                        isError = row.received.isNotBlank() && row.received.trim().replace(',', '.').toDoubleOrNull() == null,
                         modifier = Modifier.weight(1f)
                     )
                     LocationDropdown(
                         locations = locations,
                         selected = locations.firstOrNull { it.id == row.locationId },
                         onSelect = { rows[index] = row.copy(locationId = it.id) },
+                        label = "Ячейка *",
                         modifier = Modifier.weight(1.5f)
                     )
                     OutlinedTextField(
@@ -145,8 +148,9 @@ fun ReceiptAcceptance(
                     OutlinedTextField(
                         value = row.reason,
                         onValueChange = { rows[index] = row.copy(reason = it) },
-                        label = { Text("Причина расхождения (обязательно)") },
+                        label = { Text("Причина расхождения *") },
                         singleLine = true,
+                        isError = row.reason.isBlank(),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -154,30 +158,42 @@ fun ReceiptAcceptance(
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         val ready = rows.all { it.locationId != null && it.received.isNotBlank() }
-        Button(
-            enabled = ready,
-            onClick = {
-                onSave(
-                    rows.map {
-                        AcceptReceiptLineInput(
-                            lineId = it.lineId,
-                            receivedQuantity = it.received.trim().replace(',', '.'),
-                            locationId = it.locationId!!,
-                            lotNumber = it.lotNumber.trim().ifEmpty { null },
-                            discrepancyReason = it.reason.trim().ifEmpty { null }
-                        )
-                    }
+        // Подсказка стоит рядом с кнопкой, а не под формой: именно здесь выясняется, почему «Сохранить» недоступна.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                enabled = ready,
+                onClick = {
+                    onSave(
+                        rows.map {
+                            AcceptReceiptLineInput(
+                                lineId = it.lineId,
+                                receivedQuantity = it.received.trim().replace(',', '.'),
+                                locationId = it.locationId!!,
+                                lotNumber = it.lotNumber.trim().ifEmpty { null },
+                                discrepancyReason = it.reason.trim().ifEmpty { null }
+                            )
+                        }
+                    )
+                }
+            ) { Text("Сохранить факт приёмки") }
+            if (!ready) {
+                Text(
+                    "Укажите ячейку и количество для каждой строки: без этого документ не проводится",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f)
+                )
+            } else if (dirty) {
+                Text(
+                    "Есть несохранённые изменения — нажмите «Сохранить факт приёмки», иначе проводить нельзя",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f)
                 )
             }
-        ) { Text("Сохранить факт приёмки") }
-        if (!ready) {
-            Text("Укажите ячейку и количество для каждой строки: без этого документ не проводится", style = MaterialTheme.typography.bodySmall)
-        } else if (dirty) {
-            Text(
-                "Есть несохранённые изменения — нажмите «Сохранить факт приёмки», иначе проводить нельзя",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
         }
     }
 }

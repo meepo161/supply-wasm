@@ -904,7 +904,12 @@ class ReceiptService(
             createdBy = receipt.createdBy,
             version = receipt.version ?: 0,
             lines = lines.map { it.toDto() },
-            links = links.map { it.toDto() },
+            links = links.map { link ->
+                link.toDto().copy(
+                    purchaseOrderNumber = link.purchaseOrderId?.let { purchaseRepository.findOrderById(it)?.number },
+                    purchaseDeliveryNumber = link.purchaseDeliveryId?.let { purchaseRepository.findDeliveryById(it)?.number }
+                )
+            },
             hasDiscrepancies = lines.any { it.discrepancyKind != null },
             supplierInvoiceId = receipt.supplierInvoiceId,
             supplierInvoiceNumber = receipt.supplierInvoiceId?.let { receipt.sourceDocumentNo }

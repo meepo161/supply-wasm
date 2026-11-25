@@ -20,6 +20,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -76,7 +81,8 @@ internal fun TransfersTab(
                 modifier = Modifier.width(320.dp)
             )
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        // Ошибка действия карточки показывается внутри неё, иначе она оказывается за модальным окном.
+        if (state.selectedTransfer == null) state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.transfersLoading && state.transfers.isEmpty()) {
             LoadingOverlay()
         } else if (state.transfers.isEmpty()) {
@@ -111,7 +117,9 @@ internal fun TransfersTab(
                 onInTransit = viewModel::markTransferInTransit,
                 onReceive = viewModel::receiveTransfer,
                 onCancel = viewModel::cancelTransfer,
-                onClose = { viewModel.selectTransfer(null) }
+                onClose = { viewModel.selectTransfer(null) },
+                error = state.operationError,
+                busy = state.isLoading || state.transfersLoading
             )
         }
     }
@@ -128,7 +136,9 @@ private fun TransferDetailDialog(
     onInTransit: () -> Unit,
     onReceive: () -> Unit,
     onCancel: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    error: org.example.project.dto.ApiError? = null,
+    busy: Boolean = false
 ) {
     val canShip = transfer.status == TransferStatus.CREATED
     val canInTransit = transfer.status == TransferStatus.SHIPPED
@@ -145,12 +155,13 @@ private fun TransferDetailDialog(
         dismissText = "Закрыть",
         onDismiss = onClose,
         extraActions = {
-            if (canShip) Button(onClick = onShip) { Text("Отгрузить") }
-            if (canInTransit) Button(onClick = onInTransit) { Text("В путь") }
-            if (canReceive) Button(onClick = onReceive) { Text("Принять") }
-            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+            if (canShip) Button(onClick = onShip, enabled = !busy) { Text("Отгрузить") }
+            if (canInTransit) Button(onClick = onInTransit, enabled = !busy) { Text("В путь") }
+            if (canReceive) Button(onClick = onReceive, enabled = !busy) { Text("Принять") }
+            if (canCancel) TextButton(onClick = onCancel, enabled = !busy) { Text("Отменить перемещение") }
         }
     ) {
+        error?.let { ErrorMessageCard(error = it) }
         val names = LocalWmsNames.current
         Text("Вид: ${transfer.kind.localizedName()}", style = MaterialTheme.typography.bodyMedium)
         Text("Позиция: ${names.item(transfer.nomenclatureId)}", style = MaterialTheme.typography.bodyMedium)
@@ -192,7 +203,7 @@ private fun TransferDetailDialog(
             Text("История", style = MaterialTheme.typography.labelLarge)
             transfer.events.forEach { event ->
                 Text(
-                    text = "${event.action.name} · ${event.quantity ?: "без количества"} · ${ErpFormat.dateRu(event.createdAt)}",
+                    text = "${event.action.name} · ${event.quantity?.let { ErpFormat.qty(it) } ?: "без количества"} · ${ErpFormat.dateRu(event.createdAt)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -253,6 +264,7 @@ internal fun CreateTransferDialog(
                 selected = locationsFrom.find { it.id == form.fromLocationId },
                 onSelect = { onFormChange(form.copy(fromLocationId = it.id)) },
                 label = "Ячейка-источник *",
+                showWarehouse = false,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -274,6 +286,7 @@ internal fun CreateTransferDialog(
                 selected = availableTargetLocations.find { it.id == form.toLocationId },
                 onSelect = { onFormChange(form.copy(toLocationId = it.id)) },
                 label = "Ячейка-получатель *",
+                showWarehouse = false,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -345,7 +358,8 @@ internal fun IssuesTab(
                 modifier = Modifier.width(320.dp)
             )
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        // Ошибка действия карточки показывается внутри неё, иначе она оказывается за модальным окном.
+        if (state.selectedIssue == null) state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.issuesLoading && state.issues.isEmpty()) {
             LoadingOverlay()
         } else if (state.issues.isEmpty()) {
@@ -382,7 +396,9 @@ internal fun IssuesTab(
                 onConfirm = viewModel::confirmSelectedIssue,
                 onRefuse = viewModel::refuseSelectedIssue,
                 onCancel = viewModel::cancelSelectedIssue,
-                onClose = { viewModel.selectIssue(null) }
+                onClose = { viewModel.selectIssue(null) },
+                error = state.operationError,
+                busy = state.isLoading || state.issuesLoading
             )
         }
     }
@@ -401,13 +417,17 @@ private fun IssueDetailDialog(
     onConfirm: () -> Unit,
     onRefuse: () -> Unit,
     onCancel: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    error: org.example.project.dto.ApiError? = null,
+    busy: Boolean = false
 ) {
     val canPick = issue.status == IssueStatus.DRAFT
     val canIssue = issue.status == IssueStatus.DRAFT
     val canConfirm = issue.status == IssueStatus.ISSUED
     val canRefuse = issue.status == IssueStatus.DRAFT || issue.status == IssueStatus.ISSUED
     val canCancel = issue.status == IssueStatus.DRAFT
+    // Поле причины появляется только после нажатия «Отказаться»: до этого оно лишь занимает место.
+    var refusing by remember(issue.id, issue.status) { mutableStateOf(false) }
 
     org.example.project.ui.theme.ErpDialog(
         title = "Выдача ${issue.number}",
@@ -418,14 +438,23 @@ private fun IssueDetailDialog(
         dismissText = "Закрыть",
         onDismiss = onClose,
         extraActions = {
-            if (canIssue) Button(onClick = onIssue) { Text("Провести выдачу") }
-            if (canConfirm) Button(onClick = onConfirm) { Text("Подтвердить получение") }
-            if (canRefuse) TextButton(onClick = onRefuse) { Text("Отказаться") }
-            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+            if (canIssue) Button(onClick = onIssue, enabled = !busy) { Text("Провести выдачу") }
+            if (canConfirm) Button(onClick = onConfirm, enabled = !busy) { Text("Подтвердить получение") }
+            if (canRefuse) {
+                TextButton(
+                    onClick = { if (refusing) onRefuse() else refusing = true },
+                    enabled = !busy
+                ) { Text(if (refusing) "Подтвердить отказ" else "Отказаться") }
+            }
+            if (canCancel) TextButton(onClick = onCancel, enabled = !busy) { Text("Отменить выдачу") }
         }
     ) {
+                error?.let { ErrorMessageCard(error = it) }
                 val names = LocalWmsNames.current
-                Text("Основание: ${issue.reasonType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Основание: ${names.basis(issue.reasonType, issue.projectId, issue.taskId)}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 issue.reasonNote?.let {
                     Text("Пояснение: $it", style = MaterialTheme.typography.bodyMedium)
                 }
@@ -514,12 +543,12 @@ private fun IssueDetailDialog(
                     }
                 }
 
-                if (canRefuse) {
+                if (canRefuse && refusing) {
                     HorizontalDivider()
                     OutlinedTextField(
                         value = refusalReason,
                         onValueChange = onRefusalReasonChange,
-                        label = { Text("Причина отказа") },
+                        label = { Text("Причина отказа *") },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2
                     )
@@ -682,11 +711,16 @@ internal fun ReturnsTab(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Возврат создаётся только по выдаче со статусом «Получено» (или «Недостача»): нужно знать, есть ли такие.
+        LaunchedEffect(Unit) { if (state.issues.isEmpty()) viewModel.loadIssues() }
+        val noReturnableIssues = !state.issuesLoading &&
+            state.issues.none { it.status == IssueStatus.RECEIVED || it.status == IssueStatus.SHORTAGE }
         TabHeader(
             title = "Возвраты",
             onCreate = { viewModel.showDialog(WmsDialog.CreateReturn) },
             onRefresh = viewModel::loadReturns,
-            createLabel = "Создать возврат"
+            createLabel = "Создать возврат",
+            createEnabled = !(state.returns.isEmpty() && noReturnableIssues)
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -699,7 +733,8 @@ internal fun ReturnsTab(
                 modifier = Modifier.width(320.dp)
             )
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        // Ошибка действия карточки показывается внутри неё, иначе она оказывается за модальным окном.
+        if (state.selectedReturn == null) state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.returnsLoading && state.returns.isEmpty()) {
             LoadingOverlay()
         } else if (state.returns.isEmpty()) {
@@ -709,9 +744,16 @@ internal fun ReturnsTab(
                     actionLabel = "Показать все",
                     onAction = { viewModel.updateReturnStatusFilter(null) }
                 )
+            } else if (noReturnableIssues) {
+                EmptyState(
+                    "Возвратов нет, и оформить возврат пока не по чему: он создаётся по выдаче " +
+                        "со статусом «Получено». Сначала подтвердите получение выдачи.",
+                    actionLabel = "Перейти к выдачам",
+                    onAction = { viewModel.selectTab(WmsTab.ISSUES) }
+                )
             } else {
                 EmptyState(
-                    "Возвратов нет. Возврат оформляется по выдаче с подтверждённым получением.",
+                    "Возвратов нет. Возврат создаётся по выдаче со статусом «Получено».",
                     actionLabel = "Создать возврат",
                     onAction = { viewModel.showDialog(WmsDialog.CreateReturn) }
                 )
@@ -731,7 +773,9 @@ internal fun ReturnsTab(
                 onInspectFormChange = viewModel::updateReturnInspectForm,
                 onInspect = viewModel::inspectReturnLine,
                 onReceive = viewModel::receiveSelectedReturn,
-                onClose = { viewModel.selectReturn(null) }
+                onClose = { viewModel.selectReturn(null) },
+                error = state.operationError,
+                busy = state.isLoading || state.returnsLoading
             )
         }
     }
@@ -745,7 +789,9 @@ private fun ReturnDetailDialog(
     onInspectFormChange: (Long, ReturnInspectForm) -> Unit,
     onInspect: (Long) -> Unit,
     onReceive: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    error: org.example.project.dto.ApiError? = null,
+    busy: Boolean = false
 ) {
     val canReceive = order.status == ReturnStatus.DRAFT
     val canInspect = order.status == ReturnStatus.RECEIVED
@@ -758,9 +804,11 @@ private fun ReturnDetailDialog(
         width = 680.dp,
         confirmText = if (canReceive) "Принять на карантин" else null,
         onConfirm = if (canReceive) onReceive else null,
+        confirmEnabled = !busy,
         dismissText = "Закрыть",
         onDismiss = onClose
     ) {
+                error?.let { ErrorMessageCard(error = it) }
                 val names = LocalWmsNames.current
                 val issueDetails = rememberIssueDetails(order.issueOrderId)
                 Text("Выдача: ${names.issue(order.issueOrderId)}", style = MaterialTheme.typography.bodyMedium)
@@ -829,7 +877,7 @@ private fun ReturnDetailDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true
                                 )
-                                Button(onClick = { onInspect(line.id) }) { Text("Применить решение") }
+                                Button(onClick = { onInspect(line.id) }, enabled = !busy) { Text("Применить решение") }
                             }
                         }
                     }
@@ -906,7 +954,7 @@ internal fun CreateReturnDialog(
                     itemText = { issue ->
                         "${issue.number} · ${issue.reasonType.localizedName()} · ${ErpFormat.dateRu(issue.issuedAt)}"
                     },
-                    emptyText = "Нет выдач с подтверждённым получением по выбранному складу",
+                    emptyText = "Нет выдач со статусом «Получено» по выбранному складу. Сначала подтвердите получение выдачи",
                     modifier = Modifier.fillMaxWidth()
                 )
                 // Сервер принимает возврат только в активную ячейку с назначением «Карантин».
@@ -1019,7 +1067,8 @@ internal fun WriteOffsTab(
                 modifier = Modifier.width(320.dp)
             )
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        // Ошибка действия карточки показывается внутри неё, иначе она оказывается за модальным окном.
+        if (state.selectedWriteOff == null) state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.writeOffsLoading && state.writeOffs.isEmpty()) {
             LoadingOverlay()
         } else if (state.writeOffs.isEmpty()) {
@@ -1050,7 +1099,9 @@ internal fun WriteOffsTab(
                 onCancelReasonChange = viewModel::updateWriteOffCancelReason,
                 onPost = viewModel::postSelectedWriteOff,
                 onCancel = viewModel::cancelSelectedWriteOff,
-                onClose = { viewModel.selectWriteOff(null) }
+                onClose = { viewModel.selectWriteOff(null) },
+                error = state.operationError,
+                busy = state.isLoading || state.writeOffsLoading
             )
         }
     }
@@ -1063,7 +1114,9 @@ private fun WriteOffDetailDialog(
     onCancelReasonChange: (String) -> Unit,
     onPost: () -> Unit,
     onCancel: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    error: org.example.project.dto.ApiError? = null,
+    busy: Boolean = false
 ) {
     val canPost = writeOff.status == WriteOffStatus.DRAFT || writeOff.status == WriteOffStatus.APPROVED
     val canCancel = writeOff.status == WriteOffStatus.DRAFT ||
@@ -1079,16 +1132,18 @@ private fun WriteOffDetailDialog(
         dismissText = "Закрыть",
         onDismiss = onClose,
         extraActions = {
-            if (canPost) Button(onClick = onPost) { Text("Провести") }
-            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+            // Пока идёт запрос, кнопка неактивна: двойной клик давал ложную ошибку «Данные изменились».
+            if (canPost) Button(onClick = onPost, enabled = !busy) { Text("Провести") }
+            if (canCancel) TextButton(onClick = onCancel, enabled = !busy) { Text("Отменить списание") }
         }
     ) {
+                error?.let { ErrorMessageCard(error = it) }
                 Text("Причина: ${writeOff.reasonType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 Text("Основание: ${writeOff.reasonNote}", style = MaterialTheme.typography.bodyMedium)
-                Text("Количество: ${writeOff.totalQuantity}", style = MaterialTheme.typography.bodyMedium)
+                Text("Количество: ${ErpFormat.qty(writeOff.totalQuantity)}", style = MaterialTheme.typography.bodyMedium)
                 if (writeOff.overLimit) {
                     Text(
-                        "Сверх лимита склада (${writeOff.limitQuantity ?: "не задан"}): требуется согласование",
+                        "Сверх лимита склада (${writeOff.limitQuantity?.let { ErpFormat.qty(it) } ?: "не задан"}): требуется согласование",
                         style = MaterialTheme.typography.bodyMedium,
                         color = org.example.project.ui.theme.readableAccent(Brand.Amber)
                     )
@@ -1197,7 +1252,7 @@ internal fun CreateWriteOffDialog(
                 )
 
                 HorizontalDivider()
-                Text("Лимит без согласования", style = MaterialTheme.typography.labelLarge)
+                Text("Лимит списания без согласования", style = MaterialTheme.typography.labelLarge)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1206,15 +1261,19 @@ internal fun CreateWriteOffDialog(
                     OutlinedTextField(
                         value = limit,
                         onValueChange = onLimitChange,
-                        label = { Text("Лимит склада") },
+                        label = { Text("Лимит выбранного склада (суммарное количество)") },
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
-                    Button(onClick = onSaveLimit, enabled = form.warehouseId != null) { Text("Сохранить") }
+                    OutlinedButton(onClick = onSaveLimit, enabled = form.warehouseId != null) { Text("Сохранить лимит") }
                 }
+                // По коду сервера «сверх лимита» значит «общее количество больше лимита»: при лимите 0
+                // согласование нужно для любого списания, а не «без ограничений».
                 Text(
-                    text = "Списание сверх лимита проводится только после согласования " +
-                        "или с правом «wms:write_off_over_limit».",
+                    text = "Списание в пределах лимита проводится сразу. Списание сверх лимита проводится " +
+                        "после согласования или сотрудником с правом списывать сверх лимита. " +
+                        "Лимит 0 означает, что согласование нужно для любого списания. " +
+                        "Изменять лимит может только руководитель склада.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1303,7 +1362,8 @@ internal fun InventoriesTab(
                 modifier = Modifier.width(320.dp)
             )
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        // Ошибка действия карточки показывается внутри неё, иначе она оказывается за модальным окном.
+        if (state.selectedInventory == null) state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.inventoriesLoading && state.inventories.isEmpty()) {
             LoadingOverlay()
         } else if (state.inventories.isEmpty()) {
@@ -1314,10 +1374,13 @@ internal fun InventoriesTab(
                     onAction = { viewModel.updateInventoryStatusFilter(null) }
                 )
             } else {
+                // Кнопка создания уже есть в заголовке — в пустом состоянии её не дублируем.
                 EmptyState(
-                    "Инвентаризаций нет. Инвентаризация сверяет учётный остаток с фактическим.",
-                    actionLabel = "Создать инвентаризацию",
-                    onAction = { viewModel.showDialog(WmsDialog.CreateInventory) }
+                    "Инвентаризаций нет. Она сверяет учётный остаток с фактическим:\n" +
+                        "1. создайте документ и зафиксируйте срез учётных остатков;\n" +
+                        "2. внесите фактическое количество по позициям;\n" +
+                        "3. проверьте расхождения (при необходимости согласуйте);\n" +
+                        "4. проведите документ — остатки скорректируются."
                 )
             }
         } else {
@@ -1339,7 +1402,9 @@ internal fun InventoriesTab(
                 onApprove = viewModel::approveSelectedInventory,
                 onPost = viewModel::postSelectedInventory,
                 onCancel = viewModel::cancelSelectedInventory,
-                onClose = { viewModel.selectInventory(null) }
+                onClose = { viewModel.selectInventory(null) },
+                error = state.operationError,
+                busy = state.isLoading || state.inventoriesLoading
             )
         }
     }
@@ -1357,7 +1422,9 @@ private fun InventoryDetailDialog(
     onApprove: () -> Unit,
     onPost: () -> Unit,
     onCancel: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    error: org.example.project.dto.ApiError? = null,
+    busy: Boolean = false
 ) {
     val canBook = inventory.status == InventoryStatus.DRAFT
     val canCount = inventory.status in setOf(
@@ -1381,13 +1448,14 @@ private fun InventoryDetailDialog(
         dismissText = "Закрыть",
         onDismiss = onClose,
         extraActions = {
-            if (canBook) Button(onClick = onBook) { Text("Зафиксировать срез") }
-            if (canCount) Button(onClick = onSubmitCounts) { Text("Сохранить подсчёт") }
-            if (canApprove) Button(onClick = onApprove) { Text("Согласовать") }
-            if (canPost) Button(onClick = onPost) { Text("Провести") }
-            if (canCancel) TextButton(onClick = onCancel) { Text("Отменить") }
+            if (canBook) Button(onClick = onBook, enabled = !busy) { Text("Зафиксировать срез") }
+            if (canCount) Button(onClick = onSubmitCounts, enabled = !busy) { Text("Сохранить подсчёт") }
+            if (canApprove) Button(onClick = onApprove, enabled = !busy) { Text("Согласовать") }
+            if (canPost) Button(onClick = onPost, enabled = !busy) { Text("Провести") }
+            if (canCancel) TextButton(onClick = onCancel, enabled = !busy) { Text("Отменить инвентаризацию") }
         }
     ) {
+                error?.let { ErrorMessageCard(error = it) }
                 val names = LocalWmsNames.current
                 Text("Область: ${inventory.scopeType.localizedName()}", style = MaterialTheme.typography.bodyMedium)
                 inventory.scopeLocationId?.let {

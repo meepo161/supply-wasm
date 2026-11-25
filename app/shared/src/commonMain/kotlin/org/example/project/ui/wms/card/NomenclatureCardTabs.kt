@@ -536,8 +536,16 @@ private fun MovementRow(m: StockMovementDto, unit: String) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(color))
         Column(modifier = Modifier.weight(1f)) {
+            // Номер документа, а не внутренний id: «Списание WOF-2026-00001»; id остаётся запасным вариантом.
+            val docName = docTypeLabel(m.documentType)
+            val movementTitle = if (m.documentNumber != null) {
+                val docTitle = "${docName.replaceFirstChar { it.uppercase() }} ${m.documentNumber}"
+                if (m.type.localizedName().equals(docName, ignoreCase = true)) docTitle else "${m.type.localizedName()} · $docTitle"
+            } else {
+                "${m.type.localizedName()} · $docName №${m.documentId}"
+            }
             Text(
-                "${m.type.localizedName()} · ${docTypeLabel(m.documentType)} №${m.documentId}",
+                movementTitle,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )

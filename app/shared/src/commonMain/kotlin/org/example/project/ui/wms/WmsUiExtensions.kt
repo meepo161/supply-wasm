@@ -200,3 +200,23 @@ fun String?.toShortDate(): String {
     if (this.isNullOrBlank()) return "не указана"
     return substringBefore("T")
 }
+
+/**
+ * Есть ли в ответе сервера ошибка проверки именно этого поля (`details`: «lines[0].expectedQuantity» → «format»).
+ * Нужна, чтобы подсветить поле формы, а не только показать текст ошибки над ней.
+ */
+internal fun org.example.project.dto.ApiError?.hasFieldError(vararg fields: String): Boolean {
+    val keys = this?.details?.keys ?: return false
+    return keys.any { it in fields }
+}
+
+/** Знак движения для журнала: «+» приход, «−» расход, у перемещения знака нет. */
+internal fun org.example.project.dto.StockMovementType.signPrefix(): String = when (this) {
+    org.example.project.dto.StockMovementType.RECEIPT,
+    org.example.project.dto.StockMovementType.RETURN,
+    org.example.project.dto.StockMovementType.ADJUSTMENT_IN -> "+"
+    org.example.project.dto.StockMovementType.ISSUE,
+    org.example.project.dto.StockMovementType.WRITE_OFF,
+    org.example.project.dto.StockMovementType.ADJUSTMENT_OUT -> "−"
+    org.example.project.dto.StockMovementType.TRANSFER -> ""
+}

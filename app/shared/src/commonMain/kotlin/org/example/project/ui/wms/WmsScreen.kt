@@ -147,7 +147,9 @@ fun WmsScreen(
                 error = state.operationError,
                 onFormChange = viewModel::updateCreateLocationForm,
                 onCreate = viewModel::createLocation,
-                onDismiss = viewModel::dismissDialog
+                onDismiss = viewModel::dismissDialog,
+                parentCandidates = state.locations,
+                onWarehouseChange = viewModel::onCreateLocationWarehouseChanged
             )
             WmsDialog.CreateNomenclature -> CreateNomenclatureDialog(
                 form = state.createNomenclatureForm,
@@ -262,7 +264,9 @@ internal fun TabHeader(
     onCreate: () -> Unit,
     onRefresh: () -> Unit,
     createLabel: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** false — создание сейчас невозможно (например, нет документов-оснований). */
+    createEnabled: Boolean = true
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -275,7 +279,7 @@ internal fun TabHeader(
             color = MaterialTheme.colorScheme.onSurface
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onCreate) { Text(createLabel) }
+            Button(onClick = onCreate, enabled = createEnabled) { Text(createLabel) }
             OutlinedButton(onClick = onRefresh) { Text("Обновить") }
         }
     }
@@ -599,8 +603,9 @@ private fun ReceiptsTab(
         // Основание приёмки не свободная строка: заказ, счёт, накладная/УПД,
         // возврат, перемещение, начальный остаток, прочий документ.
         Text(
-            text = "Основание: заказ поставщику, счёт, накладная/УПД, возврат, перемещение, " +
-                "начальный остаток или прочий документ. Один документ проводится один раз.",
+            text = "Основание: заказ поставщику, накладная/УПД, возврат, перемещение, " +
+                "начальный остаток или прочий документ. Приёмку по счёту оформляет снабжение. " +
+                "Один документ проводится один раз.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -844,10 +849,19 @@ private fun ReceiptDetailCard(
             Text("Строки:", style = MaterialTheme.typography.labelLarge)
             receipt.lines.forEach { line ->
                 val item = nomenclature.find { it.id == line.nomenclatureId }
+                // Пока приёмка не проведена, «принято» равно ожидаемому по умолчанию — это не факт.
+                // Факт показываем, когда документ проведён или кладовщик уже ввёл иное количество.
+                val factEntered = (receipt.status != ReceiptStatus.DRAFT && receipt.status != ReceiptStatus.IN_PROGRESS) ||
+                    line.receivedQuantity.toDoubleOrNull() != line.expectedQuantity.toDoubleOrNull()
+                val unitSuffix = item?.unit?.let { " $it" }.orEmpty()
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = "№${line.lineNo}: ${item?.let { "${it.code} · ${it.name}" } ?: (line.nomenclatureCode ?: "Номенклатура ${line.nomenclatureId}")}\n" +
-                            "Ожидалось ${ErpFormat.qty(line.expectedQuantity)} ${item?.unit.orEmpty()}, принято ${ErpFormat.qty(line.receivedQuantity)} ${item?.unit.orEmpty()}",
+                            if (factEntered) {
+                                "Ожидалось ${ErpFormat.qty(line.expectedQuantity)}$unitSuffix, принято ${ErpFormat.qty(line.receivedQuantity)}$unitSuffix"
+                            } else {
+                                "Ожидается ${ErpFormat.qty(line.expectedQuantity)}$unitSuffix"
+                            },
                         style = MaterialTheme.typography.bodySmall
                     )
                     line.discrepancyKind?.let { kind ->
@@ -867,8 +881,8 @@ private fun ReceiptDetailCard(
                 receipt.links.forEach { link ->
                     Text(
                         text = listOfNotNull(
-                            link.purchaseOrderId?.let { "заказ #$it" },
-                            link.purchaseDeliveryId?.let { "поставка #$it" },
+                            link.purchaseOrderNumber?.let { "заказ $it" } ?: link.purchaseOrderId?.let { "заказ #$it" },
+                            link.purchaseDeliveryNumber?.let { "поставка $it" } ?: link.purchaseDeliveryId?.let { "поставка #$it" },
                             link.sourceDocumentNo?.let { "документ $it" },
                             link.reason
                         ).joinToString(" · "),
@@ -1139,6 +1153,7 @@ private fun ReservationDetailDialog(
     busy: Boolean = false
 ) {
     val unit = nomenclature?.unit?.let { " $it" }.orEmpty()
+    val names = LocalWmsNames.current
     org.example.project.ui.theme.ErpDialog(
         title = "Резерв ${reservation.number}",
         glyph = ErpIconGlyph.Clock,
@@ -1159,8 +1174,11 @@ private fun ReservationDetailDialog(
             text = "Склад: " + (warehouse?.let { "${it.code} · ${it.name}" } ?: "#${reservation.warehouseId}"),
             style = MaterialTheme.typography.bodyMedium
         )
+        reservation.locationId?.let {
+            Text(text = "Ячейка: ${names.location(it)}", style = MaterialTheme.typography.bodyMedium)
+        }
         Text(
-            text = "Основание: ${reservation.reasonType.localizedName()}" +
+            text = "Основание: ${names.basis(reservation.reasonType, reservation.projectId, reservation.taskId)}" +
                 (reservation.reasonNote?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
             style = MaterialTheme.typography.bodyMedium
         )
@@ -1258,9 +1276,8 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
             val nom = nomById[m.nomenclatureId]
             (nom?.name?.lowercase()?.contains(q) == true) ||
                 (nom?.code?.lowercase()?.contains(q) == true) ||
-                m.nomenclatureId.toString().contains(q) ||
-                m.documentType.lowercase().contains(q) ||
-                m.documentId.toString().contains(q) ||
+                (m.documentNumber?.lowercase()?.contains(q) == true) ||
+                movementDocTypeLabel(m.documentType).lowercase().contains(q) ||
                 (m.lotNumber?.lowercase()?.contains(q) == true) ||
                 (m.serialNumber?.lowercase()?.contains(q) == true) ||
                 (m.fromLocationCode?.lowercase()?.contains(q) == true) ||
@@ -1327,7 +1344,7 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                 OutlinedTextField(
                     value = state.barcodeQuery,
                     onValueChange = viewModel::updateBarcodeQuery,
-                    label = { Text("Поиск номенклатуры по штрихкоду или артикулу") },
+                    label = { Text("Определить номенклатуру по штрихкоду или артикулу") },
                     leadingIcon = {
                         ErpIcon(
                             glyph = ErpIconGlyph.Search,
@@ -1338,7 +1355,7 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
-                OutlinedButton(onClick = viewModel::lookupBarcode) { Text("Найти") }
+                OutlinedButton(onClick = viewModel::lookupBarcode) { Text("Определить") }
                 OutlinedButton(onClick = viewModel::loadMovementsAndLowStock) {
                     ErpIcon(
                         glyph = ErpIconGlyph.Refresh,
@@ -1368,6 +1385,8 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
                         )
+                        // Результат поиска по штрихкоду сразу отбирает движения этой позиции в журнале.
+                        TextButton(onClick = { searchQuery = nom.code }) { Text("Показать в журнале") }
                         Surface(shape = RoundedCornerShape(999.dp), color = Brand.Teal.copy(alpha = 0.16f)) {
                             Text(
                                 text = nom.unit,
@@ -1417,7 +1436,8 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Поиск по номенклатуре, ячейке, документу...", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    label = { Text("Фильтр журнала", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    placeholder = { Text("номенклатура, ячейка, номер документа, партия", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1588,10 +1608,10 @@ private fun MovementLogCard(m: StockMovementDto, nomenclature: NomenclatureDto?)
     val scheme = MaterialTheme.colorScheme
     val (typeLabel, typeColor, signPrefix) = movementTypeMeta(m.type)
     val docLabel = movementDocTypeLabel(m.documentType)
-    // Сервер пишет служебное примечание вида «Receipt RCP-2026-00006»: номер документа
+    // Старые записи несут служебное примечание вида «Receipt RCP-2026-00006»: номер документа
     // переносим в подпись, а английский дубль не показываем.
     val serviceNote = m.note?.trim()?.let { Regex("^(Receipt|Issue|Transfer|Return|Write[- ]?off|Inventory|Initial stock) +([^ ]+)$", RegexOption.IGNORE_CASE).find(it) }
-    val docNumber = serviceNote?.groupValues?.get(2)
+    val docNumber = m.documentNumber ?: serviceNote?.groupValues?.get(2)
     val visibleNote = if (serviceNote != null) null else m.note
     val shape = RoundedCornerShape(8.dp)
 
@@ -1639,7 +1659,8 @@ private fun MovementLogCard(m: StockMovementDto, nomenclature: NomenclatureDto?)
                 Surface(shape = RoundedCornerShape(8.dp), color = typeColor.copy(alpha = 0.12f)) {
                     val unitSuffix = nomenclature?.unit?.let { " $it" } ?: ""
                     Text(
-                        text = "$signPrefix${ErpFormat.qty(m.quantity)}$unitSuffix",
+                        text = "$signPrefix${ErpFormat.qty(m.quantity)}$unitSuffix" +
+                            if (m.type == StockMovementType.TRANSFER) " · перемещение" else "",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = typeColor,
@@ -1654,16 +1675,17 @@ private fun MovementLogCard(m: StockMovementDto, nomenclature: NomenclatureDto?)
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // «→» рисуем, только когда есть и откуда, и куда; иначе просто подпись ячейки.
                 val routeText = when {
                     !m.fromLocationCode.isNullOrBlank() && !m.toLocationCode.isNullOrBlank() ->
-                        "${m.fromLocationCode} → ${m.toLocationCode}"
-                    !m.toLocationCode.isNullOrBlank() -> "→ ${m.toLocationCode}"
-                    !m.fromLocationCode.isNullOrBlank() -> "${m.fromLocationCode} →"
+                        "Ячейка: ${m.fromLocationCode} → ${m.toLocationCode}"
+                    !m.toLocationCode.isNullOrBlank() -> "В ячейку: ${m.toLocationCode}"
+                    !m.fromLocationCode.isNullOrBlank() -> "Из ячейки: ${m.fromLocationCode}"
                     else -> null
                 }
                 if (routeText != null) {
                     Text(
-                        text = "Ячейка: $routeText",
+                        text = routeText,
                         style = MaterialTheme.typography.labelSmall,
                         color = scheme.onSurface
                     )
@@ -1750,7 +1772,7 @@ private fun LowStockItemCard(item: LowStockItemDto) {
                 }
                 Surface(shape = RoundedCornerShape(999.dp), color = Brand.Rose.copy(alpha = 0.15f)) {
                     Text(
-                        text = "Дефицит ${item.deficitQty} ${item.unit}",
+                        text = "Дефицит ${ErpFormat.qty(item.deficitQty)} ${item.unit}",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = Brand.Rose,
@@ -1781,12 +1803,12 @@ private fun LowStockItemCard(item: LowStockItemDto) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Доступно: ${item.availableQty} ${item.unit}",
+                    text = "Доступно: ${ErpFormat.qty(item.availableQty)} ${item.unit}",
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurface
                 )
                 Text(
-                    text = "Мин.: ${item.minStock} • Страх.: ${item.safetyStock}",
+                    text = "Мин.: ${ErpFormat.qty(item.minStock)} • Страх.: ${ErpFormat.qty(item.safetyStock)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurfaceVariant
                 )
@@ -1796,13 +1818,13 @@ private fun LowStockItemCard(item: LowStockItemDto) {
 }
 
 private fun movementTypeMeta(type: StockMovementType): Triple<String, Color, String> = when (type) {
-    StockMovementType.RECEIPT -> Triple("Приход", Brand.Teal, "+")
-    StockMovementType.RETURN -> Triple("Возврат", Brand.Cyan, "+")
-    StockMovementType.ADJUSTMENT_IN -> Triple("Корр. +", Brand.Mint, "+")
-    StockMovementType.ISSUE -> Triple("Выдача", Brand.Amber, "-")
-    StockMovementType.WRITE_OFF -> Triple("Списание", Brand.Rose, "-")
-    StockMovementType.ADJUSTMENT_OUT -> Triple("Корр. -", Brand.Orange, "-")
-    StockMovementType.TRANSFER -> Triple("Перемещение", Brand.Indigo, "")
+    StockMovementType.RECEIPT -> Triple("Приход", Brand.Teal, type.signPrefix())
+    StockMovementType.RETURN -> Triple("Возврат", Brand.Cyan, type.signPrefix())
+    StockMovementType.ADJUSTMENT_IN -> Triple("Корр. +", Brand.Mint, type.signPrefix())
+    StockMovementType.ISSUE -> Triple("Выдача", Brand.Amber, type.signPrefix())
+    StockMovementType.WRITE_OFF -> Triple("Списание", Brand.Rose, type.signPrefix())
+    StockMovementType.ADJUSTMENT_OUT -> Triple("Корр. \u2212", Brand.Orange, type.signPrefix())
+    StockMovementType.TRANSFER -> Triple("Перемещение", Brand.Indigo, type.signPrefix())
 }
 
 private fun movementDocTypeLabel(docType: String): String = when (docType.uppercase()) {
@@ -1836,7 +1858,8 @@ private fun WmsTabContent(state: WmsUiState, viewModel: WmsViewModel) {
 
 private fun wmsTabCount(tab: WmsTab, state: WmsUiState): Int = when (tab) {
     WmsTab.WAREHOUSES -> state.warehouses.size
-    WmsTab.LOCATIONS -> state.locations.size
+    // Ячейки загружены только для одного склада из фильтра — общий счётчик был бы обманчивым.
+    WmsTab.LOCATIONS -> 0
     WmsTab.NOMENCLATURE -> state.nomenclature.size
     WmsTab.STOCK -> state.stock.size
     WmsTab.RECEIPTS -> state.receipts.size
@@ -1846,7 +1869,8 @@ private fun wmsTabCount(tab: WmsTab, state: WmsUiState): Int = when (tab) {
     WmsTab.RETURNS -> state.returns.size
     WmsTab.WRITE_OFFS -> state.writeOffs.size
     WmsTab.INVENTORIES -> state.inventories.size
-    WmsTab.MOVEMENTS -> state.lowStock.size
+    // Журнал считает записи движений; дефицит показывается на самой странице журнала и в остатках.
+    WmsTab.MOVEMENTS -> state.movements.size
 }
 
 private data class WmsNavEntry(
@@ -1875,7 +1899,8 @@ private fun WmsTopNav(
             WmsNavEntry(WmsTab.RESERVATIONS, ErpIconGlyph.Clock, Brand.Amber),
             WmsNavEntry(WmsTab.TRANSFERS, ErpIconGlyph.Send, Brand.Indigo),
             WmsNavEntry(WmsTab.RETURNS, ErpIconGlyph.Refresh, Brand.Violet),
-            WmsNavEntry(WmsTab.WRITE_OFFS, ErpIconGlyph.Alert, Brand.Rose),
+            // Значок «Закрыть» вместо предупреждения: списание — обычная операция, а не тревога.
+            WmsNavEntry(WmsTab.WRITE_OFFS, ErpIconGlyph.Close, Brand.Rose),
             WmsNavEntry(WmsTab.INVENTORIES, ErpIconGlyph.Documents, Brand.Blue)
         )
     }
@@ -1921,7 +1946,7 @@ private fun WmsTopNav(
 
             Box {
                 org.example.project.ui.theme.SoftButton(
-                    text = activeOperation?.let { "${it.tab.title} ▾" } ?: "Операции ▾",
+                    text = activeOperation?.let { "Операции: ${it.tab.title} ▾" } ?: "Операции ▾",
                     onClick = { opsExpanded = true },
                     tint = activeOperation?.accent ?: Brand.Slate,
                     leadingIcon = activeOperation?.glyph ?: ErpIconGlyph.Clock
@@ -1943,7 +1968,7 @@ private fun WmsTopNav(
 
             Box {
                 org.example.project.ui.theme.SoftButton(
-                    text = activeDict?.let { "${it.tab.title} ▾" } ?: "Справочники ▾",
+                    text = activeDict?.let { "Справочники: ${it.tab.title} ▾" } ?: "Справочники ▾",
                     onClick = { dictExpanded = true },
                     tint = activeDict?.accent ?: Brand.Slate,
                     leadingIcon = activeDict?.glyph ?: ErpIconGlyph.Warehouse

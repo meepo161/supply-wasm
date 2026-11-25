@@ -89,7 +89,11 @@ fun CreateLocationDialog(
     error: org.example.project.dto.ApiError?,
     onFormChange: (CreateLocationForm) -> Unit,
     onCreate: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Ячейки, из которых выбирают родителя; в списке остаются только ячейки выбранного склада. */
+    parentCandidates: List<StorageLocationDto> = emptyList(),
+    /** Смена склада в диалоге: сбрасывает родителя и подгружает ячейки нового склада. */
+    onWarehouseChange: ((Long) -> Unit)? = null
 ) {
     ErpDialog(
         title = "Новая ячейка",
@@ -111,7 +115,10 @@ fun CreateLocationDialog(
             WarehouseDropdown(
                 warehouses = warehouses,
                 selected = warehouses.find { it.id == form.warehouseId },
-                onSelect = { onFormChange(form.copy(warehouseId = it.id)) },
+                onSelect = {
+                    if (onWarehouseChange != null) onWarehouseChange(it.id)
+                    else onFormChange(form.copy(warehouseId = it.id, parentId = ""))
+                },
                 label = "Склад *",
                 modifier = Modifier.fillMaxWidth()
             )
@@ -145,12 +152,18 @@ fun CreateLocationDialog(
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(
-                value = form.parentId,
-                onValueChange = { onFormChange(form.copy(parentId = it)) },
-                label = { Text("Родительский ID") },
-                modifier = Modifier.weight(1f),
-                singleLine = true
+            // Родитель — зона или ячейка того же склада (N-09): выбор из списка вместо ручного ID.
+            val parentOptions = parentCandidates.filter { it.warehouseId == form.warehouseId }
+            LocationDropdown(
+                locations = parentOptions,
+                selected = parentOptions.find { it.id.toString() == form.parentId.trim() },
+                onSelect = { onFormChange(form.copy(parentId = it.id.toString())) },
+                label = "Родительская зона или ячейка",
+                emptyText = if (form.warehouseId == null) "Сначала выберите склад" else "На складе пока нет ячеек",
+                showWarehouse = false,
+                onClear = { onFormChange(form.copy(parentId = "")) },
+                clearText = "Без родителя",
+                modifier = Modifier.weight(1f)
             )
             OutlinedTextField(
                 value = form.capacity,
@@ -413,18 +426,29 @@ fun CreateReceiptDialog(
                 onValueChange = { onFormChange(form.copy(sourceDocumentNo = it)) },
                 label = {
                     Text(
-                        if (form.sourceType == ReceiptSourceType.INVOICE) {
-                            "Номер счёта-основания"
-                        } else {
-                            "Номер документа-основания"
+                        when {
+                            form.sourceType == ReceiptSourceType.INVOICE -> "Номер счёта-основания *"
+                            form.sourceType.requiresDocument() -> "Номер документа-основания *"
+                            else -> "Номер документа-основания"
                         }
                     )
                 },
-                placeholder = { Text("УПД-123 или СЧ-45") },
+                placeholder = {
+                    Text(
+                        when (form.sourceType) {
+                            ReceiptSourceType.PURCHASE_ORDER -> "Подставится из выбранного заказа"
+                            ReceiptSourceType.DELIVERY_NOTE -> "УПД-123"
+                            else -> "Номер документа"
+                        }
+                    )
+                },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
-                isError = form.sourceDocumentNo.isBlank() && form.sourceType != ReceiptSourceType.INITIAL_STOCK &&
-                    form.sourceType != ReceiptSourceType.OTHER
+                // Для заказа номер подставляется при выборе заказа, поэтому пустое поле не «ошибка»;
+                // для остальных красим поле только после ответа об ошибке.
+                isError = error.hasFieldError("sourceDocumentNo") ||
+                    (error != null && form.sourceDocumentNo.isBlank() && form.sourceType.requiresDocument() &&
+                        form.sourceType != ReceiptSourceType.PURCHASE_ORDER)
             )
             OutlinedTextField(
                 value = form.sourceRef,
@@ -447,6 +471,7 @@ fun CreateReceiptDialog(
                     selected = warehouses.find { it.id == form.warehouseId },
                     onSelect = { onWarehouseChange(it.id) },
                     label = "Склад *",
+                    isError = error.hasFieldError("warehouseId") || (error != null && form.warehouseId == null),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -524,6 +549,8 @@ fun CreateReceiptDialog(
         form.lines.forEachIndexed { index, line ->
             ReceiptLineRow(
                 line = line,
+                index = index,
+                error = error,
                 locations = locations,
                 nomenclature = nomenclature.filterNot { it.archived },
                 showPurchaseOrderLine = form.purchaseOrderId != null,
@@ -538,6 +565,8 @@ fun CreateReceiptDialog(
 @Composable
 private fun ReceiptLineRow(
     line: CreateReceiptLineForm,
+    index: Int,
+    error: org.example.project.dto.ApiError?,
     locations: List<StorageLocationDto>,
     nomenclature: List<NomenclatureDto>,
     showPurchaseOrderLine: Boolean,
@@ -569,6 +598,8 @@ private fun ReceiptLineRow(
                     selected = nomenclature.find { it.id == line.nomenclatureId },
                     onSelect = { onChange(line.copy(nomenclatureId = it.id)) },
                     label = "Номенклатура *",
+                    isError = error.hasFieldError("lines[$index].nomenclatureId") ||
+                        (error != null && line.nomenclatureId == null),
                     modifier = Modifier.weight(1.2f)
                 )
                 LocationDropdown(
@@ -576,6 +607,8 @@ private fun ReceiptLineRow(
                     selected = locations.find { it.id == line.locationId },
                     onSelect = { onChange(line.copy(locationId = it.id)) },
                     label = "Ячейка *",
+                    isError = error.hasFieldError("lines[$index].locationId") ||
+                        (error != null && line.locationId == null),
                     modifier = Modifier.weight(0.8f)
                 )
             }
@@ -607,6 +640,8 @@ private fun ReceiptLineRow(
                     value = line.expectedQuantity,
                     onValueChange = { onChange(line.copy(expectedQuantity = it)) },
                     label = { Text("Ожидаемое количество *") },
+                    isError = error.hasFieldError("lines[$index].expectedQuantity") ||
+                        (error != null && line.expectedQuantity.isBlank()),
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )
@@ -615,6 +650,7 @@ private fun ReceiptLineRow(
                     onValueChange = { onChange(line.copy(receivedQuantity = it)) },
                     label = { Text("Фактическое количество") },
                     supportingText = { Text("Пусто = ожидаемому") },
+                    isError = error.hasFieldError("lines[$index].receivedQuantity"),
                     modifier = Modifier.weight(1f),
                     singleLine = true
                 )
@@ -627,6 +663,8 @@ private fun ReceiptLineRow(
                     onValueChange = { onChange(line.copy(discrepancyReason = it)) },
                     label = { Text("Обоснование расхождения *") },
                     supportingText = { Text("Недопоставка или излишек без обоснования не принимается") },
+                    isError = error.hasFieldError("lines[$index].discrepancyReason") ||
+                        (error != null && line.discrepancyReason.isBlank()),
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )
@@ -638,6 +676,7 @@ private fun ReceiptLineRow(
                     label = {
                         Text(if (nomenclature.find { it.id == line.nomenclatureId }?.lotTracked == true) "Номер партии *" else "Номер партии")
                     },
+                    isError = error.hasFieldError("lines[$index].lotNumber"),
                     modifier = Modifier.weight(0.8f),
                     singleLine = true
                 )
