@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +86,7 @@ fun AssistantHomeCard(
     onSend: (String?) -> Unit,
     onConfirmDraft: (String) -> Unit,
     onDismissDraft: (String) -> Unit,
+    onNavigateDestination: (String) -> Unit = {},
     onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -245,7 +247,8 @@ fun AssistantHomeCard(
                                 message = msg,
                                 isLoading = isLoading,
                                 onConfirmDraft = onConfirmDraft,
-                                onDismissDraft = onDismissDraft
+                                onDismissDraft = onDismissDraft,
+                                onNavigateDestination = onNavigateDestination
                             )
                         }
                     }
@@ -444,7 +447,8 @@ private fun AssistantMessageRow(
     message: AssistantMessageDto,
     isLoading: Boolean,
     onConfirmDraft: (String) -> Unit,
-    onDismissDraft: (String) -> Unit
+    onDismissDraft: (String) -> Unit,
+    onNavigateDestination: (String) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     @Suppress("DEPRECATION")
@@ -466,6 +470,13 @@ private fun AssistantMessageRow(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             AssistantMarkdown(markdown = message.content)
+
+            message.navigationTarget?.let { target ->
+                SoftButton(
+                    text = "${localizeDestinationLabel(target)} →",
+                    onClick = { onNavigateDestination(target) }
+                )
+            }
 
             message.draft?.let { draft ->
                 DraftConfirmationCard(
@@ -831,6 +842,16 @@ private fun DraftConfirmationCard(
             }
         }
     }
+}
+
+private fun localizeDestinationLabel(target: String): String = when (target) {
+    "DEMANDS" -> "Открыть «Потребности»"
+    "TASKS" -> "Открыть «Задачи»"
+    "PROJECTS" -> "Открыть «Проекты»"
+    "WMS" -> "Открыть «Склад»"
+    "SUPPLIERS" -> "Открыть «Поставщики»"
+    "PURCHASE_ORDERS" -> "Открыть «Заказы поставщикам»"
+    else -> "Открыть раздел"
 }
 
 private fun localizeToolName(name: String): String = when (name) {

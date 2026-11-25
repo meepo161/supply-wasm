@@ -589,7 +589,7 @@ enum class ErpIconGlyph {
     Home, Tasks, Projects, Warehouse, Layers, Cart, Documents, Bell, Shield, User,
     Search, Plus, Refresh, Logout, ChevronRight, ChevronLeft, Moon, Sun,
     CheckCircle, Clock, Alert, Sparkle, Menu, Filter, Send, Close, Grid, TrendUp,
-    MoreHoriz, Attachment
+    MoreHoriz, Attachment, Star
 }
 
 @Composable
@@ -910,6 +910,22 @@ private fun DrawScope.drawGlyph(glyph: ErpIconGlyph, color: Color, sw: Float) {
                 cubicTo(0.18f * w, 0.64f * h, 0.32f * w, 0.8f * h, 0.46f * w, 0.66f * h)
                 lineTo(0.78f * w, 0.34f * h)
                 cubicTo(0.92f * w, 0.2f * h, 0.76f * w, 0.04f * h, 0.62f * w, 0.18f * h)
+            }
+            drawPath(path, color, style = stroke)
+        }
+        ErpIconGlyph.Star -> {
+            val path = Path().apply {
+                moveTo(0.5f * w, 0.12f * h)
+                lineTo(0.61f * w, 0.36f * h)
+                lineTo(0.88f * w, 0.38f * h)
+                lineTo(0.68f * w, 0.57f * h)
+                lineTo(0.74f * w, 0.84f * h)
+                lineTo(0.5f * w, 0.7f * h)
+                lineTo(0.26f * w, 0.84f * h)
+                lineTo(0.32f * w, 0.57f * h)
+                lineTo(0.12f * w, 0.38f * h)
+                lineTo(0.39f * w, 0.36f * h)
+                close()
             }
             drawPath(path, color, style = stroke)
         }

@@ -483,21 +483,27 @@ fun CreateReceiptDialog(
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+        var showExtraFields by remember { mutableStateOf(form.expectedAt.isNotBlank() || form.note.isNotBlank()) }
+        TextButton(onClick = { showExtraFields = !showExtraFields }) {
+            Text(if (showExtraFields) "Скрыть дополнительные поля" else "Дополнительно (дата ожидания, примечание)")
+        }
+        if (showExtraFields) {
             org.example.project.ui.theme.ErpDateField(
                 value = form.expectedAt,
                 onValueChange = { onFormChange(form.copy(expectedAt = it)) },
-                label = "Ожидается",
+                label = "Ожидается (необязательно)",
                 format = org.example.project.ui.theme.DateValueFormat.START_OF_DAY_UTC,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = form.note,
+                onValueChange = { onFormChange(form.copy(note = it)) },
+                label = { Text("Примечание") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
             )
         }
-        OutlinedTextField(
-            value = form.note,
-            onValueChange = { onFormChange(form.copy(note = it)) },
-            label = { Text("Примечание") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 2
-        )
 
         val orderLines = rememberPurchaseOrderLines(form.purchaseOrderId)
         val notAccepted = rememberOrderLinesNotAccepted(form.purchaseOrderId)

@@ -623,6 +623,12 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                     style = MaterialTheme.typography.bodySmall,
                     color = Brand.Amber
                 )
+            } else {
+                Text(
+                    text = "Оставьте только те позиции, которые поставляет этот поставщик (лишние удалите кнопкой ✕):",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             form.lines.forEachIndexed { index, line ->
                 Row(
@@ -660,6 +666,11 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                         label = "НДС %",
                         modifier = Modifier.weight(0.5f)
                     )
+                    if (form.lines.size > 1) {
+                        TextButton(onClick = { viewModel.removeOfferLine(index) }) {
+                            Text("✕", color = Brand.Rose)
+                        }
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

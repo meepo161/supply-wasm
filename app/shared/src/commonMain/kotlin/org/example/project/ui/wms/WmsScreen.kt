@@ -964,7 +964,7 @@ private fun ReceiptDetailCard(
                         onClick = onPost,
                         // Несохранённый факт приёмки проводить нельзя: сервер проведёт старые значения.
                         enabled = receipt.lines.none { it.locationId == null } && !acceptanceDirty
-                    ) { Text("Провести") }
+                    ) { Text("Принять на склад") }
                 }
                 if (receipt.status == ReceiptStatus.POSTED) {
                     Button(onClick = {
@@ -983,7 +983,7 @@ private fun ReceiptDetailCard(
                 receipt.lines.any { it.locationId == null }
             ) {
                 Text(
-                    "Провести можно после сохранения факта приёмки с ячейкой для каждой строки.",
+                    "Выберите ячейку для каждой строки, сохраните факт приёмки и нажмите «Принять на склад».",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

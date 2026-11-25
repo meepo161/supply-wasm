@@ -335,6 +335,19 @@ class AssistantService(
             actionsDone.joinToString("\n")
         }
 
+        val navigationTarget = when {
+            createdDemandNumber != null -> "DEMANDS"
+            draft.actions.any { it.kind == AssistantActionKind.CREATE_TASK } -> "TASKS"
+            draft.actions.any { it.kind == AssistantActionKind.CREATE_PROJECT } -> "PROJECTS"
+            createdNomenclatureCount > 0 || draft.actions.any {
+                it.kind == AssistantActionKind.CREATE_WAREHOUSE ||
+                    it.kind == AssistantActionKind.CREATE_LOCATION ||
+                    it.kind == AssistantActionKind.CREATE_RESERVATION
+            } -> "WMS"
+            createdSupplierId != null -> "SUPPLIERS"
+            else -> null
+        }
+
         request.conversationId?.let { convId ->
             conversationRepository.updateDraftExecuted(
                 convId,
@@ -344,7 +357,11 @@ class AssistantService(
             conversationRepository.appendMessage(
                 convId,
                 currentUser.userId,
-                AssistantMessageDto(role = AssistantRole.ASSISTANT, content = "Готово:\n$summary")
+                AssistantMessageDto(
+                    role = AssistantRole.ASSISTANT,
+                    content = "Готово:\n$summary",
+                    navigationTarget = navigationTarget
+                )
             )
         }
 
@@ -352,7 +369,8 @@ class AssistantService(
             summary = summary,
             createdSupplierId = createdSupplierId,
             createdNomenclatureCount = createdNomenclatureCount,
-            createdDemandNumber = createdDemandNumber
+            createdDemandNumber = createdDemandNumber,
+            navigationTarget = navigationTarget
         )
     }
 

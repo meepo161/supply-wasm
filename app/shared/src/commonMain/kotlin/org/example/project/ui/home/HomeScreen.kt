@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,6 +75,7 @@ fun HomeScreen(
     onOpenConversation: (Long) -> Unit,
     onOpenProjectChat: (Long) -> Unit,
     onOpenNotifications: () -> Unit,
+    onNavigateDestination: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -132,6 +138,13 @@ fun HomeScreen(
 
             state.operationError?.let { ErrorMessageCard(error = it) }
 
+            if (state.actionQueue.isNotEmpty()) {
+                ActionQueueSection(
+                    items = state.actionQueue,
+                    onNavigate = onNavigateDestination
+                )
+            }
+
             MetricRow(
                 metrics = listOf(
                     Metric("Просрочено", overdue.size, ErpIconGlyph.Alert, Gradients.Sunset, Brand.Rose),
@@ -161,6 +174,7 @@ fun HomeScreen(
                 onSend = viewModel::sendAssistantMessage,
                 onConfirmDraft = viewModel::confirmAssistantDraft,
                 onDismissDraft = viewModel::dismissAssistantDraft,
+                onNavigateDestination = onNavigateDestination,
                 onClear = viewModel::clearAssistantChat
             )
 
@@ -311,6 +325,90 @@ fun HomeScreen(
     }
 }
 
+/* ---------------------------------- Очередь действий ----------------------------------- */
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ActionQueueSection(
+    items: List<HomeActionQueueItem>,
+    onNavigate: (String) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 16.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconBadge(glyph = ErpIconGlyph.Sparkle, gradient = Gradients.Primary, size = 28.dp)
+                Text(
+                    text = "Что мне нужно сделать сейчас",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onSurface
+                )
+            }
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val itemModifier = if (maxWidth < 640.dp) {
+                    Modifier.fillMaxWidth()
+                } else {
+                    Modifier.widthIn(min = 260.dp, max = 420.dp)
+                }
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items.forEach { item ->
+                        val interaction = remember { MutableInteractionSource() }
+                        val hovered by interaction.collectIsHoveredAsState()
+                        val shape = RoundedCornerShape(8.dp)
+                        Row(
+                            modifier = itemModifier
+                                .clip(shape)
+                                .background(
+                                    if (hovered) scheme.primaryContainer.copy(alpha = 0.45f)
+                                    else scheme.surfaceContainerLow
+                                )
+                                .border(
+                                    1.dp,
+                                    if (hovered) scheme.primary else scheme.outlineVariant,
+                                    shape
+                                )
+                                .erpInteractive(interaction, shape)
+                                .clickable(interactionSource = interaction, indication = null) {
+                                    onNavigate(item.destination)
+                                }
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = actionQueueContentDescription(item)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            PillBadge(text = item.count.toString(), accent = scheme.primary)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.title,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = scheme.onSurface
+                                )
+                                Text(
+                                    text = item.subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /* ---------------------------------- Hero ----------------------------------- */
 
 /**
@@ -347,18 +445,7 @@ private fun HeroCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = buildString {
-                        append(userName)
-                        append(" · ")
-                        append(
-                            when {
-                                overdueCount > 0 -> "просрочено $overdueCount, открыто $openCount, на приёмке $reviewCount"
-                                openCount > 0 -> "открыто $openCount, на приёмке $reviewCount, просрочек нет"
-                                companyOverdueCount > 0 && !companyScope -> "у вас просрочек нет, по компании просрочено $companyOverdueCount"
-                                else -> if (companyScope) "по компании просроченных задач нет" else "просроченных задач нет"
-                            }
-                        )
-                    },
+                    text = "$userName · ${homeTaskSummary(companyScope, companyOverdueCount, openCount, overdueCount, reviewCount)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (overdueCount > 0) readableAccent(Brand.Rose) else scheme.onSurfaceVariant,
                     maxLines = 2,

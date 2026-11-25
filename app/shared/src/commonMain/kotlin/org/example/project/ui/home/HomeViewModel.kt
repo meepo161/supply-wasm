@@ -11,8 +11,11 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import org.example.project.data.ApiResult
 import org.example.project.data.AssistantRepository
 import org.example.project.data.ConversationRepository
+import org.example.project.data.DemandRepository
 import org.example.project.data.NotificationRepository
+import org.example.project.data.PurchaseOrderRepository
 import org.example.project.data.TaskRepository
+import org.example.project.data.WmsRepository
 import org.example.project.data.pickAttachmentFile
 import org.example.project.dto.ApiError
 import org.example.project.dto.AssistantAttachmentDto
@@ -22,7 +25,10 @@ import org.example.project.dto.AssistantMessageDto
 import org.example.project.dto.AssistantRole
 import org.example.project.dto.AssistantUploadDto
 import org.example.project.dto.ConversationKind
+import org.example.project.dto.DemandStatus
 import org.example.project.dto.NotificationDto
+import org.example.project.dto.PurchaseOrderStatus
+import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.TaskDto
 import org.example.project.dto.UserDto
 
@@ -31,7 +37,10 @@ class HomeViewModel(
     private val notificationRepository: NotificationRepository,
     private val conversationRepository: ConversationRepository,
     val currentUser: UserDto,
-    private val assistantRepository: AssistantRepository? = null
+    private val assistantRepository: AssistantRepository? = null,
+    private val demandRepository: DemandRepository? = null,
+    private val purchaseOrderRepository: PurchaseOrderRepository? = null,
+    private val wmsRepository: WmsRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -42,6 +51,7 @@ class HomeViewModel(
     init {
         loadTasks()
         loadNotifications()
+        loadActionQueue()
         loadAssistantStatus()
         loadAssistantConversations(autoSelectLatest = true)
     }
@@ -54,8 +64,97 @@ class HomeViewModel(
         _uiState.value = _uiState.value.copy(currentDate = currentIsoDate())
         loadTasks()
         loadNotifications()
+        loadActionQueue()
         loadAssistantStatus()
         loadAssistantConversations(autoSelectLatest = false)
+    }
+
+    fun loadActionQueue() {
+        viewModelScope.launch {
+            val items = mutableListOf<HomeActionQueueItem>()
+
+            if (hasPerm("demands", "read") || hasPerm("demands", "read_any")) {
+                val res = demandRepository?.listDemands()
+                if (res is ApiResult.Success) {
+                    val submitted = res.data.count { it.status == DemandStatus.PENDING_APPROVAL }
+                    if (submitted > 0) {
+                        items.add(
+                            HomeActionQueueItem(
+                                title = "Потребности на утверждении",
+                                subtitle = "Откройте раздел и утвердите или верните заявку",
+                                count = submitted,
+                                destination = "DEMANDS"
+                            )
+                        )
+                    }
+                    val approved = res.data.count { it.status == DemandStatus.APPROVED }
+                    if (approved > 0) {
+                        items.add(
+                            HomeActionQueueItem(
+                                title = "Утверждённые потребности",
+                                subtitle = "Снабжение: нужно собрать предложения и оформить заказ",
+                                count = approved,
+                                destination = "DEMANDS"
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (hasPerm("suppliers", "read") || hasPerm("purchase_orders", "read")) {
+                val res = purchaseOrderRepository?.listOrders(null, null, null)
+                if (res is ApiResult.Success) {
+                    val pending = res.data.count { it.status == PurchaseOrderStatus.PENDING_APPROVAL }
+                    if (pending > 0) {
+                        items.add(
+                            HomeActionQueueItem(
+                                title = "Заказы на согласовании",
+                                subtitle = "Требуют согласования перед отправкой поставщику",
+                                count = pending,
+                                destination = "PURCHASE_ORDERS"
+                            )
+                        )
+                    }
+                    val approved = res.data.count { it.status == PurchaseOrderStatus.APPROVED }
+                    if (approved > 0) {
+                        items.add(
+                            HomeActionQueueItem(
+                                title = "Согласованные заказы",
+                                subtitle = "Отправьте заказ поставщику и загрузите счёт",
+                                count = approved,
+                                destination = "PURCHASE_ORDERS"
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (hasPerm("wms", "read")) {
+                val res = wmsRepository?.listReceipts(null, null)
+                if (res is ApiResult.Success) {
+                    val pendingReceipts = res.data.count {
+                        it.status == ReceiptStatus.DRAFT || it.status == ReceiptStatus.IN_PROGRESS
+                    }
+                    if (pendingReceipts > 0) {
+                        items.add(
+                            HomeActionQueueItem(
+                                title = "Приёмки на складе",
+                                subtitle = "Укажите ячейки, количество и нажмите «Принять на склад»",
+                                count = pendingReceipts,
+                                destination = "WMS"
+                            )
+                        )
+                    }
+                }
+            }
+
+            _uiState.value = _uiState.value.copy(actionQueue = items)
+        }
+    }
+
+    private fun hasPerm(resource: String, action: String): Boolean {
+        val perms = currentUser.permissions
+        return "*:*" in perms || "$resource:*" in perms || "$resource:$action" in perms
     }
 
     fun loadAssistantConversations(autoSelectLatest: Boolean = false) {
@@ -267,7 +366,8 @@ class HomeViewModel(
                         } else msg
                     } + AssistantMessageDto(
                         role = AssistantRole.ASSISTANT,
-                        content = "Готово:\n${result.data.summary}"
+                        content = "Готово:\n${result.data.summary}",
+                        navigationTarget = result.data.navigationTarget
                     )
                     _uiState.value = _uiState.value.copy(
                         assistantMessages = updatedMessages,
@@ -275,6 +375,7 @@ class HomeViewModel(
                         assistantError = null
                     )
                     loadTasks()
+                    loadActionQueue()
                 }
                 is ApiResult.Error -> {
                     _uiState.value = _uiState.value.copy(

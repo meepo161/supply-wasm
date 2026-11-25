@@ -90,7 +90,7 @@ class HomePresentationTest {
 **Step 2: Запустить тест и подтвердить красный результат**
 
 ```bash
-./gradlew.bat --no-daemon :app:shared:wasmJsTest --tests "org.example.project.HomePresentationTest"
+./gradlew.bat --no-daemon :app:shared:wasmJsBrowserTest --tests "org.example.project.HomePresentationTest"
 ```
 
 Expected: компиляция падает, потому что функции ещё не определены.
@@ -126,9 +126,9 @@ internal fun actionQueueContentDescription(item: HomeActionQueueItem): String =
 Run: команда из Step 2.  
 Expected: `BUILD SUCCESSFUL`, три новых теста проходят.
 
-**Step 5: Commit**
+**Step 5: Сохранность исходных изменений**
 
-Закоммитить только новые файлы и план; существующие изменения пользователя в `HomeScreen.kt` не включать в отдельный коммит без явного запроса.
+Оставить производственный код и тесты незакоммиченными вместе с исходными изменениями пользователя: новый helper зависит от `HomeActionQueueItem`, поэтому изолированный коммит только новых файлов был бы нерабочим.
 
 ### Task 3: Очередь действий — плотность, адаптивность и клавиатура
 

@@ -81,7 +81,8 @@ data class AssistantMessageDto(
     val content: String,
     val toolUsed: String? = null,
     val attachments: List<AssistantAttachmentDto> = emptyList(),
-    val draft: AssistantDraftDto? = null
+    val draft: AssistantDraftDto? = null,
+    val navigationTarget: String? = null
 )
 
 @Serializable
@@ -126,7 +127,8 @@ data class AssistantConfirmDraftResponseDto(
     val summary: String,
     val createdSupplierId: Long? = null,
     val createdNomenclatureCount: Int = 0,
-    val createdDemandNumber: String? = null
+    val createdDemandNumber: String? = null,
+    val navigationTarget: String? = null
 )
 
 @Serializable

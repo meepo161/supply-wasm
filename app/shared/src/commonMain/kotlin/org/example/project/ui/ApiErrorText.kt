@@ -34,6 +34,7 @@ fun ApiError.userText(): String {
     if (message.hasCyrillic()) return message
     return when (code) {
         "FORBIDDEN" -> missingPermission()?.let { "Для этого действия нужно право «${it.first}» (${it.second}). Обратитесь к администратору." }
+            ?: knownMessage()
             ?: "У вас нет прав на это действие. Обратитесь к администратору."
         "UNAUTHORIZED" -> knownMessage() ?: "Сессия истекла или вход не выполнен. Войдите снова."
         "NOT_FOUND" -> "Объект удалён или у вас нет к нему доступа. Обновите список."
@@ -100,7 +101,8 @@ private val fieldReasons = mapOf(
     "not_found" to "не найдено", "no_file" to "не загружен файл", "not_invoice" to "документ не является счётом",
     "scale" to "слишком много знаков после запятой", "range" to "вне допустимого диапазона",
     "format" to "неверный формат", "not_positive" to "должно быть больше нуля",
-    "not_quarantine" to "выберите ячейку карантина", "duplicate" to "уже существует"
+    "not_quarantine" to "выберите ячейку карантина", "duplicate" to "уже существует",
+    "exceeds_deficit" to "превышает открытый дефицит потребности"
 )
 
 /** Подписи полей вместо технических имён из ответа сервера. */
@@ -111,7 +113,8 @@ private val fieldLabels = mapOf(
     "quarantineLocationId" to "Карантинная ячейка", "locationId" to "Ячейка", "warehouseId" to "Склад",
     "nomenclatureId" to "Номенклатура", "inn" to "ИНН", "kpp" to "КПП", "ogrn" to "ОГРН", "code" to "Код",
     "name" to "Наименование", "currency" to "Валюта", "validUntil" to "Действует до", "reason" to "Причина",
-    "requiredDate" to "Требуемая дата", "lotNumber" to "Партия", "parentId" to "Родительская ячейка"
+    "requiredDate" to "Требуемая дата", "lotNumber" to "Партия", "parentId" to "Родительская ячейка",
+    "unblockResponsibleId" to "Ответственный за снятие блокировки"
 )
 
 private fun ApiError.fieldHints(): List<String> =
@@ -209,5 +212,9 @@ private val knownPhrases: List<Pair<String, String>> = listOf(
     "Offer documents are not confirmed" to "Комплектность документов предложения не подтверждена.",
     "Selected offer is locked" to "Выбранное предложение заблокировано: сначала отмените выбор.",
     "Offer is not selected" to "Предложение не выбрано.",
-    "Idempotency key was already used" to "Запрос с таким ключом уже выполнялся с другими данными. Повторите действие заново."
+    "Idempotency key was already used" to "Запрос с таким ключом уже выполнялся с другими данными. Повторите действие заново.",
+    "Only project member or owner can create project task" to "Создавать проектные задачи могут только руководитель или участники проекта.",
+    "Unblock responsible is required" to "Укажите ответственного за снятие блокировки.",
+    "Offered quantity exceeds the open deficit" to "Предложенное количество превышает открытый дефицит по строке потребности.",
+    "already produced purchase order" to "По этому предложению уже оформлен заказ поставщику."
 )

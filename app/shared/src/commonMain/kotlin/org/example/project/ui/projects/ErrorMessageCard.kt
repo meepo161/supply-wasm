@@ -66,12 +66,14 @@ fun ErrorMessageCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onErrorContainer
                 )
-                error.technicalDetail()?.let { detail ->
-                    Text(
-                        text = "Подробности: ${error.code} · $detail",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onErrorContainer.copy(alpha = 0.6f)
-                    )
+                if (error.code == "INTERNAL_ERROR" || error.code == "UNKNOWN") {
+                    error.technicalDetail()?.let { detail ->
+                        Text(
+                            text = "Подробности: ${error.code} · $detail",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onErrorContainer.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }
