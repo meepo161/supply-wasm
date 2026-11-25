@@ -67,6 +67,16 @@ class WmsIssueRoutesTest {
         val actions = reservationAfter.history.map { it.action }
         assertTrue(ReservationHistoryAction.ISSUED in actions)
         assertTrue(ReservationHistoryAction.FULFILLED in actions)
+
+        // Журнал движений отдаёт номер документа вместо одного лишь id (W-10).
+        val movements = client.get("/api/wms/movements?nomenclatureId=${nomenclature.id}")
+            .bodyAs<ApiResponse<List<StockMovementDto>>>().data!!
+        val issueMovement = movements.first { it.documentType == "ISSUE" }
+        assertEquals(confirmed.number, issueMovement.documentNumber)
+
+        // Список выдач содержит строки: по ним таблица показывает номенклатуру.
+        val listed = client.get("/api/wms/issues").bodyAs<ApiResponse<List<IssueOrderDto>>>().data!!
+        assertEquals(1, listed.first { it.id == confirmed.id }.lines.size)
     }
 
     @Test

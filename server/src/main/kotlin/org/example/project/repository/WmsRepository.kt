@@ -570,6 +570,33 @@ class WmsRepository(private val dsl: DSLContext) {
 
     // Журнал движений (append-only)
 
+    /**
+     * Номера документов-оснований движений: (тип документа, id) → номер.
+     * Типы без таблицы с номером (например, начальные остатки) в результат не попадают.
+     */
+    fun documentNumbers(refs: Collection<Pair<String, Long>>): Map<Pair<String, Long>, String> {
+        val tables = mapOf(
+            "RECEIPT" to "receipts",
+            "ISSUE" to "issue_orders",
+            "TRANSFER" to "transfers",
+            "RETURN" to "return_orders",
+            "WRITE_OFF" to "write_off_orders",
+            "INVENTORY" to "inventory_orders"
+        )
+        val idField = org.jooq.impl.DSL.field(org.jooq.impl.DSL.name("id"), Long::class.java)
+        val numberField = org.jooq.impl.DSL.field(org.jooq.impl.DSL.name("number"), String::class.java)
+        val result = mutableMapOf<Pair<String, Long>, String>()
+        refs.groupBy({ it.first.uppercase() }, { it.second }).forEach { (type, ids) ->
+            val table = tables[type] ?: return@forEach
+            dsl.select(idField, numberField)
+                .from(org.jooq.impl.DSL.table(org.jooq.impl.DSL.name(table)))
+                .where(idField.`in`(ids.distinct()))
+                .fetch()
+                .forEach { row -> result[type to row.get(idField)!!] = row.get(numberField)!! }
+        }
+        return result
+    }
+
     fun insertMovement(
         movementType: String,
         nomenclatureId: Long,

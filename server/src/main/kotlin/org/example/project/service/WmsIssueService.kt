@@ -107,7 +107,14 @@ class WmsIssueService(
 
     fun listIssues(warehouseId: Long?, status: IssueStatus?, currentUser: CurrentUser): List<IssueOrderDto> {
         currentUser.requirePermission("wms", "read")
-        return issueRepository.listIssues(warehouseId, status?.name).map { it.toDto(emptyList()) }
+        // В списке нужны строки (номенклатура выдачи); отборы ячеек подгружает карточка документа.
+        return issueRepository.listIssues(warehouseId, status?.name).map { order ->
+            order.toDto(
+                issueRepository.listIssueLines(order.id).map { line ->
+                    line to emptyList<org.example.project.generated.jooq.tables.records.IssuePicksRecord>()
+                }
+            )
+        }
     }
 
     fun getIssue(id: Long, currentUser: CurrentUser): IssueOrderDto {
