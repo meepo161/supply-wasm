@@ -114,8 +114,21 @@ class WmsViewModel(
         _uiState.value = _uiState.value.copy(operationError = null)
     }
 
+    /** Идёт команда проведения/выдачи: повторный клик по кнопке игнорируется. */
+    private var documentCommandInFlight = false
+
     fun showDialog(dialog: WmsDialog) {
         _uiState.value = _uiState.value.copy(activeDialog = dialog, operationError = null)
+        if (dialog == WmsDialog.CreateLocation) {
+            // Склад подставляется из фильтра страницы «Ячейки» (N-09).
+            val form = _uiState.value.createLocationForm
+            val filterWarehouse = _uiState.value.locationFilterWarehouseId
+            if (filterWarehouse != null && form.warehouseId != filterWarehouse) {
+                _uiState.value = _uiState.value.copy(
+                    createLocationForm = form.copy(warehouseId = filterWarehouse, parentId = "")
+                )
+            }
+        }
         // Формы выбирают документы-основания из списков, поэтому подгружаем их при открытии.
         when (dialog) {
             WmsDialog.CreateReturn -> if (_uiState.value.issues.isEmpty()) loadIssues()
@@ -1210,18 +1223,25 @@ class WmsViewModel(
         action: suspend (Long, Long) -> ApiResult<IssueOrderDto>
     ) {
         val issue = _uiState.value.selectedIssue ?: return
+        // Двойной клик не должен отправить команду дважды: второй запрос со старой версией даёт ложную ошибку.
+        if (documentCommandInFlight) return
+        documentCommandInFlight = true
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
-            when (val result = action(issue.id, issue.version)) {
-                is ApiResult.Success -> {
-                    _uiState.value = _uiState.value.copy(selectedIssue = result.data, isLoading = false)
-                    loadIssues()
-                    loadStock()
+            try {
+                when (val result = action(issue.id, issue.version)) {
+                    is ApiResult.Success -> {
+                        _uiState.value = _uiState.value.copy(selectedIssue = result.data, isLoading = false)
+                        loadIssues()
+                        loadStock()
+                    }
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        operationError = result.error
+                    )
                 }
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    operationError = result.error
-                )
+            } finally {
+                documentCommandInFlight = false
             }
         }
     }
@@ -1643,21 +1663,27 @@ class WmsViewModel(
 
     fun postSelectedWriteOff() {
         val writeOff = _uiState.value.selectedWriteOff ?: return
+        if (documentCommandInFlight) return
+        documentCommandInFlight = true
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
-            when (val result = repository.postWriteOff(
-                writeOff.id,
-                WriteOffActionRequest(writeOff.version, newIdempotencyKey())
-            )) {
-                is ApiResult.Success -> {
-                    _uiState.value = _uiState.value.copy(selectedWriteOff = result.data, isLoading = false)
-                    loadWriteOffs()
-                    loadStock()
+            try {
+                when (val result = repository.postWriteOff(
+                    writeOff.id,
+                    WriteOffActionRequest(writeOff.version, newIdempotencyKey())
+                )) {
+                    is ApiResult.Success -> {
+                        _uiState.value = _uiState.value.copy(selectedWriteOff = result.data, isLoading = false)
+                        loadWriteOffs()
+                        loadStock()
+                    }
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        operationError = result.error
+                    )
                 }
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    operationError = result.error
-                )
+            } finally {
+                documentCommandInFlight = false
             }
         }
     }
@@ -1958,6 +1984,14 @@ class WmsViewModel(
 
     fun updateCreateLocationForm(form: CreateLocationForm) {
         _uiState.value = _uiState.value.copy(createLocationForm = form)
+    }
+
+    /** Смена склада в диалоге новой ячейки: родитель сбрасывается, ячейки нового склада подгружаются. */
+    fun onCreateLocationWarehouseChanged(warehouseId: Long) {
+        _uiState.value = _uiState.value.copy(
+            createLocationForm = _uiState.value.createLocationForm.copy(warehouseId = warehouseId, parentId = "")
+        )
+        updateLocationFilterWarehouse(warehouseId)
     }
 
     fun updateCreateNomenclatureForm(form: CreateNomenclatureForm) {

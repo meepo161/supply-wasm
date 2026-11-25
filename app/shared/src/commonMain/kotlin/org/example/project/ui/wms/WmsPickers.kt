@@ -266,8 +266,28 @@ internal class WmsNames(
     private val locations: List<org.example.project.dto.StorageLocationDto> = emptyList(),
     private val nomenclature: List<org.example.project.dto.NomenclatureDto> = emptyList(),
     private val users: List<UserOptionDto> = emptyList(),
-    private val issues: List<org.example.project.dto.IssueOrderDto> = emptyList()
+    private val issues: List<org.example.project.dto.IssueOrderDto> = emptyList(),
+    private val projects: List<ProjectDto> = emptyList(),
+    private val tasks: List<TaskDto> = emptyList()
 ) {
+    /** Проект по ID: «PRJ-001 · Название» или «Проект #id», пока список не загрузился. */
+    fun project(id: Long?): String? = id?.let { projectId ->
+        projects.find { it.id == projectId }?.let { "${it.number} · ${it.name}" } ?: "проект #$projectId"
+    }
+
+    fun task(id: Long?): String? = id?.let { taskId ->
+        tasks.find { it.id == taskId }?.let { "${it.number} · ${it.title}" } ?: "задача #$taskId"
+    }
+
+    /** Основание документа: тип плюс конкретные проект и задача, если они указаны. */
+    fun basis(reasonType: org.example.project.dto.ReservationReasonType, projectId: Long?, taskId: Long?): String {
+        val parts = listOfNotNull(
+            project(projectId)?.let { "проект $it" },
+            task(taskId)?.let { "задача $it" }
+        )
+        return if (parts.isEmpty()) reasonType.localizedName() else "${reasonType.localizedName()}: ${parts.joinToString(", ")}"
+    }
+
     fun issue(id: Long?): String = when (id) {
         null -> "не указана"
         else -> issues.find { it.id == id }?.number ?: "Выдача #$id"
@@ -277,6 +297,10 @@ internal class WmsNames(
         null -> "не указан"
         else -> warehouses.find { it.id == id }?.let { "${it.code} · ${it.name}" } ?: "Склад #$id"
     }
+
+    /** Склад по ID или null, если названия ещё нет (подпись тогда не показываем, чтобы не выводить «Склад #3»). */
+    fun warehouseOrNull(id: Long?): String? =
+        warehouses.find { it.id == id }?.let { "${it.code} · ${it.name}" }
 
     fun location(id: Long?): String = when (id) {
         null -> "не указана"
@@ -314,7 +338,15 @@ internal fun rememberWmsNames(
     val wmsRepository: org.example.project.data.WmsRepository = koinInject()
     val userRepository: UserRepository = koinInject()
     var locations by remember { mutableStateOf<List<org.example.project.dto.StorageLocationDto>>(emptyList()) }
+    val projectRepository: ProjectRepository = koinInject()
+    val taskRepository: TaskRepository = koinInject()
     var users by remember { mutableStateOf<List<UserOptionDto>>(emptyList()) }
+    var projects by remember { mutableStateOf<List<ProjectDto>>(emptyList()) }
+    var tasks by remember { mutableStateOf<List<TaskDto>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        projects = (projectRepository.list() as? ApiResult.Success)?.data.orEmpty()
+        tasks = (taskRepository.list() as? ApiResult.Success)?.data.orEmpty()
+    }
     LaunchedEffect(warehouses.map { it.id }) {
         locations = warehouses.flatMap { warehouse ->
             (wmsRepository.listLocations(warehouse.id) as? ApiResult.Success)?.data.orEmpty()
@@ -323,8 +355,8 @@ internal fun rememberWmsNames(
     LaunchedEffect(Unit) {
         users = (userRepository.listOptions() as? ApiResult.Success)?.data.orEmpty()
     }
-    return remember(warehouses, locations, nomenclature, users, issues) {
-        WmsNames(warehouses, locations, nomenclature, users, issues)
+    return remember(warehouses, locations, nomenclature, users, issues, projects, tasks) {
+        WmsNames(warehouses, locations, nomenclature, users, issues, projects, tasks)
     }
 }
 
