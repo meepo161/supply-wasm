@@ -160,6 +160,54 @@ private fun ApiError.knownMessage(): String? {
         m.startsWith("Invalid quantity") || m.startsWith("Invalid decimal value") ->
             "Неверное число: используйте цифры, дробную часть — через запятую."
         m.startsWith("Email format is invalid") -> "Неверный формат email."
-        else -> null
+        else -> knownPhrases.firstOrNull { (fragment, _) -> m.contains(fragment) }?.second
     }
 }
+
+/** Типичные сообщения склада и снабжения: фрагмент английского текста сервера и русское пояснение. */
+private val knownPhrases: List<Pair<String, String>> = listOf(
+    // Склад: инвентаризация
+    "Inventory can be approved only after counting" to "Инвентаризацию можно утвердить только после подсчёта.",
+    "Inventory can be booked only from DRAFT" to "Провести в учёте можно только черновик инвентаризации.",
+    "Inventory can be posted only after counting" to "Провести инвентаризацию можно только после подсчёта.",
+    "Counts are accepted only while" to "Результаты подсчёта принимаются только в процессе подсчёта.",
+    "Inventory scope has no stock" to "В выбранной области нет остатков для подсчёта.",
+    "Inventory cannot be cancelled" to "В текущем статусе инвентаризацию нельзя отменить.",
+    // Склад: выдача и возвраты
+    "Issue order can be cancelled only from DRAFT" to "Отменить выдачу можно только в статусе «Черновик».",
+    "Issue order can be confirmed only from ISSUED" to "Подтвердить получение можно только после выдачи.",
+    "Issue order can be handed over only from DRAFT" to "Передать выдачу можно только из черновика.",
+    "Issue order can be refused only from" to "Отказаться от выдачи можно только в статусе «Черновик» или «Выдано».",
+    "Picks can be added only while" to "Отбор можно менять, пока выдача в статусе «Черновик».",
+    "Nothing was issued for the issue line" to "По строке выдачи ничего не выдано.",
+    "Return is possible only for a posted issue order" to "Возврат возможен только по проведённой выдаче.",
+    "Return quantity exceeds the issued quantity" to "Количество возврата больше выданного.",
+    "Return order can be received only from DRAFT" to "Принять возврат можно только из черновика.",
+    "Return line inspection was already decided" to "По строке возврата решение уже принято.",
+    "Return lines can be inspected only while" to "Строки возврата проверяют только после приёмки возврата.",
+    // Склад: перемещения, резервы, приёмка
+    "Transfer can only be shipped from CREATED" to "Отправить перемещение можно только в статусе «Создано».",
+    "Transfer can only be received from IN_TRANSIT" to "Принять перемещение можно только в статусе «В пути».",
+    "Transfer can only go in transit from SHIPPED" to "Перевести перемещение в путь можно только после отгрузки.",
+    "Transfer can only be cancelled before shipping" to "Отменить перемещение можно только до отгрузки.",
+    "Only inter-warehouse transfers can be shipped" to "Отгружать можно только перемещения между складами.",
+    "Insufficient reserved stock" to "Недостаточно зарезервированного остатка.",
+    "Reservation is not active" to "Резерв не активен.",
+    "Receipt for this invoice already exists" to "Приёмка по этому счёту уже создана.",
+    "Quality control is allowed only for POSTED receipts" to "Входной контроль возможен только для проведённой приёмки.",
+    "Quality control is already completed" to "Входной контроль уже завершён.",
+    "Nomenclature is already archived" to "Позиция уже в архиве.",
+    // Снабжение
+    "Only DRAFT demand can be submitted" to "На согласование можно отправить только черновик потребности.",
+    "Only PENDING_APPROVAL demand can be approved" to "Утвердить можно только потребность, ожидающую согласования.",
+    "Demand is already cancelled" to "Потребность уже отменена.",
+    "Demand is cancelled, offer selection" to "Потребность отменена: выбирать предложение нельзя.",
+    "Purchase order must be approved before sending" to "Заказ поставщику нужно утвердить перед отправкой.",
+    "Archived supplier cannot be changed" to "Архивного поставщика нельзя изменять.",
+    "Archived supplier cannot receive new offers" to "Архивному поставщику нельзя вносить предложения.",
+    "Supplier is archived" to "Поставщик в архиве.",
+    "Offer documents are not confirmed" to "Комплектность документов предложения не подтверждена.",
+    "Selected offer is locked" to "Выбранное предложение заблокировано: сначала отмените выбор.",
+    "Offer is not selected" to "Предложение не выбрано.",
+    "Idempotency key was already used" to "Запрос с таким ключом уже выполнялся с другими данными. Повторите действие заново."
+)
