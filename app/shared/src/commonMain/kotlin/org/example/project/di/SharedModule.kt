@@ -1,6 +1,8 @@
 package org.example.project.di
 
 import org.example.project.data.AttachmentApiClient
+import org.example.project.data.AssistantApiClient
+import org.example.project.data.AssistantRepository
 import org.example.project.data.NomenclatureCardApiClient
 import org.example.project.data.NomenclatureCardRepository
 import org.example.project.data.AttachmentRepository
@@ -10,6 +12,7 @@ import org.example.project.data.AnalyticsApiClient
 import org.example.project.data.AnalyticsRepository
 import org.example.project.data.ErpExtrasApiClient
 import org.example.project.data.ErpExtrasRepository
+import org.example.project.data.ErpEventsClient
 import org.example.project.data.ApprovalApiClient
 import org.example.project.data.ApprovalRepository
 import org.example.project.data.AuthApiClient
@@ -73,4 +76,6 @@ val sharedModule = module {
     singleOf(::ProductionApiClient) bind ProductionRepository::class
     singleOf(::AnalyticsApiClient) bind AnalyticsRepository::class
     singleOf(::ErpExtrasApiClient) bind ErpExtrasRepository::class
+    singleOf(::AssistantApiClient) bind AssistantRepository::class
+    singleOf(::ErpEventsClient)
 }

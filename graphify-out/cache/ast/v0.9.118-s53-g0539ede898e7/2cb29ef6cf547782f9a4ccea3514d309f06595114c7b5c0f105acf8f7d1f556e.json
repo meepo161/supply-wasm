@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_core_src_commonmain_kotlin_org_example_project_dto_stubdtos_kt", "label": "StubDtos.kt", "file_type": "code", "source_file": "core/src/commonMain/kotlin/org/example/project/dto/StubDtos.kt", "source_location": "L1"}], "edges": [], "raw_calls": [], "kotlin_package": "org.example.project.dto"}

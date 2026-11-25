@@ -28,6 +28,13 @@ data class PushSettings(
         get() = !vapidPublicKey.isNullOrBlank() && !vapidPrivateKey.isNullOrBlank() && !vapidSubject.isNullOrBlank()
 }
 
+data class AssistantSettings(
+    val enabled: Boolean,
+    val baseUrl: String,
+    val model: String,
+    val timeoutSeconds: Long
+)
+
 data class AppConfig(
     val port: Int,
     val dbUrl: String,
@@ -38,7 +45,8 @@ data class AppConfig(
     val storagePath: String,
     val allowedOrigins: List<String>,
     val cookieSecure: Boolean,
-    val push: PushSettings
+    val push: PushSettings,
+    val assistant: AssistantSettings
 ) {
     companion object {
         fun load(config: ApplicationConfig): AppConfig {
@@ -67,6 +75,16 @@ data class AppConfig(
                         ?.map { it.trim() }
                         ?.filter { it.isNotEmpty() }
                         ?: DEFAULT_PUSH_ALLOWED_HOSTS
+                ),
+                assistant = AssistantSettings(
+                    enabled = config.setting("assistant.enabled", "ERP_ASSISTANT_ENABLED")
+                        ?.toBooleanStrictOrNull() ?: true,
+                    baseUrl = config.setting("assistant.baseUrl", "ERP_ASSISTANT_BASE_URL")
+                        ?: "http://127.0.0.1:11434",
+                    model = config.setting("assistant.model", "ERP_ASSISTANT_MODEL")
+                        ?: "qwen3.5:9b",
+                    timeoutSeconds = config.setting("assistant.timeoutSeconds", "ERP_ASSISTANT_TIMEOUT_SECONDS")
+                        ?.toLongOrNull() ?: 120L
                 )
             )
         }

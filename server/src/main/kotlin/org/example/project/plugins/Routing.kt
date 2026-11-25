@@ -5,11 +5,13 @@ import io.ktor.server.routing.*
 import org.example.project.config.AppConfig
 import org.example.project.realtime.ChatEventBus
 import org.example.project.realtime.ConversationEventBus
+import org.example.project.realtime.ErpEventBus
 import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.ChatRepository
 import org.example.project.repository.ConversationRepository
 import org.example.project.realtime.chatWebSocketRoutes
 import org.example.project.realtime.conversationWebSocketRoutes
+import org.example.project.realtime.erpEventWebSocketRoutes
 import org.example.project.realtime.notificationWebSocketRoutes
 import org.example.project.route.*
 import org.example.project.service.*
@@ -52,12 +54,14 @@ fun Application.configureRouting() {
     val chatEventBus: ChatEventBus by inject()
     val notificationEventBus: NotificationEventBus by inject()
     val conversationEventBus: ConversationEventBus by inject()
+    val erpEventBus: ErpEventBus by inject()
     val chatRepository: ChatRepository by inject()
     val conversationRepository: ConversationRepository by inject()
     val conversationService: ConversationService by inject()
     val unifiedChatListService: UnifiedChatListService by inject()
     val auditService: AuditService by inject()
     val erpExtrasService: ErpExtrasService by inject()
+    val assistantService: AssistantService by inject()
     val dsl: org.jooq.DSLContext by inject()
     val config: AppConfig by inject()
 
@@ -78,6 +82,7 @@ fun Application.configureRouting() {
         searchRoutes(searchService)
         chatWebSocketRoutes(chatService, chatRepository, sessionService, chatEventBus, config.cookieName, config.allowedOrigins)
         notificationWebSocketRoutes(notificationService, sessionService, notificationEventBus, config.cookieName, config.allowedOrigins)
+        erpEventWebSocketRoutes(sessionService, erpEventBus, config.cookieName, config.allowedOrigins)
         conversationRoutes(conversationService)
         unifiedChatRoutes(unifiedChatListService)
         conversationWebSocketRoutes(conversationService, conversationRepository, sessionService, conversationEventBus, config.cookieName, config.allowedOrigins)
@@ -101,5 +106,6 @@ fun Application.configureRouting() {
         documentRoutes(documentService)
         demandRoutes(demandService)
         approvalRoutes(approvalService)
+        assistantRoutes(assistantService)
     }
 }

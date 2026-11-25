@@ -142,6 +142,28 @@ fun HomeScreen(
                 loading = state.isLoadingTasks
             )
 
+            AssistantHomeCard(
+                available = state.assistantAvailable,
+                model = state.assistantModel,
+                statusReason = state.assistantStatusReason,
+                conversations = state.assistantConversations,
+                activeConversationId = state.assistantConversationId,
+                messages = state.assistantMessages,
+                pendingFiles = state.assistantPendingFiles,
+                input = state.assistantInput,
+                isLoading = state.assistantLoading,
+                error = state.assistantError,
+                onInputChange = viewModel::updateAssistantInput,
+                onPickFile = viewModel::pickAssistantFile,
+                onRemovePendingFile = viewModel::removeAssistantPendingFile,
+                onSelectConversation = viewModel::selectAssistantConversation,
+                onDeleteConversation = viewModel::deleteAssistantConversation,
+                onSend = viewModel::sendAssistantMessage,
+                onConfirmDraft = viewModel::confirmAssistantDraft,
+                onDismissDraft = viewModel::dismissAssistantDraft,
+                onClear = viewModel::clearAssistantChat
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End

@@ -48,6 +48,7 @@ dependencies {
     implementation(libs.bcrypt)
     implementation(libs.web.push)
     implementation(libs.bouncycastle.bcprov)
+    implementation(libs.pdfbox)
 
     testImplementation(libs.ktor.serverTestHost)
     testImplementation(libs.ktor.clientWebsockets)

@@ -490,6 +490,12 @@ private fun VerifyDialog(state: SupplierUiState, viewModel: SupplierViewModel) {
 private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewModel) {
     val form = state.offerForm
     var localLines by remember { mutableStateOf(form.demandLines) }
+    var showExtra by remember { mutableStateOf(false) }
+    var showQuickSupplier by remember { mutableStateOf(false) }
+    var quickName by remember { mutableStateOf("") }
+    var quickInn by remember { mutableStateOf("") }
+    var quickEmail by remember { mutableStateOf("") }
+    var quickVerify by remember { mutableStateOf(true) }
     LaunchedEffect(form.demandId, form.demandLines) {
         localLines = form.demandLines
     }
@@ -516,14 +522,27 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                 modifier = Modifier.fillMaxWidth(),
                 label = "Потребность *"
             )
-            SupplierDropdown(
-                suppliers = state.suppliers,
-                selectedId = form.supplierId,
-                onSelect = { viewModel.updateOfferForm(form.copy(supplierId = it)) },
-                onlyVerified = true,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                label = "Поставщик *"
-            )
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SupplierDropdown(
+                    suppliers = state.suppliers,
+                    selectedId = form.supplierId,
+                    onSelect = { viewModel.updateOfferForm(form.copy(supplierId = it)) },
+                    onlyVerified = true,
+                    modifier = Modifier.weight(1f),
+                    label = "Поставщик *"
+                )
+                SoftButton(text = "+ Новый", onClick = {
+                    quickName = ""
+                    quickInn = ""
+                    quickEmail = ""
+                    quickVerify = true
+                    showQuickSupplier = true
+                })
+            }
             viewModel.existingOfferFor(form.demandId, form.supplierId)?.let { existing ->
                 Text(
                     text = "Внимание: у этого поставщика уже есть предложение ${existing.number} " +
@@ -535,9 +554,10 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ComplianceDropdown(
-                    selected = form.compliance,
-                    onSelect = { viewModel.updateOfferForm(form.copy(compliance = it)) },
+                ErpTextField(
+                    value = form.deliveryDays,
+                    onValueChange = { viewModel.updateOfferForm(form.copy(deliveryDays = it)) },
+                    label = "Срок поставки, дн.",
                     modifier = Modifier.weight(1f)
                 )
                 ErpDateField(
@@ -547,45 +567,55 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                     modifier = Modifier.weight(1f)
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ErpTextField(
-                    value = form.deliveryDays,
-                    onValueChange = { viewModel.updateOfferForm(form.copy(deliveryDays = it)) },
-                    label = "Срок поставки, дн.",
-                    modifier = Modifier.weight(1f)
-                )
-                ErpTextField(
-                    value = form.warrantyMonths,
-                    onValueChange = { viewModel.updateOfferForm(form.copy(warrantyMonths = it)) },
-                    label = "Гарантия, мес.",
-                    modifier = Modifier.weight(1f)
-                )
-                ErpTextField(
-                    value = form.currency,
-                    onValueChange = { viewModel.updateOfferForm(form.copy(currency = it)) },
-                    label = "Валюта",
-                    supportingText = "RUB — рубли (₽)",
-                    modifier = Modifier.weight(0.7f)
-                )
-            }
             ErpTextField(
                 value = form.paymentTerms,
                 onValueChange = { viewModel.updateOfferForm(form.copy(paymentTerms = it)) },
                 label = "Условия оплаты",
                 modifier = Modifier.fillMaxWidth()
             )
-            ErpTextField(
-                value = form.deliveryTerms,
-                onValueChange = { viewModel.updateOfferForm(form.copy(deliveryTerms = it)) },
-                label = "Доставка",
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = form.documentsComplete,
-                    onCheckedChange = { viewModel.updateOfferForm(form.copy(documentsComplete = it)) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = form.documentsComplete,
+                        onCheckedChange = { viewModel.updateOfferForm(form.copy(documentsComplete = it)) }
+                    )
+                    Text("Комплект документов подтверждён", style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = { showExtra = !showExtra }) {
+                    Text(if (showExtra) "Скрыть доп. условия" else "Дополнительные условия ▾")
+                }
+            }
+            if (showExtra) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ComplianceDropdown(
+                        selected = form.compliance,
+                        onSelect = { viewModel.updateOfferForm(form.copy(compliance = it)) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ErpTextField(
+                        value = form.warrantyMonths,
+                        onValueChange = { viewModel.updateOfferForm(form.copy(warrantyMonths = it)) },
+                        label = "Гарантия, мес.",
+                        modifier = Modifier.weight(0.8f)
+                    )
+                    ErpTextField(
+                        value = form.currency,
+                        onValueChange = { viewModel.updateOfferForm(form.copy(currency = it)) },
+                        label = "Валюта",
+                        supportingText = "RUB — рубли (₽)",
+                        modifier = Modifier.weight(0.7f)
+                    )
+                }
+                ErpTextField(
+                    value = form.deliveryTerms,
+                    onValueChange = { viewModel.updateOfferForm(form.copy(deliveryTerms = it)) },
+                    label = "Доставка",
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Text("Комплект документов подтверждён", style = MaterialTheme.typography.bodySmall)
             }
             if (form.demandLines.isEmpty()) {
                 Text(
@@ -638,6 +668,53 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                     onClick = { viewModel.removeOfferLine(form.lines.size - 1) },
                     enabled = form.lines.size > 1
                 ) { Text("Убрать последнюю") }
+            }
+        }
+    }
+    if (showQuickSupplier) {
+        ErpDialog(
+            title = "Новый поставщик",
+            glyph = ErpIconGlyph.Documents,
+            gradient = Gradients.Ocean,
+            onDismiss = { if (!state.isActionRunning) showQuickSupplier = false },
+            confirmText = if (state.isActionRunning) "Создание…" else "Создать",
+            onConfirm = {
+                viewModel.quickCreateSupplierForOffer(
+                    name = quickName,
+                    inn = quickInn,
+                    email = quickEmail,
+                    verifyNow = quickVerify,
+                    onDone = { showQuickSupplier = false }
+                )
+            },
+            confirmEnabled = quickName.isNotBlank() && !state.isActionRunning,
+            width = 480.dp
+        ) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+            ErpTextField(
+                value = quickName,
+                onValueChange = { quickName = it },
+                label = "Наименование *",
+                modifier = Modifier.fillMaxWidth()
+            )
+            ErpTextField(
+                value = quickInn,
+                onValueChange = { quickInn = it },
+                label = "ИНН (10 или 12 цифр)",
+                modifier = Modifier.fillMaxWidth()
+            )
+            ErpTextField(
+                value = quickEmail,
+                onValueChange = { quickEmail = it },
+                label = "Почта / контакт",
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = quickVerify,
+                    onCheckedChange = { quickVerify = it }
+                )
+                Text("Сразу подтвердить проверку контрагента", style = MaterialTheme.typography.bodySmall)
             }
         }
     }

@@ -88,6 +88,7 @@ fun DemandScreen(
             onAddLine = viewModel::addDemandLine,
             onUpdateLine = viewModel::updateDemandLine,
             onRemoveLine = viewModel::removeDemandLine,
+            onNomenclatureCreated = viewModel::appendNomenclature,
             onCreate = viewModel::createDemand,
             onDismiss = viewModel::dismissDialog
         )

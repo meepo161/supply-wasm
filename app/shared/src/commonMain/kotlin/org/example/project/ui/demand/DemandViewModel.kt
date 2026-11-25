@@ -102,6 +102,13 @@ class DemandViewModel(
         }
     }
 
+    fun appendNomenclature(item: org.example.project.dto.NomenclatureDto) {
+        val current = _uiState.value.nomenclature
+        if (current.none { it.id == item.id }) {
+            _uiState.value = _uiState.value.copy(nomenclature = current + item)
+        }
+    }
+
     private fun loadNomenclature() {
         viewModelScope.launch {
             when (val result = wmsRepository.listNomenclature()) {

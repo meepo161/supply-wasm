@@ -68,7 +68,10 @@ import org.example.project.data.ProductionRepository
 import org.example.project.data.ProjectRepository
 import org.example.project.data.PurchaseOrderRepository
 import org.example.project.data.SupplierRepository
+import org.example.project.data.AssistantRepository
+import org.example.project.data.ErpEventsClient
 import org.example.project.data.SearchRepository
+import org.example.project.dto.ErpEventDomain
 import org.example.project.data.TaskRepository
 import org.example.project.data.UserRepository
 import org.example.project.data.WmsRepository
@@ -153,6 +156,8 @@ fun MainScaffold(
     val attachmentRepository: AttachmentRepository = koinInject()
     val adminRepository: AdminRepository = koinInject()
     val searchRepository: SearchRepository = koinInject()
+    val assistantRepository: AssistantRepository = koinInject()
+    val erpEventsClient: ErpEventsClient = koinInject()
 
     val projectViewModel = remember(user.id) {
         ProjectViewModel(projectRepository, userRepository, taskRepository)
@@ -165,7 +170,7 @@ fun MainScaffold(
         )
     }
     val homeViewModel = remember(user.id) {
-        HomeViewModel(taskRepository, notificationRepository, conversationRepository, user)
+        HomeViewModel(taskRepository, notificationRepository, conversationRepository, user, assistantRepository)
     }
     val searchViewModel = remember(user.id) { SearchViewModel(searchRepository) }
     val notificationViewModel = remember(user.id) {
@@ -267,6 +272,34 @@ fun MainScaffold(
         remember(user) { DemandViewModel(demandRepository, wmsRepository, projectRepository, bomRepository, user) }
     } else {
         null
+    }
+    androidx.compose.runtime.LaunchedEffect(user.id, wmsViewModel, demandViewModel, supplierViewModel, productionViewModel) {
+        erpEventsClient.observeEvents().collect { event ->
+            when (event.domain) {
+                ErpEventDomain.TASK -> {
+                    homeViewModel.loadTasks()
+                    taskViewModel.loadTasks()
+                }
+                ErpEventDomain.PROJECT -> {
+                    projectViewModel.loadProjects()
+                }
+                ErpEventDomain.WMS -> {
+                    wmsViewModel?.loadWarehouses()
+                    wmsViewModel?.loadNomenclature()
+                    wmsViewModel?.loadStock()
+                    wmsViewModel?.loadReservations()
+                }
+                ErpEventDomain.DEMAND -> {
+                    demandViewModel?.loadDemands()
+                }
+                ErpEventDomain.SUPPLIER -> {
+                    supplierViewModel?.loadSuppliers()
+                }
+                ErpEventDomain.PRODUCTION -> {
+                    productionViewModel?.loadOrders()
+                }
+            }
+        }
     }
     val documentViewModel = remember(user) {
         DocumentViewModel(documentRepository, projectRepository, userRepository, user)
@@ -946,26 +979,37 @@ private fun Sidebar(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.White.copy(alpha = 0.05f))
-                .padding(10.dp)
+                .padding(horizontal = if (collapsed) 4.dp else 10.dp, vertical = if (collapsed) 8.dp else 10.dp)
         ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(name = user.fullName, size = 36.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = user.fullName,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "@${user.login}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.62f),
-                            maxLines = 1
-                        )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = if (collapsed) Alignment.CenterHorizontally else Alignment.Start
+            ) {
+                if (collapsed) {
+                    Avatar(
+                        name = user.fullName,
+                        size = 32.dp,
+                        modifier = Modifier.semantics { contentDescription = user.fullName }
+                    )
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Avatar(name = user.fullName, size = 36.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = user.fullName,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "@${user.login}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.62f),
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -979,20 +1023,27 @@ private fun Sidebar(
                         .background(if (logoutHovered) Color.White.copy(alpha = 0.08f) else Color.Transparent)
                         .erpInteractive(logoutInteraction, RoundedCornerShape(6.dp), focusColor = Brand.Signal)
                         .clickable(interactionSource = logoutInteraction, indication = null) { onLogout() }
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .semantics { if (collapsed) contentDescription = "Выйти из системы" }
+                        .padding(
+                            horizontal = if (collapsed) 0.dp else 10.dp,
+                            vertical = if (collapsed) 0.dp else 7.dp
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start
                 ) {
                     ErpIcon(
                         glyph = ErpIconGlyph.Logout,
                         tint = Color.White.copy(alpha = 0.78f),
                         modifier = Modifier.size(15.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Выйти из системы",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.78f)
-                    )
+                    if (!collapsed) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Выйти из системы",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.78f)
+                        )
+                    }
                 }
             }
         }
@@ -1038,7 +1089,7 @@ private fun SidebarItem(
         Row(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = if (collapsed) 0.dp else 9.dp, end = 10.dp),
+                .padding(start = if (collapsed) 0.dp else 9.dp, end = if (collapsed) 3.dp else 10.dp),
             horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {

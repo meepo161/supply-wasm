@@ -327,6 +327,59 @@ class SupplierViewModel(
         }
     }
 
+    /** Быстрое создание поставщика прямо из формы коммерческого предложения. */
+    fun quickCreateSupplierForOffer(
+        name: String,
+        inn: String,
+        email: String,
+        verifyNow: Boolean,
+        onDone: () -> Unit
+    ) {
+        if (!canManage()) return fail("Нет права создавать поставщиков")
+        if (name.isBlank()) return fail("Укажите наименование поставщика")
+        innProblem(inn)?.let { return fail(it) }
+        update { it.copy(isActionRunning = true, operationError = null) }
+        viewModelScope.launch {
+            val request = CreateSupplierRequest(
+                name = name.trim(),
+                kind = CreateSupplierForm().kind,
+                inn = inn.trim().ifEmpty { null },
+                email = email.trim().ifEmpty { null },
+                responsibleId = currentUser.id,
+                idempotencyKey = newKey("supplier-quick-create")
+            )
+            when (val result = supplierRepository.createSupplier(request)) {
+                is ApiResult.Success -> {
+                    var created = result.data.supplier
+                    if (verifyNow && canVerify()) {
+                        when (val v = supplierRepository.verifySupplier(
+                            created.id,
+                            SupplierVerificationRequest(
+                                status = SupplierVerificationStatus.VERIFIED,
+                                note = "Быстрая проверка при внесении КП",
+                                version = created.version,
+                                idempotencyKey = newKey("supplier-quick-verify")
+                            )
+                        )) {
+                            is ApiResult.Success -> created = v.data
+                            is ApiResult.Error -> { /* оставляем созданным, ошибку не блокируем */ }
+                        }
+                    }
+                    update { state ->
+                        val updatedSuppliers = listOf(created) + state.suppliers.filterNot { it.id == created.id }
+                        state.copy(
+                            suppliers = updatedSuppliers,
+                            offerForm = state.offerForm.copy(supplierId = created.id),
+                            isActionRunning = false
+                        )
+                    }
+                    onDone()
+                }
+                is ApiResult.Error -> failWith(result.error)
+            }
+        }
+    }
+
     fun updateEditForm(form: EditSupplierForm) = update { it.copy(editForm = form) }
 
     fun saveSupplier() {
@@ -361,6 +414,7 @@ class SupplierViewModel(
         }
     }
 
+
     // --- Проверка, архив ---
 
     fun updateVerificationNote(value: String) = update { it.copy(verificationNote = value) }
@@ -393,6 +447,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun toggleArchive(archived: Boolean) {
         val card = _uiState.value.selectedCard ?: return
         update { it.copy(isActionRunning = true, operationError = null) }
@@ -412,6 +467,7 @@ class SupplierViewModel(
             }
         }
     }
+
 
     // --- Контакты, адреса, документы, категории ---
 
@@ -443,6 +499,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun updateAddressForm(form: AddressForm) = update { it.copy(addressForm = form) }
 
     fun addAddress() {
@@ -465,6 +522,7 @@ class SupplierViewModel(
             }
         }
     }
+
 
     fun updateDocumentForm(form: DocumentForm) = update { it.copy(documentForm = form) }
 
@@ -498,6 +556,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun toggleCategory(categoryId: Long) {
         val current = _uiState.value.categorySelection
         update {
@@ -523,6 +582,7 @@ class SupplierViewModel(
             }
         }
     }
+
 
     // --- Предложения ---
 
@@ -601,6 +661,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun createOffer() {
         if (!canOffer()) return fail("Нет права вносить предложения поставщиков")
         val form = _uiState.value.offerForm
@@ -657,6 +718,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun updateSelectionReason(value: String) = update { it.copy(selectionReason = value) }
 
     fun submitSelection() {
@@ -692,6 +754,7 @@ class SupplierViewModel(
             }
         }
     }
+
 
     fun openSelection(offerId: Long, offerNumber: String) {
         update {
@@ -729,6 +792,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun clearSelection(offerId: Long) {
         val offer = _uiState.value.offers.firstOrNull { it.id == offerId } ?: return
         update { it.copy(isActionRunning = true, operationError = null) }
@@ -743,6 +807,7 @@ class SupplierViewModel(
             }
         }
     }
+
 
     // --- Правка предложения (S-04) ---
 
@@ -798,6 +863,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun updateEditOfferForm(form: EditOfferForm) = update { it.copy(editOfferForm = form) }
 
     fun updateEditOfferLine(index: Int, line: EditOfferLineForm) {
@@ -852,6 +918,7 @@ class SupplierViewModel(
             }
         }
     }
+
 
     /** Предложение того же поставщика по той же потребности, которое ещё в работе. */
     fun existingOfferFor(demandId: Long?, supplierId: Long?): org.example.project.dto.SupplierOfferDto? {
@@ -953,6 +1020,7 @@ class SupplierViewModel(
         }
     }
 
+
     fun transitionClaim(
         claim: org.example.project.dto.SupplierClaimDto,
         targetStatus: org.example.project.dto.SupplierClaimStatus
@@ -982,5 +1050,4 @@ class SupplierViewModel(
     }
 }
 
-private fun String.isIsoDate(): Boolean =
-    matches(Regex("""^\d{4}-\d{2}-\d{2}$"""))
+private fun String.isIsoDate(): Boolean = Regex("""\d{4}-\d{2}-\d{2}""").matches(trim())

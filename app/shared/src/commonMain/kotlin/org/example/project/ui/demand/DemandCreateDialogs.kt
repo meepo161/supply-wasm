@@ -15,14 +15,24 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import org.example.project.data.ApiResult
+import org.example.project.data.WmsRepository
 import org.example.project.dto.ApiError
 import org.example.project.dto.BomRevisionStatus
 import org.example.project.dto.BomRevisionSummaryDto
+import org.example.project.dto.CreateNomenclatureRequest
 import org.example.project.dto.DemandSourceType
 import org.example.project.dto.NomenclatureDto
+import org.example.project.dto.NomenclatureType
 import org.example.project.dto.ProductModelDto
 import org.example.project.dto.ProjectDto
 import org.example.project.ui.bom.localizedName
@@ -30,6 +40,8 @@ import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.ErpDialog
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.Gradients
+import org.example.project.ui.userText
+import org.koin.compose.koinInject
 
 @Composable
 fun CreateDemandDialog(
@@ -47,6 +59,7 @@ fun CreateDemandDialog(
     onAddLine: () -> Unit,
     onUpdateLine: (Int, CreateDemandLineForm) -> Unit,
     onRemoveLine: (Int) -> Unit,
+    onNomenclatureCreated: (NomenclatureDto) -> Unit = {},
     onCreate: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -114,7 +127,8 @@ fun CreateDemandDialog(
                 nomenclature = nomenclature,
                 onAddLine = onAddLine,
                 onUpdateLine = onUpdateLine,
-                onRemoveLine = onRemoveLine
+                onRemoveLine = onRemoveLine,
+                onNomenclatureCreated = onNomenclatureCreated
             )
         }
     }
@@ -176,7 +190,8 @@ private fun ManualLinesSection(
     nomenclature: List<NomenclatureDto>,
     onAddLine: () -> Unit,
     onUpdateLine: (Int, CreateDemandLineForm) -> Unit,
-    onRemoveLine: (Int) -> Unit
+    onRemoveLine: (Int) -> Unit,
+    onNomenclatureCreated: (NomenclatureDto) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
@@ -189,7 +204,8 @@ private fun ManualLinesSection(
                 line = line,
                 nomenclature = nomenclature,
                 onChange = { onUpdateLine(index, it) },
-                onRemove = { onRemoveLine(index) }
+                onRemove = { onRemoveLine(index) },
+                onNomenclatureCreated = onNomenclatureCreated
             )
         }
         OutlinedButton(onClick = onAddLine) { Text("Добавить позицию") }
@@ -201,37 +217,117 @@ private fun DemandLineRow(
     line: CreateDemandLineForm,
     nomenclature: List<NomenclatureDto>,
     onChange: (CreateDemandLineForm) -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    onNomenclatureCreated: (NomenclatureDto) -> Unit
 ) {
+    val wmsRepository: WmsRepository = koinInject()
+    val scope = rememberCoroutineScope()
+    var showQuickCreate by remember { mutableStateOf(false) }
+    var newCode by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf("") }
+    var newUnit by remember { mutableStateOf("шт") }
+    var createError by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text("Строка ${line.lineNo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        DemandNomenclatureDropdown(
-            items = nomenclature,
-            selected = nomenclature.find { it.id == line.nomenclatureId },
-            onSelect = { onChange(line.copy(nomenclatureId = it.id, unit = it.unit)) },
-            label = "Номенклатура *",
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Строка ${line.lineNo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = onRemove) { Text("Удалить строку") }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DemandNomenclatureDropdown(
+                items = nomenclature,
+                selected = nomenclature.find { it.id == line.nomenclatureId },
+                onSelect = { onChange(line.copy(nomenclatureId = it.id, unit = it.unit)) },
+                label = "Номенклатура *",
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedButton(onClick = {
+                newCode = ""
+                newName = ""
+                newUnit = "шт"
+                createError = null
+                showQuickCreate = true
+            }) { Text("+ Новая") }
+        }
         OutlinedTextField(
             value = line.quantity,
             onValueChange = { onChange(line.copy(quantity = it)) },
             label = { Text("Количество *") },
+            suffix = if (line.unit.isNotBlank()) ({ Text(line.unit) }) else null,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
-        OutlinedTextField(
-            value = line.unit,
-            onValueChange = {},
-            label = { Text("Единица измерения") },
-            supportingText = { Text("Подставляется из выбранной номенклатуры") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            readOnly = true
-        )
-        TextButton(onClick = onRemove) { Text("Удалить строку") }
+    }
+
+    if (showQuickCreate) {
+        ErpDialog(
+            title = "Новая номенклатура",
+            glyph = ErpIconGlyph.Warehouse,
+            gradient = Gradients.Primary,
+            width = 480.dp,
+            confirmText = if (creating) "Создание…" else "Создать",
+            confirmEnabled = newCode.isNotBlank() && newName.isNotBlank() && newUnit.isNotBlank() && !creating,
+            onConfirm = {
+                creating = true
+                createError = null
+                scope.launch {
+                    when (val r = wmsRepository.createNomenclature(
+                        CreateNomenclatureRequest(
+                            code = newCode.trim(),
+                            name = newName.trim(),
+                            type = NomenclatureType.PURCHASED_COMPONENT,
+                            unit = newUnit.trim()
+                        )
+                    )) {
+                        is ApiResult.Success -> {
+                            onNomenclatureCreated(r.data)
+                            onChange(line.copy(nomenclatureId = r.data.id, unit = r.data.unit))
+                            showQuickCreate = false
+                        }
+                        is ApiResult.Error -> createError = r.error.userText()
+                    }
+                    creating = false
+                }
+            },
+            onDismiss = { if (!creating) showQuickCreate = false }
+        ) {
+            createError?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            OutlinedTextField(
+                value = newCode,
+                onValueChange = { newCode = it },
+                label = { Text("Код / артикул *") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("Наименование *") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = newUnit,
+                onValueChange = { newUnit = it },
+                label = { Text("Единица измерения *") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

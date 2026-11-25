@@ -1,6 +1,9 @@
 package org.example.project.ui.home
 
+import org.example.project.data.AttachmentFileData
 import org.example.project.dto.ApiError
+import org.example.project.dto.AssistantConversationSummaryDto
+import org.example.project.dto.AssistantMessageDto
 import org.example.project.dto.NotificationDto
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
@@ -11,7 +14,17 @@ data class HomeUiState(
     val isLoadingTasks: Boolean = false,
     val isLoadingNotifications: Boolean = false,
     val operationError: ApiError? = null,
-    val currentDate: String = currentIsoDate()
+    val currentDate: String = currentIsoDate(),
+    val assistantAvailable: Boolean = false,
+    val assistantModel: String = "qwen3.5:9b",
+    val assistantStatusReason: String? = null,
+    val assistantConversations: List<AssistantConversationSummaryDto> = emptyList(),
+    val assistantConversationId: Long? = null,
+    val assistantMessages: List<AssistantMessageDto> = emptyList(),
+    val assistantPendingFiles: List<AttachmentFileData> = emptyList(),
+    val assistantInput: String = "",
+    val assistantLoading: Boolean = false,
+    val assistantError: String? = null
 )
 
 fun TaskDto.isOpen(): Boolean = status != TaskStatus.CLOSED && status != TaskStatus.CANCELLED

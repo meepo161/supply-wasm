@@ -438,7 +438,7 @@ private fun IssueDetailDialog(
         dismissText = "Закрыть",
         onDismiss = onClose,
         extraActions = {
-            if (canIssue) Button(onClick = onIssue, enabled = !busy) { Text("Провести выдачу") }
+            if (canIssue) Button(onClick = onIssue, enabled = !busy) { Text("Выдать") }
             if (canConfirm) Button(onClick = onConfirm, enabled = !busy) { Text("Подтвердить получение") }
             if (canRefuse) {
                 TextButton(
@@ -532,12 +532,14 @@ private fun IssueDetailDialog(
                                     )
                                     Button(onClick = { onPick(line.id) }) { Text("Отобрать") }
                                 }
-                                LotPicker(
-                                    value = form.lotId,
-                                    onChange = { onPickFormChange(line.id, form.copy(lotId = it)) },
-                                    nomenclatureId = line.nomenclatureId,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                if (names.itemDto(line.nomenclatureId)?.lotTracked == true) {
+                                    LotPicker(
+                                        value = form.lotId,
+                                        onChange = { onPickFormChange(line.id, form.copy(lotId = it)) },
+                                        nomenclatureId = line.nomenclatureId,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }
@@ -620,13 +622,6 @@ internal fun CreateIssueDialog(
                     projectId = form.projectId,
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = form.reasonNote,
-                    onValueChange = { onFormChange(form.copy(reasonNote = it)) },
-                    label = { Text("Пояснение основания") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
                 UserPicker(
                     value = form.recipientId,
                     onChange = { onFormChange(form.copy(recipientId = it)) },
@@ -637,9 +632,9 @@ internal fun CreateIssueDialog(
                 OutlinedTextField(
                     value = form.note,
                     onValueChange = { onFormChange(form.copy(note = it)) },
-                    label = { Text("Примечание") },
+                    label = { Text("Комментарий") },
                     modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
+                    singleLine = true
                 )
 
                 Text("Строки выдачи", style = MaterialTheme.typography.labelLarge)

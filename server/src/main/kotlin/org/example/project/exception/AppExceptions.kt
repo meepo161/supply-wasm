@@ -28,3 +28,6 @@ class ConflictException(message: String) :
 
 class InternalServerException(message: String = "Internal server error") :
     AppException(HttpStatusCode.InternalServerError, "INTERNAL_ERROR", message)
+
+class ServiceUnavailableException(message: String = "Service unavailable") :
+    AppException(HttpStatusCode.ServiceUnavailable, "SERVICE_UNAVAILABLE", message)

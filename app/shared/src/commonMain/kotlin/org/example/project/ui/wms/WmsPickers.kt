@@ -315,6 +315,8 @@ internal class WmsNames(
         else -> nomenclature.find { it.id == id }?.let { "${it.code} · ${it.name}" } ?: "Позиция #$id"
     }
 
+    fun itemDto(id: Long?): org.example.project.dto.NomenclatureDto? = id?.let { target -> nomenclature.find { it.id == target } }
+
     fun unit(id: Long?): String = nomenclature.find { it.id == id }?.unit.orEmpty()
 
     /** Количество с единицей позиции: «3 шт». */

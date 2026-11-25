@@ -162,6 +162,7 @@ class WmsViewModel(
         }
     }
 
+
     fun createWarehouse() {
         val form = _uiState.value.createWarehouseForm
         if (form.code.isBlank() || form.name.isBlank()) {
@@ -195,6 +196,7 @@ class WmsViewModel(
         }
     }
 
+
     fun loadLocations(warehouseId: Long) {
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
@@ -212,6 +214,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun createLocation() {
         val form = _uiState.value.createLocationForm
@@ -251,6 +254,7 @@ class WmsViewModel(
         }
     }
 
+
     fun loadNomenclature() {
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
@@ -267,6 +271,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun createNomenclature() {
         val form = _uiState.value.createNomenclatureForm
@@ -307,6 +312,7 @@ class WmsViewModel(
         }
     }
 
+
     fun archiveNomenclature(nomenclature: NomenclatureDto) {
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
@@ -325,6 +331,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     /** Открывает карточку номенклатуры; данные карточка загружает сама (D-63). */
     fun selectNomenclature(nomenclature: NomenclatureDto?) {
@@ -375,6 +382,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun createReceipt() {
         val form = _uiState.value.createReceiptForm
@@ -447,6 +455,7 @@ class WmsViewModel(
         }
     }
 
+
     fun openReceipt(id: Long) {
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
@@ -463,6 +472,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun loadReceiptById() {
         val id = _uiState.value.loadReceiptId.toLongOrNull()
@@ -526,6 +536,7 @@ class WmsViewModel(
         }
     }
 
+
     /** Склад вносит факт, ячейки и расхождения в поступление (в т. ч. по счёту от снабжения, D-61). */
     fun acceptReceiptLines(lines: List<org.example.project.dto.AcceptReceiptLineInput>) {
         val receipt = _uiState.value.currentReceipt ?: return
@@ -547,6 +558,53 @@ class WmsViewModel(
                     isLoading = false,
                     operationError = result.error
                 )
+            }
+        }
+    }
+
+    /** Сохраняет факт приёмки и сразу проводит документ в одной операции. */
+    fun acceptAndPostReceipt(lines: List<org.example.project.dto.AcceptReceiptLineInput>) {
+        val receipt = _uiState.value.currentReceipt ?: return
+        if (documentCommandInFlight) return
+        documentCommandInFlight = true
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            try {
+                when (val acceptRes = repository.acceptReceiptLines(
+                    receipt.id,
+                    org.example.project.dto.AcceptReceiptLinesRequest(receipt.version, lines)
+                )) {
+                    is ApiResult.Success -> {
+                        val updated = acceptRes.data
+                        when (val postRes = repository.postReceipt(updated.id, PostReceiptRequest(updated.version))) {
+                            is ApiResult.Success -> {
+                                _uiState.value = _uiState.value.copy(
+                                    currentReceipt = postRes.data,
+                                    isLoading = false,
+                                    operationError = null,
+                                    successMessage = "Приёмка ${postRes.data.number} принята и проведена, остаток обновлён"
+                                )
+                                loadReceipts()
+                                loadStock()
+                                loadExpectedReceipts()
+                            }
+                            is ApiResult.Error -> {
+                                _uiState.value = _uiState.value.copy(
+                                    currentReceipt = updated,
+                                    isLoading = false,
+                                    operationError = postRes.error
+                                )
+                                loadReceipts()
+                            }
+                        }
+                    }
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        operationError = acceptRes.error
+                    )
+                }
+            } finally {
+                documentCommandInFlight = false
             }
         }
     }
@@ -577,6 +635,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     /** Ожидаемые к приёмке позиции: «заказано / поставлено / принято / осталось». */
     fun loadExpectedReceipts(purchaseOrderId: Long? = null) {
@@ -662,6 +721,7 @@ class WmsViewModel(
         }
     }
 
+
     fun createReservation() {
         val form = _uiState.value.createReservationForm
         val warehouseId = form.warehouseId
@@ -708,6 +768,7 @@ class WmsViewModel(
         }
     }
 
+
     fun loadReservations() {
         val filters = _uiState.value.reservationFilters
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
@@ -725,6 +786,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun selectReservation(reservation: ReservationDto?) {
         _uiState.value = _uiState.value.copy(currentReservation = reservation, operationError = null)
@@ -754,6 +816,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun clearCurrentReservation() {
         _uiState.value = _uiState.value.copy(currentReservation = null, releaseReason = "")
@@ -894,6 +957,7 @@ class WmsViewModel(
         }
     }
 
+
     fun shipTransfer() = transferCommand { id, version ->
         repository.shipTransfer(id, ShipTransferRequest(version, newIdempotencyKey()))
     }
@@ -966,6 +1030,7 @@ class WmsViewModel(
         }
     }
 
+
     // ---------------- Выдача (§8.8) ----------------
 
     fun loadIssues() {
@@ -1002,7 +1067,13 @@ class WmsViewModel(
         issue?.let { order ->
             viewModelScope.launch {
                 when (val result = repository.listLocations(order.warehouseId)) {
-                    is ApiResult.Success -> _uiState.value = _uiState.value.copy(issueLocations = result.data)
+                    is ApiResult.Success -> {
+                        val activeLocations = result.data.filter { it.active && it.code != TRANSIT_LOCATION_CODE }
+                        _uiState.value = _uiState.value.copy(issueLocations = result.data)
+                        _uiState.value.selectedIssue?.let { current ->
+                            if (current.id == order.id) applyDefaultIssuePickLocations(current, activeLocations)
+                        }
+                    }
                     is ApiResult.Error -> { }
                 }
             }
@@ -1011,10 +1082,50 @@ class WmsViewModel(
                 when (val result = repository.getIssue(order.id)) {
                     is ApiResult.Success -> if (_uiState.value.selectedIssue?.id == order.id) {
                         _uiState.value = _uiState.value.copy(selectedIssue = result.data)
+                        val activeLocations = _uiState.value.issueLocations.filter { it.active && it.code != TRANSIT_LOCATION_CODE }
+                        if (activeLocations.isNotEmpty()) {
+                            applyDefaultIssuePickLocations(result.data, activeLocations)
+                        }
                     }
                     is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
                 }
             }
+        }
+    }
+
+    /** Подставляет ячейку отбора по умолчанию: с наибольшим доступным остатком или единственную на складе. */
+    private fun applyDefaultIssuePickLocations(
+        issue: IssueOrderDto,
+        activeLocations: List<org.example.project.dto.StorageLocationDto>
+    ) {
+        if (issue.status != IssueStatus.DRAFT || activeLocations.isEmpty()) return
+        val stockOnWarehouse = _uiState.value.stock.filter { it.warehouseId == issue.warehouseId }
+        val forms = _uiState.value.issuePickForms.toMutableMap()
+        var changed = false
+        issue.lines.forEach { line ->
+            val remaining = (line.requestedQuantity.toDoubleOrNull() ?: 0.0) -
+                line.picks.sumOf { it.quantity.toDoubleOrNull() ?: 0.0 }
+            if (remaining <= 0.0) return@forEach
+            val existing = forms[line.id]
+            if (existing?.locationId != null) return@forEach
+            val bestStockLocId = stockOnWarehouse
+                .filter {
+                    val avail = (it.physicalQty.toDoubleOrNull() ?: 0.0) - (it.reservedQty.toDoubleOrNull() ?: 0.0)
+                    it.nomenclatureId == line.nomenclatureId && avail > 0.0
+                }
+                .maxByOrNull { (it.physicalQty.toDoubleOrNull() ?: 0.0) - (it.reservedQty.toDoubleOrNull() ?: 0.0) }
+                ?.locationId
+                ?.takeIf { id -> activeLocations.any { loc -> loc.id == id } }
+            val fallbackLocId = bestStockLocId ?: activeLocations.singleOrNull()?.id
+            if (fallbackLocId != null) {
+                val qtyStr = existing?.quantity?.takeIf { it.isNotBlank() }
+                    ?: if (remaining % 1.0 == 0.0) remaining.toLong().toString() else remaining.toString()
+                forms[line.id] = (existing ?: IssuePickForm()).copy(locationId = fallbackLocId, quantity = qtyStr)
+                changed = true
+            }
+        }
+        if (changed) {
+            _uiState.value = _uiState.value.copy(issuePickForms = forms)
         }
     }
 
@@ -1123,6 +1234,7 @@ class WmsViewModel(
         }
     }
 
+
     fun updateIssuePickForm(lineId: Long, form: IssuePickForm) {
         val forms = _uiState.value.issuePickForms.toMutableMap()
         forms[lineId] = form
@@ -1175,8 +1287,75 @@ class WmsViewModel(
         }
     }
 
-    fun issueSelectedOrder() = issueCommand { id, version ->
-        repository.issueOrder(id, IssueActionRequest(version, newIdempotencyKey()))
+
+    fun issueSelectedOrder() {
+        val issue = _uiState.value.selectedIssue ?: return
+        if (documentCommandInFlight) return
+        val pickForms = _uiState.value.issuePickForms
+        val pendingPicks = issue.lines.mapNotNull { line ->
+            val remaining = (line.requestedQuantity.toDoubleOrNull() ?: 0.0) -
+                line.picks.sumOf { it.quantity.toDoubleOrNull() ?: 0.0 }
+            if (remaining <= 0.0) return@mapNotNull null
+            val form = pickForms[line.id] ?: return@mapNotNull null
+            val locationId = form.locationId ?: return@mapNotNull null
+            val qty = form.quantity.trim().ifBlank {
+                if (remaining % 1.0 == 0.0) remaining.toLong().toString() else remaining.toString()
+            }
+            IssuePickInput(
+                lineId = line.id,
+                locationId = locationId,
+                lotId = form.lotId.toLongOrNull(),
+                serialId = form.serialId.toLongOrNull(),
+                quantity = qty
+            )
+        }
+        documentCommandInFlight = true
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+        viewModelScope.launch {
+            try {
+                var currentIssue = issue
+                if (pendingPicks.isNotEmpty()) {
+                    when (val pickRes = repository.pickIssue(
+                        issue.id,
+                        PickIssueRequest(
+                            version = issue.version,
+                            picks = pendingPicks,
+                            idempotencyKey = newIdempotencyKey()
+                        )
+                    )) {
+                        is ApiResult.Success -> currentIssue = pickRes.data
+                        is ApiResult.Error -> {
+                            _uiState.value = _uiState.value.copy(isLoading = false, operationError = pickRes.error)
+                            return@launch
+                        }
+                    }
+                }
+                when (val result = repository.issueOrder(
+                    currentIssue.id,
+                    IssueActionRequest(currentIssue.version, newIdempotencyKey())
+                )) {
+                    is ApiResult.Success -> {
+                        _uiState.value = _uiState.value.copy(
+                            selectedIssue = result.data,
+                            issuePickForms = emptyMap(),
+                            isLoading = false
+                        )
+                        loadIssues()
+                        loadStock()
+                    }
+                    is ApiResult.Error -> {
+                        _uiState.value = _uiState.value.copy(
+                            selectedIssue = currentIssue,
+                            isLoading = false,
+                            operationError = result.error
+                        )
+                        loadIssues()
+                    }
+                }
+            } finally {
+                documentCommandInFlight = false
+            }
+        }
     }
 
     fun confirmSelectedIssue() = issueCommand { id, version ->
@@ -1222,6 +1401,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     private fun issueCommand(
         action: suspend (Long, Long) -> ApiResult<IssueOrderDto>
@@ -1401,6 +1581,7 @@ class WmsViewModel(
         }
     }
 
+
     fun receiveSelectedReturn() {
         val order = _uiState.value.selectedReturn ?: return
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
@@ -1420,6 +1601,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun updateReturnInspectForm(lineId: Long, form: ReturnInspectForm) {
         val forms = _uiState.value.returnInspectForms.toMutableMap()
@@ -1467,6 +1649,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     private fun newIdempotencyKey(): String =
         "ui-${Random.nextLong().toString(16)}-${Random.nextLong().toString(16)}"
@@ -1665,6 +1848,7 @@ class WmsViewModel(
         }
     }
 
+
     fun postSelectedWriteOff() {
         val writeOff = _uiState.value.selectedWriteOff ?: return
         if (documentCommandInFlight) return
@@ -1726,6 +1910,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     // ---------------- Инвентаризация (§8.11) ----------------
 
@@ -1872,6 +2057,7 @@ class WmsViewModel(
         }
     }
 
+
     fun bookSelectedInventory() = inventoryCommand { id, version ->
         repository.bookInventory(id, InventoryActionRequest(version, newIdempotencyKey()))
     }
@@ -1930,6 +2116,7 @@ class WmsViewModel(
         }
     }
 
+
     fun cancelSelectedInventory() {
         val inventory = _uiState.value.selectedInventory ?: return
         val reason = _uiState.value.inventoryCancelReason.trim()
@@ -1961,6 +2148,7 @@ class WmsViewModel(
         }
     }
 
+
     private fun inventoryCommand(
         action: suspend (Long, Long) -> ApiResult<InventoryDto>
     ) {
@@ -1981,6 +2169,7 @@ class WmsViewModel(
             }
         }
     }
+
 
     fun updateCreateWarehouseForm(form: CreateWarehouseForm) {
         _uiState.value = _uiState.value.copy(createWarehouseForm = form)

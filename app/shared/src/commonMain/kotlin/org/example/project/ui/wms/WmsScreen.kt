@@ -839,9 +839,11 @@ private fun ReceiptsTab(
                 onLink = viewModel::linkReceipt,
                 warehouse = state.warehouses.find { it.id == state.currentReceipt.warehouseId },
                 nomenclature = state.nomenclature,
+                stock = state.stock,
                 onPost = viewModel::postReceipt,
                 onClose = viewModel::clearCurrentReceipt,
-                onAccept = viewModel::acceptReceiptLines
+                onAccept = viewModel::acceptReceiptLines,
+                onAcceptAndPost = viewModel::acceptAndPostReceipt
             )
         }
     }
@@ -859,9 +861,11 @@ private fun ReceiptDetailCard(
     onLink: () -> Unit,
     warehouse: WarehouseDto?,
     nomenclature: List<NomenclatureDto>,
+    stock: List<org.example.project.dto.StockBalanceDto> = emptyList(),
     onPost: () -> Unit,
     onClose: () -> Unit,
     onAccept: (List<org.example.project.dto.AcceptReceiptLineInput>) -> Unit = {},
+    onAcceptAndPost: ((List<org.example.project.dto.AcceptReceiptLineInput>) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -942,7 +946,9 @@ private fun ReceiptDetailCard(
                 ReceiptAcceptance(
                     receipt = receipt,
                     nomenclature = nomenclature,
+                    stock = stock,
                     onSave = onAccept,
+                    onSaveAndPost = onAcceptAndPost,
                     onDirtyChange = { acceptanceDirty = it }
                 )
             }

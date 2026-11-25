@@ -103,7 +103,9 @@ private fun <T> WmsPickerField(
     isError: Boolean = false,
     supportingText: String? = null,
     onClear: (() -> Unit)? = null,
-    clearText: String = "Не выбрано"
+    clearText: String = "Не выбрано",
+    onCreateNew: (() -> Unit)? = null,
+    createNewLabel: String = "+ Создать"
 ) {
     var expanded by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf(TextFieldValue("")) }
@@ -162,6 +164,15 @@ private fun <T> WmsPickerField(
                     }
                 )
             }
+            if (onCreateNew != null) {
+                DropdownMenuItem(
+                    text = { Text(createNewLabel) },
+                    onClick = {
+                        expanded = false
+                        onCreateNew()
+                    }
+                )
+            }
         }
     }
 }
@@ -180,7 +191,8 @@ fun LocationDropdown(
     /** Показывать под полем склад, к которому относятся ячейки списка. */
     showWarehouse: Boolean = true,
     onClear: (() -> Unit)? = null,
-    clearText: String = "Не выбрана"
+    clearText: String = "Не выбрана",
+    onCreateLocation: (() -> Unit)? = null
 ) {
     val options = if (includeTransit) locations else locations.filterNot { it.code == TRANSIT_LOCATION_CODE }
     val names = LocalWmsNames.current
@@ -213,7 +225,9 @@ fun LocationDropdown(
         isError = isError,
         supportingText = warehouseLabel,
         onClear = onClear,
-        clearText = clearText
+        clearText = clearText,
+        onCreateNew = onCreateLocation,
+        createNewLabel = "+ Добавить ячейку"
     )
 }
 
@@ -227,7 +241,8 @@ fun NomenclatureDropdown(
     onSelect: (NomenclatureDto) -> Unit,
     modifier: Modifier = Modifier,
     label: String = "Номенклатура",
-    isError: Boolean = false
+    isError: Boolean = false,
+    onCreateNomenclature: (() -> Unit)? = null
 ) {
     WmsPickerField(
         items = items,
@@ -240,7 +255,9 @@ fun NomenclatureDropdown(
         emptyText = "Нет доступной номенклатуры",
         placeholder = "Выберите",
         searchable = true,
-        isError = isError
+        isError = isError,
+        onCreateNew = onCreateNomenclature,
+        createNewLabel = "+ Создать номенклатуру"
     )
 }
 

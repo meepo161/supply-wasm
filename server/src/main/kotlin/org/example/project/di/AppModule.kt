@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource
 import org.example.project.config.AppConfig
 import org.example.project.realtime.ChatEventBus
 import org.example.project.realtime.ConversationEventBus
+import org.example.project.realtime.ErpEventBus
 import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.*
 import org.example.project.service.*
@@ -99,6 +100,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { PushService(get(), get(), config.push) }
     single { ChatEventBus() }
     single { NotificationEventBus() }
+    single { ErpEventBus() }
     single { ConversationRepository(get()) }
     single { ConversationEventBus() }
     single { ConversationService(get(), get(), get(), get(), get(), get(), get()) }
@@ -154,4 +156,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     }
     single { DemandService(get(), get(), get(), get(), get(), get()) }
     single { ErpExtrasService(get(), get(), get()) }
+    single<LlmProvider> { OllamaLlmProvider(config.assistant) }
+    single { AssistantConversationRepository(get()) }
+    single { AssistantService(config.assistant, get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 }
