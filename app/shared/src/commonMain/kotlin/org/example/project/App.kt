@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,35 +47,33 @@ fun App() {
 
                 val currentUser = state.currentUser
                 AppBackground {
-                    SelectionContainer {
-                        AnimatedContent(
-                            targetState = when {
-                                state.isLoading -> "loading"
-                                currentUser != null -> "app"
-                                else -> "login"
-                            },
-                            transitionSpec = {
-                                fadeIn(tween(260)) togetherWith fadeOut(tween(160))
-                            },
-                            label = "root"
-                        ) { screen ->
-                            when (screen) {
-                                "loading" -> LoadingScreen()
-                                "app" -> MainScaffold(
-                                    user = currentUser!!,
-                                    onLogout = viewModel::logout,
-                                    passwordChangeLoading = state.passwordChangeLoading,
-                                    passwordChangeError = state.passwordChangeError,
-                                    onChangePassword = viewModel::changePassword,
-                                    onClearPasswordError = viewModel::clearPasswordChangeState
-                                )
-                                else -> LoginScreen(
-                                    state = state,
-                                    onLogin = viewModel::login,
-                                    onBootstrap = viewModel::bootstrap,
-                                    onDismissError = viewModel::dismissError
-                                )
-                            }
+                    AnimatedContent(
+                        targetState = when {
+                            state.isLoading -> "loading"
+                            currentUser != null -> "app"
+                            else -> "login"
+                        },
+                        transitionSpec = {
+                            fadeIn(tween(260)) togetherWith fadeOut(tween(160))
+                        },
+                        label = "root"
+                    ) { screen ->
+                        when (screen) {
+                            "loading" -> LoadingScreen()
+                            "app" -> MainScaffold(
+                                user = currentUser!!,
+                                onLogout = viewModel::logout,
+                                passwordChangeLoading = state.passwordChangeLoading,
+                                passwordChangeError = state.passwordChangeError,
+                                onChangePassword = viewModel::changePassword,
+                                onClearPasswordError = viewModel::clearPasswordChangeState
+                            )
+                            else -> LoginScreen(
+                                state = state,
+                                onLogin = viewModel::login,
+                                onBootstrap = viewModel::bootstrap,
+                                onDismissError = viewModel::dismissError
+                            )
                         }
                     }
                 }

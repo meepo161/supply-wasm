@@ -13,6 +13,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import org.example.project.ui.theme.ErpIconButton
 import org.example.project.ui.theme.erpInteractive
@@ -170,7 +171,16 @@ fun MainScaffold(
         )
     }
     val homeViewModel = remember(user.id) {
-        HomeViewModel(taskRepository, notificationRepository, conversationRepository, user, assistantRepository)
+        HomeViewModel(
+            taskRepository,
+            notificationRepository,
+            conversationRepository,
+            user,
+            assistantRepository,
+            demandRepository,
+            purchaseOrderRepository,
+            wmsRepository
+        )
     }
     val searchViewModel = remember(user.id) { SearchViewModel(searchRepository) }
     val notificationViewModel = remember(user.id) {
@@ -292,9 +302,11 @@ fun MainScaffold(
                     wmsViewModel?.loadNomenclature()
                     wmsViewModel?.loadStock()
                     wmsViewModel?.loadReservations()
+                    homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.DEMAND -> {
                     demandViewModel?.loadDemands()
+                    homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.SUPPLIER -> {
                     supplierViewModel?.loadSuppliers()
@@ -563,7 +575,13 @@ fun MainScaffold(
                         onOpenConversation = onOpenConversation,
                         onOpenProjectChat = onOpenProjectChat,
                         onOpenNotifications = onOpenNotifications,
-                        onBackFromNotifications = onBackFromNotifications
+                        onBackFromNotifications = onBackFromNotifications,
+                        onNavigateDestination = { target ->
+                            runCatching { NavigationDestination.valueOf(target) }
+                                .getOrNull()
+                                ?.takeIf { it in destinations }
+                                ?.let { selected = it }
+                        }
                     )
                 }
             }
@@ -655,39 +673,38 @@ private fun TopBar(
         }
 
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "ERP",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            ErpIcon(
-                glyph = ErpIconGlyph.ChevronRight,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(12.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = destination.label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (isFavorite) "★" else "☆",
-                style = MaterialTheme.typography.titleMedium,
-                color = if (isFavorite) Brand.Amber else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable(onClick = onToggleFavorite)
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            if (showSearch) {
+                Text(
+                    text = "ERP",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                ErpIcon(
+                    glyph = ErpIconGlyph.ChevronRight,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = destination.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            RoundIconButton(
+                glyph = ErpIconGlyph.Star,
+                contentDescription = favoriteContentDescription(isFavorite),
+                tint = if (isFavorite) Brand.Amber else MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = onToggleFavorite
             )
         }
 
@@ -760,16 +777,21 @@ private fun TopBar(
             )
             Spacer(Modifier.width(14.dp))
             Box {
+                val userMenuInteraction = remember { MutableInteractionSource() }
+                val userMenuShape = RoundedCornerShape(50)
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(50))
+                        .clip(userMenuShape)
                         .background(palette.glassOverlay.copy(alpha = 0.75f))
-                        .border(
-                            1.dp,
-                            palette.glassBorder.first(),
-                            RoundedCornerShape(50)
-                        )
-                        .clickable { userMenuExpanded = true }
+                        .border(1.dp, palette.glassBorder.first(), userMenuShape)
+                        .erpInteractive(userMenuInteraction, userMenuShape)
+                        .clickable(interactionSource = userMenuInteraction, indication = null) {
+                            userMenuExpanded = true
+                        }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = "Меню пользователя ${user.fullName}"
+                        }
                         .padding(start = 5.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -825,6 +847,7 @@ private fun RoundIconButton(
     modifier: Modifier = Modifier,
     label: String? = null,
     badge: Int = 0,
+    tint: Color? = null,
     onClick: () -> Unit
 ) {
     val palette = LocalBrandPalette.current
@@ -859,7 +882,7 @@ private fun RoundIconButton(
         ) {
             ErpIcon(
                 glyph = glyph,
-                tint = scheme.onSurfaceVariant,
+                tint = tint ?: scheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
             if (label != null) {
@@ -1102,7 +1125,11 @@ private fun SidebarItem(
             .background(background)
             .erpInteractive(interaction, shape, focusColor = Brand.Signal)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .semantics { if (collapsed) contentDescription = destination.label },
+            .semantics {
+                role = Role.Button
+                this.selected = selected
+                if (collapsed) contentDescription = destination.label
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1224,10 +1251,17 @@ private fun BottomItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(8.dp)
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+            .clip(shape)
+            .erpInteractive(interaction, shape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .semantics {
+                role = Role.Button
+                this.selected = selected
+            }
             .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -1292,7 +1326,8 @@ private fun MainContent(
     onOpenConversation: (Long) -> Unit,
     onOpenProjectChat: (Long) -> Unit,
     onOpenNotifications: () -> Unit,
-    onBackFromNotifications: () -> Unit
+    onBackFromNotifications: () -> Unit,
+    onNavigateDestination: (String) -> Unit
 ) {
     when (destination) {
         NavigationDestination.HOME -> HomeScreen(
@@ -1300,7 +1335,8 @@ private fun MainContent(
             onOpenTask = onOpenTask,
             onOpenConversation = onOpenConversation,
             onOpenProjectChat = onOpenProjectChat,
-            onOpenNotifications = onOpenNotifications
+            onOpenNotifications = onOpenNotifications,
+            onNavigateDestination = onNavigateDestination
         )
 
         NavigationDestination.TASKS -> TasksScreen(
