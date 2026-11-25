@@ -78,6 +78,22 @@ fun Route.wmsInventoryRoutes(wmsInventoryService: WmsInventoryService) {
             call.respondText(result.body, ContentType.Application.Json, result.status)
         }
 
+        post("/{id}/pause") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid inventory id")
+            val request = call.receive<InventoryActionRequest>()
+            val result = wmsInventoryService.pause(id, request, call.currentUser())
+            call.respondText(result.body, ContentType.Application.Json, result.status)
+        }
+
+        post("/{id}/resume") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid inventory id")
+            val request = call.receive<InventoryActionRequest>()
+            val result = wmsInventoryService.resume(id, request, call.currentUser())
+            call.respondText(result.body, ContentType.Application.Json, result.status)
+        }
+
         post("/{id}/cancel") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid inventory id")

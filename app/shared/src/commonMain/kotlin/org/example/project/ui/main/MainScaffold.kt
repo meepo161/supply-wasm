@@ -273,6 +273,10 @@ fun MainScaffold(
     } else {
         null
     }
+    var onlineUserIds by remember(user.id) { mutableStateOf<List<Long>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(user.id) {
+        onlineUserIds = erpEventsClient.fetchOnlineUserIds()
+    }
     androidx.compose.runtime.LaunchedEffect(user.id, wmsViewModel, demandViewModel, supplierViewModel, productionViewModel) {
         erpEventsClient.observeEvents().collect { event ->
             when (event.domain) {
@@ -297,6 +301,18 @@ fun MainScaffold(
                 }
                 ErpEventDomain.PRODUCTION -> {
                     productionViewModel?.loadOrders()
+                }
+                ErpEventDomain.PRESENCE -> {
+                    val uid = event.entityId
+                    if (uid != null) {
+                        onlineUserIds = when (event.action) {
+                            "ONLINE" -> (onlineUserIds + uid).distinct()
+                            "OFFLINE" -> onlineUserIds.filterNot { it == uid }
+                            else -> erpEventsClient.fetchOnlineUserIds()
+                        }
+                    } else {
+                        onlineUserIds = erpEventsClient.fetchOnlineUserIds()
+                    }
                 }
             }
         }
@@ -462,6 +478,7 @@ fun MainScaffold(
                     isFavorite = selected in favoriteDestinations,
                     onToggleFavorite = { onToggleFavorite(selected) },
                     unreadNotifications = unreadNotifications,
+                    onlineUsersCount = onlineUserIds.size,
                     onCreateTask = {
                         selected = NavigationDestination.TASKS
                         quickCreate = QuickCreate.TASK
@@ -600,6 +617,7 @@ private fun TopBar(
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     unreadNotifications: Int,
+    onlineUsersCount: Int = 0,
     onCreateTask: () -> Unit,
     onCreateProject: () -> Unit
 ) {
@@ -721,6 +739,13 @@ private fun TopBar(
                 }
             }
             Spacer(Modifier.width(8.dp))
+            if (onlineUsersCount > 0) {
+                org.example.project.ui.theme.PillBadge(
+                    text = "В сети: $onlineUsersCount",
+                    accent = Brand.Teal
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             RoundIconButton(
                 glyph = ErpIconGlyph.Bell,
                 contentDescription = if (unreadNotifications > 0) "Уведомления, непрочитанных: $unreadNotifications" else "Уведомления",

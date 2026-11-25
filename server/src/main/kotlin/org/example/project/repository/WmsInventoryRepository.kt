@@ -243,6 +243,32 @@ class WmsInventoryRepository(private val dsl: DSLContext) {
             .returning()
             .fetchOne()
 
+    fun markPaused(id: Long, expectedVersion: Long, pausedBy: Long, fromStatus: String): InventoryOrdersRecord? =
+        dsl.update(INVENTORY_ORDERS)
+            .set(INVENTORY_ORDERS.STATUS, "PAUSED")
+            .set(INVENTORY_ORDERS.PAUSED_AT, OffsetDateTime.now())
+            .set(INVENTORY_ORDERS.PAUSED_BY, pausedBy)
+            .set(INVENTORY_ORDERS.PAUSED_FROM_STATUS, fromStatus)
+            .set(INVENTORY_ORDERS.VERSION, INVENTORY_ORDERS.VERSION.plus(1))
+            .where(INVENTORY_ORDERS.ID.eq(id))
+            .and(INVENTORY_ORDERS.VERSION.eq(expectedVersion))
+            .and(INVENTORY_ORDERS.STATUS.eq(fromStatus))
+            .returning()
+            .fetchOne()
+
+    fun markResumed(id: Long, expectedVersion: Long, targetStatus: String): InventoryOrdersRecord? =
+        dsl.update(INVENTORY_ORDERS)
+            .set(INVENTORY_ORDERS.STATUS, targetStatus)
+            .set(INVENTORY_ORDERS.PAUSED_AT, null as OffsetDateTime?)
+            .set(INVENTORY_ORDERS.PAUSED_BY, null as Long?)
+            .set(INVENTORY_ORDERS.PAUSED_FROM_STATUS, null as String?)
+            .set(INVENTORY_ORDERS.VERSION, INVENTORY_ORDERS.VERSION.plus(1))
+            .where(INVENTORY_ORDERS.ID.eq(id))
+            .and(INVENTORY_ORDERS.VERSION.eq(expectedVersion))
+            .and(INVENTORY_ORDERS.STATUS.eq("PAUSED"))
+            .returning()
+            .fetchOne()
+
     fun markCancelled(id: Long, expectedVersion: Long, reason: String, cancelledBy: Long): InventoryOrdersRecord? =
         dsl.update(INVENTORY_ORDERS)
             .set(INVENTORY_ORDERS.STATUS, "CANCELLED")
@@ -252,7 +278,7 @@ class WmsInventoryRepository(private val dsl: DSLContext) {
             .set(INVENTORY_ORDERS.VERSION, INVENTORY_ORDERS.VERSION.plus(1))
             .where(INVENTORY_ORDERS.ID.eq(id))
             .and(INVENTORY_ORDERS.VERSION.eq(expectedVersion))
-            .and(INVENTORY_ORDERS.STATUS.`in`("DRAFT", "BOOKED", "COUNTING", "DISCREPANCY", "APPROVED"))
+            .and(INVENTORY_ORDERS.STATUS.`in`("DRAFT", "BOOKED", "COUNTING", "DISCREPANCY", "PAUSED", "APPROVED"))
             .returning()
             .fetchOne()
 

@@ -66,6 +66,8 @@ import org.example.project.dto.InventoryDto
 import org.example.project.dto.InventoryScopeType
 import org.example.project.dto.InventoryStatus
 import org.example.project.dto.SubmitInventoryCountsRequest
+import org.example.project.dto.SuggestLocationDto
+import org.example.project.dto.UpdateSerialCalibrationRequest
 
 class WmsViewModel(
     private val repository: WmsRepository,
@@ -2068,6 +2070,46 @@ class WmsViewModel(
 
     fun postSelectedInventory() = inventoryCommand { id, version ->
         repository.postInventory(id, InventoryActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun pauseSelectedInventory() = inventoryCommand { id, version ->
+        repository.pauseInventory(id, InventoryActionRequest(version, newIdempotencyKey()))
+    }
+
+    fun resumeSelectedInventory() = inventoryCommand { id, version ->
+        repository.resumeInventory(id, InventoryActionRequest(version, newIdempotencyKey()))
+    }
+
+    suspend fun suggestLocation(warehouseId: Long, nomenclatureId: Long): SuggestLocationDto? =
+        when (val result = repository.suggestLocation(warehouseId, nomenclatureId)) {
+            is ApiResult.Success -> result.data
+            is ApiResult.Error -> null
+        }
+
+    fun updateSerialCalibration(
+        serialId: Long,
+        calibrationDate: String?,
+        calibrationExpiryDate: String?,
+        onDone: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
+            when (
+                val result = repository.updateSerialCalibration(
+                    serialId,
+                    UpdateSerialCalibrationRequest(calibrationDate, calibrationExpiryDate)
+                )
+            ) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    onDone()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = result.error
+                )
+            }
+        }
     }
 
     fun submitSelectedInventoryCounts() {

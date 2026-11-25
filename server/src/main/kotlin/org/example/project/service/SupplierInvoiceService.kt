@@ -866,6 +866,164 @@ class SupplierInvoiceService(
         )
     }
 
+    /**
+     * Извлекает текст из PDF-счёта (Apache PDFBox) и разбирает реквизиты и позиции
+     * с помощью [InvoiceTextParser], дополнительно подбирая поставщика по ИНН/КПП
+     * (перенесено из supply2 InvoiceAutofillParser).
+     */
+    fun parsePdf(pdfBytes: ByteArray, currentUser: CurrentUser): SupplierInvoiceAutofillDto {
+        requireManage(currentUser)
+        if (pdfBytes.isEmpty()) {
+            throw ValidationException("PDF-файл пуст", mapOf("file" to "empty"))
+        }
+        val extractedText = try {
+            org.apache.pdfbox.Loader.loadPDF(pdfBytes).use { doc ->
+                val stripper = org.apache.pdfbox.text.PDFTextStripper().apply {
+                    sortByPosition = true
+                }
+                stripper.getText(doc)
+            }
+        } catch (e: Exception) {
+            throw ValidationException("Не удалось прочитать PDF-файл: ${e.message ?: "повреждённый файл"}")
+        }
+
+        val parsed = InvoiceTextParser.parse(extractedText)
+        val matchedSupplier = parsed.supplierInn?.let { inn ->
+            val byInn = dsl.selectFrom(SUPPLIERS)
+                .where(SUPPLIERS.INN.eq(inn))
+                .fetch()
+            when {
+                byInn.isEmpty() -> null
+                parsed.supplierKpp != null -> byInn.firstOrNull { it.kpp == parsed.supplierKpp } ?: byInn.first()
+                else -> byInn.first()
+            }
+        }
+
+        return SupplierInvoiceAutofillDto(
+            number = parsed.number,
+            invoiceDate = parsed.invoiceDate,
+            validUntil = parsed.validUntil,
+            supplierInn = parsed.supplierInn,
+            supplierKpp = parsed.supplierKpp,
+            suggestedSupplierId = matchedSupplier?.id,
+            suggestedSupplierName = matchedSupplier?.name,
+            paymentTerms = parsed.paymentTerms,
+            prepaymentPct = parsed.prepaymentPct,
+            leadTimeDays = parsed.leadTimeDays,
+            leadTimeWorking = parsed.leadTimeWorking,
+            deliveryTerms = parsed.deliveryTerms,
+            supplierManager = parsed.supplierManager,
+            pricesIncludeVat = parsed.pricesIncludeVat,
+            extractedText = extractedText.take(12_000),
+            lines = parsed.lines.map { line ->
+                SupplierInvoiceAutofillLineDto(
+                    lineNo = line.lineNo,
+                    supplierItemCode = line.supplierItemCode,
+                    supplierItemName = line.supplierItemName,
+                    quantity = line.quantity,
+                    unit = line.unit,
+                    unitPrice = line.unitPrice,
+                    vatRate = line.vatRate,
+                    vatAmount = line.vatAmount,
+                    lineTotal = line.lineTotal
+                )
+            }
+        )
+    }
+
+    fun parseDocumentPdf(documentId: Long, currentUser: CurrentUser): SupplierInvoiceAutofillDto {
+        requireManage(currentUser)
+        val version = latestFileVersion(documentId)
+            ?: throw NotFoundException("document_version", documentId)
+        val storageKey = documentRepository.findFileStorageKey(version.fileId)
+            ?: throw NotFoundException("document_file", documentId)
+
+        val bytes = try {
+            fileStorage.read(storageKey)
+        } catch (_: NoSuchFileException) {
+            throw NotFoundException("document_file", documentId)
+        }
+        return parsePdf(bytes, currentUser)
+    }
+
+    /**
+     * Генерирует HTML-предпросмотр счёта поставщика для печати и просмотра в браузере
+     * (перенесено из supply2 PreviewInvoiceUseCase).
+     */
+    fun previewHtml(id: Long, currentUser: CurrentUser): SupplierInvoicePreviewDto {
+        val invoice = get(id, currentUser)
+        val supplierName = dsl.select(SUPPLIERS.NAME)
+            .from(SUPPLIERS)
+            .where(SUPPLIERS.ID.eq(invoice.supplierId))
+            .fetchOne(SUPPLIERS.NAME)
+            ?: "Поставщик #${invoice.supplierId}"
+
+        val statusLabel = when (invoice.status) {
+            SupplierInvoiceStatus.DRAFT -> "Черновик"
+            SupplierInvoiceStatus.CHECKED -> "Сверен"
+            SupplierInvoiceStatus.CANCELLED -> "Отменён"
+        }
+
+        fun esc(v: String?): String = (v ?: "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+
+        val html = buildString {
+            appendLine("<!DOCTYPE html>")
+            appendLine("<html lang=\"ru\"><head><meta charset=\"UTF-8\">")
+            appendLine("<title>Счёт ${esc(invoice.number)}</title>")
+            appendLine("<style>")
+            appendLine("body{margin:0;padding:32px;background:#f7f3eb;color:#1e293b;font-family:'Segoe UI',Tahoma,sans-serif;}")
+            appendLine(".sheet{max-width:960px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px;box-shadow:0 8px 24px rgba(15,23,42,.06);}")
+            appendLine(".hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #0f172a;padding-bottom:16px;margin-bottom:20px;}")
+            appendLine("h1{margin:0;font-size:22px;} .badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-size:12px;font-weight:600;}")
+            appendLine(".meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px;margin-bottom:20px;font-size:14px;}")
+            appendLine(".lbl{color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:.03em;}")
+            appendLine("table{width:100%;border-collapse:collapse;font-size:14px;} th,td{border:1px solid #e2e8f0;padding:8px 10px;text-align:left;}")
+            appendLine("th{background:#f8fafc;font-weight:600;} td.num,th.num{text-align:right;white-space:nowrap;}")
+            appendLine(".totals{margin-top:16px;display:flex;justify-content:flex-end;} .totals table{width:auto;min-width:300px;}")
+            appendLine("@media print{body{background:#fff;padding:0;}.sheet{border:none;box-shadow:none;}}")
+            appendLine("</style></head><body><div class=\"sheet\">")
+            appendLine("<div class=\"hdr\"><div><h1>Счёт поставщика № ${esc(invoice.number)}</h1>")
+            appendLine("<div style=\"color:#475569;margin-top:4px;\">от ${esc(invoice.invoiceDate)}</div></div>")
+            appendLine("<span class=\"badge\">$statusLabel</span></div>")
+            appendLine("<div class=\"meta\">")
+            appendLine("<div><div class=\"lbl\">Поставщик</div><div><strong>${esc(supplierName)}</strong></div></div>")
+            appendLine("<div><div class=\"lbl\">ИНН / КПП</div><div>${esc(invoice.supplierInn ?: "—")} / ${esc(invoice.supplierKpp ?: "—")}</div></div>")
+            invoice.paymentTerms?.let { appendLine("<div><div class=\"lbl\">Условия оплаты</div><div>${esc(it)}</div></div>") }
+            invoice.deliveryTerms?.let { appendLine("<div><div class=\"lbl\">Условия поставки</div><div>${esc(it)}</div></div>") }
+            invoice.validUntil?.let { appendLine("<div><div class=\"lbl\">Действителен до</div><div>${esc(it)}</div></div>") }
+            invoice.supplierManager?.let { appendLine("<div><div class=\"lbl\">Менеджер</div><div>${esc(it)}</div></div>") }
+            appendLine("</div>")
+            appendLine("<table><thead><tr><th>№</th><th>Артикул</th><th>Наименование</th><th class=\"num\">Кол-во</th><th>Ед.</th><th class=\"num\">Цена</th><th class=\"num\">НДС</th><th class=\"num\">Сумма</th></tr></thead><tbody>")
+            invoice.lines.forEach { line ->
+                appendLine("<tr><td>${line.lineNo}</td><td>${esc(line.supplierItemCode)}</td><td>${esc(line.supplierItemName)}</td>")
+                appendLine("<td class=\"num\">${esc(line.quantity)}</td><td>${esc(line.unit)}</td>")
+                appendLine("<td class=\"num\">${esc(line.unitPrice)}</td><td class=\"num\">${esc(line.vatAmount)}</td><td class=\"num\">${esc(line.lineTotal)}</td></tr>")
+            }
+            appendLine("</tbody></table>")
+            appendLine("<div class=\"totals\"><table>")
+            appendLine("<tr><td>Итого без НДС</td><td class=\"num\">${esc(invoice.netTotal)} ${esc(invoice.currency)}</td></tr>")
+            appendLine("<tr><td>НДС</td><td class=\"num\">${esc(invoice.vatTotal)} ${esc(invoice.currency)}</td></tr>")
+            appendLine("<tr><th>Всего к оплате</th><th class=\"num\">${esc(invoice.grossTotal)} ${esc(invoice.currency)}</th></tr>")
+            appendLine("</table></div>")
+            invoice.note?.takeIf { it.isNotBlank() }?.let {
+                appendLine("<p style=\"margin-top:16px;color:#475569;\"><strong>Примечание:</strong> ${esc(it)}</p>")
+            }
+            appendLine("</div></body></html>")
+        }
+
+        val safeNum = invoice.number.replace(Regex("""[^\w.-]+"""), "_")
+        return SupplierInvoicePreviewDto(
+            invoiceId = invoice.id,
+            number = invoice.number,
+            fileName = "invoice_preview_$safeNum.html",
+            htmlContent = html
+        )
+    }
+
     // -----------------------------------------------------------------------
     // Права и разбор значений
     // -----------------------------------------------------------------------

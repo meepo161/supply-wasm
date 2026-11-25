@@ -125,7 +125,15 @@ class NomenclatureCardService(
                 LotDto(it.id, it.nomenclatureId, it.lotNumber, it.manufactureDate?.toString(), it.expiryDate?.toString(), it.createdAt?.toString())
             },
             serials = wmsRepository.listSerials(id).map {
-                SerialItemDto(it.id, it.nomenclatureId, it.lotId, it.serialNumber, it.createdAt?.toString())
+                SerialItemDto(
+                    id = it.id,
+                    nomenclatureId = it.nomenclatureId,
+                    lotId = it.lotId,
+                    serialNumber = it.serialNumber,
+                    createdAt = it.createdAt?.toString(),
+                    calibrationDate = it.calibrationDate?.toString(),
+                    calibrationExpiryDate = it.calibrationExpiryDate?.toString()
+                )
             },
             expectedSupplies = expectedSupplies.map {
                 NomenclatureExpectedSupplyDto(

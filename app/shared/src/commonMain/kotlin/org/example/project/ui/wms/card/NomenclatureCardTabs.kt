@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.example.project.dto.AttachmentEntityType
 import org.example.project.dto.BomWhereUsedItemDto
 import org.example.project.dto.DemandStatus
@@ -299,9 +300,104 @@ private fun StockTab(state: NomenclatureCardUiState, card: NomenclatureCardDto, 
         }
     }
     if (card.item.serialTracked || card.serials.isNotEmpty()) {
-        CardSection("Серийные номера", count = card.serials.size) {
-            if (card.serials.isEmpty()) Hint("Серийные номера ещё не зарегистрированы.")
-            Text(card.serials.joinToString(", ") { it.serialNumber }, style = MaterialTheme.typography.bodyMedium)
+        val wmsRepo: org.example.project.data.WmsRepository = org.koin.compose.koinInject()
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        var serialList by remember(card.serials) { mutableStateOf(card.serials) }
+        var editingSerial by remember { mutableStateOf<org.example.project.dto.SerialItemDto?>(null) }
+        var calDateInput by remember { mutableStateOf("") }
+        var calExpiryInput by remember { mutableStateOf("") }
+        var calError by remember { mutableStateOf<String?>(null) }
+        var calBusy by remember { mutableStateOf(false) }
+
+        CardSection("Серийные номера", count = serialList.size) {
+            if (serialList.isEmpty()) Hint("Серийные номера ещё не зарегистрированы.")
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                serialList.forEach { ser ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(ser.serialNumber, style = MaterialTheme.typography.bodyMedium)
+                            val calSummary = listOfNotNull(
+                                ser.calibrationDate?.let { "поверка ${ErpFormat.dateRu(it)}" },
+                                ser.calibrationExpiryDate?.let { "годна до ${ErpFormat.dateRu(it)}" }
+                            ).joinToString(" · ")
+                            if (calSummary.isNotEmpty()) {
+                                Text(
+                                    calSummary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        org.example.project.ui.theme.SoftButton(
+                            text = "Поверка",
+                            onClick = {
+                                editingSerial = ser
+                                calDateInput = ser.calibrationDate.orEmpty()
+                                calExpiryInput = ser.calibrationExpiryDate.orEmpty()
+                                calError = null
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        editingSerial?.let { ser ->
+            org.example.project.ui.theme.ErpDialog(
+                title = "Даты поверки · ${ser.serialNumber}",
+                glyph = org.example.project.ui.theme.ErpIconGlyph.Documents,
+                gradient = org.example.project.ui.theme.Gradients.Emerald,
+                confirmText = if (calBusy) "Сохранение…" else "Сохранить",
+                confirmEnabled = !calBusy,
+                onDismiss = { if (!calBusy) editingSerial = null },
+                onConfirm = {
+                    calBusy = true
+                    calError = null
+                    scope.launch {
+                        when (
+                            val r = wmsRepo.updateSerialCalibration(
+                                ser.id,
+                                org.example.project.dto.UpdateSerialCalibrationRequest(
+                                    calibrationDate = calDateInput.trim().ifEmpty { null },
+                                    calibrationExpiryDate = calExpiryInput.trim().ifEmpty { null }
+                                )
+                            )
+                        ) {
+                            is org.example.project.data.ApiResult.Success -> {
+                                serialList = serialList.map { if (it.id == ser.id) r.data else it }
+                                calBusy = false
+                                editingSerial = null
+                            }
+                            is org.example.project.data.ApiResult.Error -> {
+                                calBusy = false
+                                calError = r.error.message
+                            }
+                        }
+                    }
+                }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    calError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                    OutlinedTextField(
+                        value = calDateInput,
+                        onValueChange = { calDateInput = it },
+                        label = { Text("Дата поверки (ГГГГ-ММ-ДД)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = calExpiryInput,
+                        onValueChange = { calExpiryInput = it },
+                        label = { Text("Годна до (ГГГГ-ММ-ДД)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
     }
 }

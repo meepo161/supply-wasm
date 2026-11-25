@@ -214,3 +214,44 @@ data class AcceptReceiptLinesRequest(
     val version: Long,
     val lines: List<AcceptReceiptLineInput>
 )
+
+@Serializable
+data class SupplierInvoiceAutofillLineDto(
+    val lineNo: Int,
+    val supplierItemCode: String = "",
+    val supplierItemName: String,
+    val quantity: String,
+    val unit: String,
+    val unitPrice: String,
+    val vatRate: String = "20",
+    val vatAmount: String = "",
+    val lineTotal: String = ""
+)
+
+@Serializable
+data class SupplierInvoiceAutofillDto(
+    val number: String? = null,
+    val invoiceDate: String? = null,
+    val validUntil: String? = null,
+    val supplierInn: String? = null,
+    val supplierKpp: String? = null,
+    val suggestedSupplierId: Long? = null,
+    val suggestedSupplierName: String? = null,
+    val paymentTerms: String? = null,
+    val prepaymentPct: String? = null,
+    val leadTimeDays: String? = null,
+    val leadTimeWorking: Boolean? = null,
+    val deliveryTerms: String? = null,
+    val supplierManager: String? = null,
+    val pricesIncludeVat: Boolean? = null,
+    val extractedText: String = "",
+    val lines: List<SupplierInvoiceAutofillLineDto> = emptyList()
+)
+
+@Serializable
+data class SupplierInvoicePreviewDto(
+    val invoiceId: Long,
+    val number: String,
+    val fileName: String,
+    val htmlContent: String
+)

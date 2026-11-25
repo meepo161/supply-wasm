@@ -164,6 +164,21 @@ fun Route.wmsRoutes(wmsService: WmsService) {
             call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.listSerials(nomenclatureId, call.currentUser())))
         }
 
+        patch("/serials/{id}/calibration") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid serial id")
+            val request = call.receive<UpdateSerialCalibrationRequest>()
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.updateSerialCalibration(id, request, call.currentUser())))
+        }
+
+        get("/suggest-location") {
+            val warehouseId = call.request.queryParameters["warehouseId"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid warehouseId")
+            val nomenclatureId = call.request.queryParameters["nomenclatureId"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid nomenclatureId")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(wmsService.suggestLocation(warehouseId, nomenclatureId, call.currentUser())))
+        }
+
         // Приёмки обрабатываются в receiptRoutes: там же находятся основания,
         // расхождения, проведение и поздние связи. Путь /api/wms/receipts* не
         // должен дублироваться в wmsRoutes, иначе Ktor выберет первый обработчик.

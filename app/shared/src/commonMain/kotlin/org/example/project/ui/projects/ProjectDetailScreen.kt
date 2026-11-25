@@ -192,6 +192,13 @@ fun ProjectDetailScreen(
             }
         }
 
+        ProjectNextActionBanner(
+            project = project,
+            tasks = projectTasks,
+            tabsState = tabsState,
+            onOpenTab = onTabSelected
+        )
+
         if (detailLoading) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(96.dp),
@@ -786,4 +793,141 @@ private fun AddMemberSelector(
 internal fun ownerName(project: ProjectDto): String {
     val owner = project.members.find { it.userId == project.ownerId }
     return owner?.fullName ?: "ID ${project.ownerId}"
+}
+
+/**
+ * Карточка «следующего действия» по проекту (перенесено из supply2 ProjectNextActionCard).
+ * Показывает один доминирующий шаг, ответственную роль и быстрый переход к нужному разделу.
+ */
+internal data class ProjectNextAction(
+    val title: String,
+    val explanation: String,
+    val ownerLabel: String,
+    val buttonText: String?,
+    val targetTab: ProjectTab?,
+    val accent: androidx.compose.ui.graphics.Color
+)
+
+internal fun buildProjectNextAction(
+    project: ProjectDto,
+    tasks: List<TaskDto>,
+    tabsState: ProjectsUiState?
+): ProjectNextAction {
+    val openTasks = tasks.count {
+        it.status != org.example.project.dto.TaskStatus.CLOSED &&
+            it.status != org.example.project.dto.TaskStatus.CANCELLED
+    }
+    val openDemands = tabsState?.demands?.count {
+        it.status != org.example.project.dto.DemandStatus.COVERED &&
+            it.status != org.example.project.dto.DemandStatus.CANCELLED
+    } ?: 0
+    val openRisks = tabsState?.risks?.count {
+        it.status == org.example.project.dto.ProjectRiskStatus.OPEN ||
+            it.status == org.example.project.dto.ProjectRiskStatus.MITIGATING
+    } ?: 0
+
+    return when {
+        project.status == ProjectStatus.CLOSED -> ProjectNextAction(
+            title = "Проект закрыт",
+            explanation = "Операционные действия по проекту завершены.",
+            ownerLabel = "Система",
+            buttonText = null,
+            targetTab = null,
+            accent = Brand.Slate
+        )
+        project.status == ProjectStatus.ON_HOLD -> ProjectNextAction(
+            title = "Проект приостановлен",
+            explanation = "Возобновите проект или пересмотрите активные задачи и риски.",
+            ownerLabel = "РП",
+            buttonText = "К обзору",
+            targetTab = ProjectTab.OVERVIEW,
+            accent = Brand.Amber
+        )
+        openRisks > 0 -> ProjectNextAction(
+            title = "Разобрать активные риски ($openRisks)",
+            explanation = "Есть открытые риски проекта, требующие мер реагирования.",
+            ownerLabel = "РП",
+            buttonText = "Открыть риски",
+            targetTab = ProjectTab.RISKS,
+            accent = Brand.Rose
+        )
+        openDemands > 0 -> ProjectNextAction(
+            title = "Обеспечить потребности ($openDemands)",
+            explanation = "По проекту есть открытые потребности в материалах.",
+            ownerLabel = "Снабжение / РП",
+            buttonText = "К потребностям",
+            targetTab = ProjectTab.DEMANDS,
+            accent = Brand.Amber
+        )
+        tasks.isEmpty() -> ProjectNextAction(
+            title = "Добавить задачи проекта",
+            explanation = "Декомпозируйте работы по этапам и назначьте исполнителей.",
+            ownerLabel = "РП",
+            buttonText = "К задачам",
+            targetTab = ProjectTab.TASKS,
+            accent = Brand.Indigo
+        )
+        openTasks > 0 -> ProjectNextAction(
+            title = "Контроль выполнения задач (в работе: $openTasks)",
+            explanation = "Отслеживайте сроки и статусы активных задач проекта.",
+            ownerLabel = "РП / Исполнители",
+            buttonText = "К задачам",
+            targetTab = ProjectTab.TASKS,
+            accent = Brand.Blue
+        )
+        else -> ProjectNextAction(
+            title = "Все задачи выполнены — можно завершить проект",
+            explanation = "Незакрытых задач и открытых потребностей не осталось.",
+            ownerLabel = "РП",
+            buttonText = "К обзору",
+            targetTab = ProjectTab.OVERVIEW,
+            accent = Brand.Teal
+        )
+    }
+}
+
+@Composable
+private fun ProjectNextActionBanner(
+    project: ProjectDto,
+    tasks: List<TaskDto>,
+    tabsState: ProjectsUiState?,
+    onOpenTab: (ProjectTab) -> Unit
+) {
+    val action = buildProjectNextAction(project, tasks, tabsState)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = action.accent.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, action.accent.copy(alpha = 0.28f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Следующий шаг: ${action.title}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    PillBadge(text = action.ownerLabel, accent = action.accent)
+                }
+                Text(
+                    text = action.explanation,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            val target = action.targetTab
+            val btn = action.buttonText
+            if (target != null && btn != null) {
+                Spacer(Modifier.width(12.dp))
+                OutlinedButton(onClick = { onOpenTab(target) }) {
+                    Text(btn)
+                }
+            }
+        }
+    }
 }

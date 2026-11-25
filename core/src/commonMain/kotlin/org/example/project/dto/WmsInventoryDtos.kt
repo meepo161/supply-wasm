@@ -18,6 +18,7 @@ enum class InventoryStatus {
     BOOKED,
     COUNTING,
     DISCREPANCY,
+    PAUSED,
     APPROVED,
     POSTED,
     CANCELLED
@@ -117,6 +118,9 @@ data class InventoryDto(
     val approvedBy: Long? = null,
     val postedAt: String? = null,
     val postedBy: Long? = null,
+    val pausedAt: String? = null,
+    val pausedBy: Long? = null,
+    val pausedFromStatus: InventoryStatus? = null,
     val cancelledAt: String? = null,
     val cancelReason: String? = null,
     val createdAt: String? = null,

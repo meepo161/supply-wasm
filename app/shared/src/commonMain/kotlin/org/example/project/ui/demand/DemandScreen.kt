@@ -149,6 +149,22 @@ private fun DemandListPage(
                 }
             }
         }
+        var viewMode by androidx.compose.runtime.remember {
+            androidx.compose.runtime.mutableStateOf(org.example.project.ui.components.ListViewMode.TABLE)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            org.example.project.ui.components.ViewModeToggle(
+                current = viewMode,
+                supported = setOf(
+                    org.example.project.ui.components.ListViewMode.TABLE,
+                    org.example.project.ui.components.ListViewMode.COMPACT
+                ),
+                onChange = { viewMode = it }
+            )
+        }
         if (showMergeDialog) {
             org.example.project.ui.theme.ErpDialog(
                 title = "Объединение потребностей",
@@ -211,6 +227,43 @@ private fun DemandListPage(
             LoadingOverlay()
         } else if (state.demands.isEmpty()) {
             EmptyState("Нет потребностей. Создайте первую.")
+        } else if (viewMode == org.example.project.ui.components.ListViewMode.COMPACT) {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(state.demands.size, key = { state.demands[it].id }) { idx ->
+                    val d = state.demands[idx]
+                    val openDays = demandOpenDays(d.createdAt)
+                    val atRisk = isDemandAtRisk(d.status, openDays)
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { viewModel.selectDemand(d.id) },
+                        contentPadding = 12.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("${d.number} · ${d.sourceType.localizedName()}", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    d.itemsSummary ?: "Без описания позиций",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (atRisk) {
+                                    PillBadge(text = "Зависла $openDays дн.", accent = Brand.Rose)
+                                }
+                                PillBadge(text = d.status.localizedName(), accent = Brand.Indigo)
+                            }
+                        }
+                    }
+                }
+            }
         } else {
             DemandsGrid(
                 projects = state.projects,
@@ -282,14 +335,20 @@ private fun DemandHeaderCard(
                     text = "${header.number} · ${header.sourceType.localizedName()}",
                     style = MaterialTheme.typography.titleMedium
                 )
-                PillBadge(
-                    text = header.status.localizedName(),
-                    accent = when (header.status) {
-                        DemandStatus.APPROVED -> Brand.Teal
-                        DemandStatus.CANCELLED -> Brand.Rose
-                        else -> Brand.Indigo
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val openDays = demandOpenDays(header.createdAt)
+                    if (isDemandAtRisk(header.status, openDays)) {
+                        PillBadge(text = "Зависла $openDays дн.", accent = Brand.Rose)
                     }
-                )
+                    PillBadge(
+                        text = header.status.localizedName(),
+                        accent = when (header.status) {
+                            DemandStatus.APPROVED -> Brand.Teal
+                            DemandStatus.CANCELLED -> Brand.Rose
+                            else -> Brand.Indigo
+                        }
+                    )
+                }
             }
             Text(text = "Приоритет: ${header.priority.localizedName()}", style = MaterialTheme.typography.bodyMedium)
             header.requiredDate?.let {

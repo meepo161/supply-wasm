@@ -9,6 +9,8 @@ import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
@@ -17,10 +19,12 @@ import org.example.project.dto.ConfirmSupplierInvoiceCheckRequest
 import org.example.project.dto.CreateReceiptFromInvoiceRequest
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.SupplierInvoiceActionRequest
+import org.example.project.dto.SupplierInvoiceAutofillDto
 import org.example.project.dto.SupplierInvoiceCheckDto
 import org.example.project.dto.SupplierInvoiceDto
 import org.example.project.dto.SupplierInvoiceHistoryDto
 import org.example.project.dto.SupplierInvoiceInput
+import org.example.project.dto.SupplierInvoicePreviewDto
 import org.example.project.dto.SupplierInvoiceStatus
 import org.example.project.dto.UpdateSupplierInvoiceRequest
 
@@ -69,6 +73,32 @@ class SupplierInvoiceApiClient(private val client: HttpClient) : SupplierInvoice
 
     override suspend fun history(id: Long): ApiResult<List<SupplierInvoiceHistoryDto>> =
         execute { client.get("$BASE/$id/history") }
+
+    override suspend fun parseDocumentPdf(documentId: Long): ApiResult<SupplierInvoiceAutofillDto> =
+        execute { client.post("$BASE/parse-pdf?documentId=$documentId") }
+
+    override suspend fun parsePdfBytes(fileName: String, bytes: ByteArray): ApiResult<SupplierInvoiceAutofillDto> =
+        execute {
+            client.post("$BASE/parse-pdf") {
+                setBody(
+                    io.ktor.client.request.forms.MultiPartFormDataContent(
+                        io.ktor.client.request.forms.formData {
+                            append(
+                                key = "file",
+                                value = bytes,
+                                headers = Headers.build {
+                                    append(HttpHeaders.ContentType, "application/pdf")
+                                    append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                                }
+                            )
+                        }
+                    )
+                )
+            }
+        }
+
+    override suspend fun previewHtml(id: Long): ApiResult<SupplierInvoicePreviewDto> =
+        execute { client.get("$BASE/$id/preview") }
 
     override suspend fun downloadFile(id: Long): ApiResult<DownloadedAttachment> =
         try {

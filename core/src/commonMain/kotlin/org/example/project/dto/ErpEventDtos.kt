@@ -9,7 +9,8 @@ enum class ErpEventDomain {
     WMS,
     DEMAND,
     SUPPLIER,
-    PRODUCTION
+    PRODUCTION,
+    PRESENCE
 }
 
 @Serializable
@@ -17,4 +18,9 @@ data class ErpEventDto(
     val domain: ErpEventDomain,
     val action: String,
     val entityId: Long? = null
+)
+
+@Serializable
+data class PresenceSnapshotDto(
+    val onlineUserIds: List<Long> = emptyList()
 )

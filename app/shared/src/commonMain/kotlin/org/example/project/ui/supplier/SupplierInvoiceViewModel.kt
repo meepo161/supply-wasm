@@ -23,6 +23,8 @@ import org.example.project.dto.DocumentType
 import org.example.project.dto.InvoiceIssueSeverity
 import org.example.project.dto.InvoiceTextParser
 import org.example.project.dto.LeadTimeKind
+import org.example.project.dto.ParsedSupplierInvoice
+import org.example.project.dto.ParsedSupplierInvoiceLine
 import org.example.project.dto.PurchaseOrderDto
 import org.example.project.dto.SupplierInvoiceActionRequest
 import org.example.project.dto.SupplierInvoiceCheckDto
@@ -30,6 +32,7 @@ import org.example.project.dto.SupplierInvoiceDto
 import org.example.project.dto.SupplierInvoiceHistoryDto
 import org.example.project.dto.SupplierInvoiceInput
 import org.example.project.dto.SupplierInvoiceLineInput
+import org.example.project.dto.SupplierInvoicePreviewDto
 import org.example.project.dto.SupplierInvoiceStatus
 import org.example.project.dto.UpdateSupplierInvoiceRequest
 import org.example.project.dto.UserDto
@@ -289,7 +292,70 @@ class SupplierInvoiceViewModel(
             update { it.copy(error = ApiError("VALIDATION_ERROR", "Вставьте текст счёта для распознавания")) }
             return
         }
-        val parsed = InvoiceTextParser.parse(rawText)
+        applyParsedInvoice(form, InvoiceTextParser.parse(rawText))
+    }
+
+    /** Заполняет форму счёта, отправляя приложенный PDF на сервер для извлечения текста через PDFBox. */
+    fun autofillFromPdf() {
+        val form = _uiState.value.form ?: return
+        val pending = form.pendingFile
+        val docId = form.documentId
+        if (pending == null && docId == null) {
+            update { it.copy(error = ApiError("VALIDATION_ERROR", "Сначала выберите PDF-файл счёта")) }
+            return
+        }
+        update { it.copy(isBusy = true, error = null) }
+        viewModelScope.launch {
+            val result = if (pending != null) {
+                repository.parsePdfBytes(pending.fileName, pending.bytes)
+            } else {
+                repository.parseDocumentPdf(docId!!)
+            }
+            when (result) {
+                is ApiResult.Success -> {
+                    val dto = result.data
+                    val parsed = ParsedSupplierInvoice(
+                        number = dto.number,
+                        invoiceDate = dto.invoiceDate,
+                        validUntil = dto.validUntil,
+                        supplierInn = dto.supplierInn,
+                        supplierKpp = dto.supplierKpp,
+                        paymentTerms = dto.paymentTerms,
+                        prepaymentPct = dto.prepaymentPct,
+                        leadTimeDays = dto.leadTimeDays,
+                        leadTimeWorking = dto.leadTimeWorking,
+                        deliveryTerms = dto.deliveryTerms,
+                        supplierManager = dto.supplierManager,
+                        pricesIncludeVat = dto.pricesIncludeVat,
+                        lines = dto.lines.map {
+                            ParsedSupplierInvoiceLine(
+                                lineNo = it.lineNo,
+                                supplierItemCode = it.supplierItemCode,
+                                supplierItemName = it.supplierItemName,
+                                quantity = it.quantity,
+                                unit = it.unit,
+                                unitPrice = it.unitPrice,
+                                vatRate = it.vatRate,
+                                vatAmount = it.vatAmount,
+                                lineTotal = it.lineTotal
+                            )
+                        }
+                    )
+                    update { it.copy(isBusy = false) }
+                    applyParsedInvoice(
+                        form.copy(
+                            supplierId = dto.suggestedSupplierId ?: form.supplierId,
+                            supplierName = dto.suggestedSupplierName ?: form.supplierName
+                        ),
+                        parsed
+                    )
+                }
+                is ApiResult.Error -> update { it.copy(isBusy = false, error = result.error) }
+            }
+        }
+    }
+
+    private fun applyParsedInvoice(form: InvoiceForm, parsed: ParsedSupplierInvoice) {
         val effectivePricesIncludeVat = parsed.pricesIncludeVat ?: form.pricesIncludeVat
         val mappedLines = if (parsed.lines.isNotEmpty()) {
             parsed.lines.mapIndexed { idx, pLine ->
@@ -341,13 +407,13 @@ class SupplierInvoiceViewModel(
             if (parsed.lines.isNotEmpty()) add("строк: ${parsed.lines.size}")
         }
         if (recognizedParts.isEmpty()) {
-            update { it.copy(error = ApiError("VALIDATION_ERROR", "Не удалось распознать поля счёта, проверьте формат текста")) }
+            update { it.copy(error = ApiError("VALIDATION_ERROR", "Не удалось распознать поля счёта, проверьте формат документа")) }
         } else {
             update {
                 it.copy(
                     form = updatedForm,
                     error = null,
-                    message = "Распознано из текста: ${recognizedParts.joinToString(", ")}"
+                    message = "Распознано: ${recognizedParts.joinToString(", ")}"
                 )
             }
         }
@@ -480,6 +546,20 @@ class SupplierInvoiceViewModel(
                     safeAttachmentFileName(invoice.fileName ?: "invoice-${invoice.number}.pdf", invoice.id),
                     r.data.mimeType,
                     r.data.bytes
+                )
+                is ApiResult.Error -> update { it.copy(error = r.error) }
+            }
+        }
+    }
+
+    fun previewHtml(target: SupplierInvoiceDto? = null) {
+        val invoice = target ?: _uiState.value.selected ?: return
+        viewModelScope.launch {
+            when (val r = repository.previewHtml(invoice.id)) {
+                is ApiResult.Success -> saveAttachmentFile(
+                    r.data.fileName,
+                    "text/html; charset=utf-8",
+                    r.data.htmlContent.encodeToByteArray()
                 )
                 is ApiResult.Error -> update { it.copy(error = r.error) }
             }

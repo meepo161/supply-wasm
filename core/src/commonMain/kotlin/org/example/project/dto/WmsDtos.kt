@@ -215,7 +215,25 @@ data class SerialItemDto(
     val nomenclatureId: Long,
     val lotId: Long? = null,
     val serialNumber: String,
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val calibrationDate: String? = null,
+    val calibrationExpiryDate: String? = null
+)
+
+@Serializable
+data class UpdateSerialCalibrationRequest(
+    val calibrationDate: String? = null,
+    val calibrationExpiryDate: String? = null
+)
+
+@Serializable
+data class SuggestLocationDto(
+    val warehouseId: Long,
+    val nomenclatureId: Long,
+    val locationId: Long? = null,
+    val locationCode: String? = null,
+    val zoneCode: String? = null,
+    val usageCount: Int = 0
 )
 
 @Serializable

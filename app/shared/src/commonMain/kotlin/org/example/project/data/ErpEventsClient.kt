@@ -1,7 +1,9 @@
 package org.example.project.data
 
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.get
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readReason
@@ -9,11 +11,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import org.example.project.dto.ApiResponse
 import org.example.project.dto.ErpEventDto
+import org.example.project.dto.PresenceSnapshotDto
 
 class ErpEventsClient(private val client: HttpClient) {
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    suspend fun fetchOnlineUserIds(): List<Long> = runCatching {
+        client.get("/api/presence/online").body<ApiResponse<PresenceSnapshotDto>>().data?.onlineUserIds ?: emptyList()
+    }.getOrDefault(emptyList())
 
     fun observeEvents(): Flow<ErpEventDto> = flow {
         var backoffMs = 1_500L

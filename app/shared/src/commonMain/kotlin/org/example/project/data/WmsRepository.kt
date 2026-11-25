@@ -14,6 +14,7 @@ import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
+import org.example.project.dto.SerialItemDto
 import org.example.project.dto.StockBalanceDto
 import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.WarehouseDto
@@ -48,6 +49,8 @@ import org.example.project.dto.InventoryActionRequest
 import org.example.project.dto.InventoryDto
 import org.example.project.dto.InventoryStatus
 import org.example.project.dto.SubmitInventoryCountsRequest
+import org.example.project.dto.SuggestLocationDto
+import org.example.project.dto.UpdateSerialCalibrationRequest
 
 interface WmsRepository {
     suspend fun listWarehouses(): ApiResult<List<WarehouseDto>>
@@ -180,5 +183,11 @@ interface WmsRepository {
     suspend fun submitInventoryCounts(id: Long, request: SubmitInventoryCountsRequest): ApiResult<InventoryDto>
     suspend fun approveInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto>
     suspend fun postInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto>
+    suspend fun pauseInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto>
+    suspend fun resumeInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto>
     suspend fun cancelInventory(id: Long, request: CancelInventoryRequest): ApiResult<InventoryDto>
+
+    // Подсказка ячейки и поверка серийных экземпляров (из supply2)
+    suspend fun suggestLocation(warehouseId: Long, nomenclatureId: Long): ApiResult<SuggestLocationDto>
+    suspend fun updateSerialCalibration(serialId: Long, request: UpdateSerialCalibrationRequest): ApiResult<SerialItemDto>
 }

@@ -347,6 +347,7 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
 private fun InvoiceActions(invoice: SupplierInvoiceDto, state: SupplierInvoiceUiState, viewModel: SupplierInvoiceViewModel) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         SoftButton(text = "Открыть файл", onClick = { viewModel.downloadFile(invoice) }, leadingIcon = ErpIconGlyph.Documents)
+        SoftButton(text = "Предпросмотр HTML", onClick = { viewModel.previewHtml(invoice) }, leadingIcon = ErpIconGlyph.Documents)
         if (!viewModel.canManage()) return@Row
         when (invoice.status) {
             SupplierInvoiceStatus.DRAFT -> {
@@ -482,6 +483,15 @@ private fun InvoiceFormDialog(state: SupplierInvoiceUiState, viewModel: Supplier
                     color = if (form.hasFile) Brand.Teal else Brand.Rose,
                     modifier = Modifier.weight(1f)
                 )
+                if (form.hasFile) {
+                    SoftButton(
+                        text = "Заполнить из PDF",
+                        onClick = viewModel::autofillFromPdf,
+                        enabled = !state.isBusy,
+                        tint = Brand.Teal
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
                 if (form.documentId == null) {
                     SoftButton(text = if (form.pendingFile == null) "Выбрать файл" else "Другой файл", onClick = viewModel::pickInvoiceFile, leadingIcon = ErpIconGlyph.Plus)
                 }

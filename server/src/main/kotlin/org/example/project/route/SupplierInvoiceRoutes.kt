@@ -1,11 +1,13 @@
 package org.example.project.route
 
 import io.ktor.http.*
+import io.ktor.http.content.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.utils.io.*
 import org.example.project.dto.*
 import org.example.project.exception.ValidationException
 import org.example.project.plugins.RequireAuthPlugin
@@ -82,6 +84,34 @@ fun Route.supplierInvoiceRoutes(service: SupplierInvoiceService) {
         get("/{id}/history") {
             val id = call.longParamOrThrow("id")
             call.respond(HttpStatusCode.OK, ApiResponse.success(service.history(id, call.currentUser())))
+        }
+
+        post("/parse-pdf") {
+            val docId = call.request.queryParameters["documentId"]?.toLongOrNull()
+            if (docId != null) {
+                call.respond(HttpStatusCode.OK, ApiResponse.success(service.parseDocumentPdf(docId, call.currentUser())))
+                return@post
+            }
+            val multipart = call.receiveMultipart()
+            var pdfBytes: ByteArray? = null
+            multipart.forEachPart { part ->
+                if (part is PartData.FileItem && pdfBytes == null) {
+                    pdfBytes = part.provider().toByteArray()
+                }
+                part.dispose()
+            }
+            val bytes = pdfBytes ?: throw ValidationException("PDF-файл или documentId не переданы")
+            call.respond(HttpStatusCode.OK, ApiResponse.success(service.parsePdf(bytes, call.currentUser())))
+        }
+
+        get("/{id}/preview") {
+            val id = call.longParamOrThrow("id")
+            val preview = service.previewHtml(id, call.currentUser())
+            if (call.request.queryParameters["raw"] == "true") {
+                call.respondText(preview.htmlContent, ContentType.Text.Html)
+            } else {
+                call.respond(HttpStatusCode.OK, ApiResponse.success(preview))
+            }
         }
 
         get("/{id}/file") {

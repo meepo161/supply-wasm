@@ -163,6 +163,7 @@ fun InventoryStatus.localizedName(): String = when (this) {
     InventoryStatus.BOOKED -> "Срез зафиксирован"
     InventoryStatus.COUNTING -> "Идёт подсчёт"
     InventoryStatus.DISCREPANCY -> "Есть расхождения"
+    InventoryStatus.PAUSED -> "На паузе"
     InventoryStatus.APPROVED -> "Согласовано"
     InventoryStatus.POSTED -> "Проведено"
     InventoryStatus.CANCELLED -> "Отменено"

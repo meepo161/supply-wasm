@@ -1396,6 +1396,8 @@ internal fun InventoriesTab(
                 onSubmitCounts = viewModel::submitSelectedInventoryCounts,
                 onApprove = viewModel::approveSelectedInventory,
                 onPost = viewModel::postSelectedInventory,
+                onPause = viewModel::pauseSelectedInventory,
+                onResume = viewModel::resumeSelectedInventory,
                 onCancel = viewModel::cancelSelectedInventory,
                 onClose = { viewModel.selectInventory(null) },
                 error = state.operationError,
@@ -1416,6 +1418,8 @@ private fun InventoryDetailDialog(
     onSubmitCounts: () -> Unit,
     onApprove: () -> Unit,
     onPost: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
     onCancel: () -> Unit,
     onClose: () -> Unit,
     error: org.example.project.dto.ApiError? = null,
@@ -1431,6 +1435,12 @@ private fun InventoryDetailDialog(
         inventory.status == InventoryStatus.COUNTING
     val canPost = inventory.status == InventoryStatus.DISCREPANCY ||
         inventory.status == InventoryStatus.APPROVED
+    val canPause = inventory.status in setOf(
+        InventoryStatus.BOOKED,
+        InventoryStatus.COUNTING,
+        InventoryStatus.DISCREPANCY
+    )
+    val canResume = inventory.status == InventoryStatus.PAUSED
     val canCancel = inventory.status != InventoryStatus.POSTED && inventory.status != InventoryStatus.CANCELLED
     val discrepancyBySnapshot = inventory.discrepancies.associateBy { it.snapshotId }
 
@@ -1447,6 +1457,8 @@ private fun InventoryDetailDialog(
             if (canCount) Button(onClick = onSubmitCounts, enabled = !busy) { Text("Сохранить подсчёт") }
             if (canApprove) Button(onClick = onApprove, enabled = !busy) { Text("Согласовать") }
             if (canPost) Button(onClick = onPost, enabled = !busy) { Text("Провести") }
+            if (canPause) TextButton(onClick = onPause, enabled = !busy) { Text("Пауза") }
+            if (canResume) Button(onClick = onResume, enabled = !busy) { Text("Возобновить") }
             if (canCancel) TextButton(onClick = onCancel, enabled = !busy) { Text("Отменить инвентаризацию") }
         }
     ) {
@@ -1540,6 +1552,7 @@ private fun inventoryStatusAccent(status: InventoryStatus) = when (status) {
     InventoryStatus.BOOKED -> Brand.Indigo
     InventoryStatus.COUNTING -> Brand.Cyan
     InventoryStatus.DISCREPANCY -> Brand.Amber
+    InventoryStatus.PAUSED -> Brand.Amber
     InventoryStatus.APPROVED -> Brand.Indigo
     InventoryStatus.POSTED -> Brand.Teal
     InventoryStatus.CANCELLED -> Brand.Rose

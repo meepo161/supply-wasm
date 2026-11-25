@@ -107,7 +107,15 @@ fun ReceiptAcceptance(
                                     ?.locationId
                                     ?.takeIf { id -> selectable.any { it.id == id } }
                             }
-                            val autoLocId = existingLocId ?: selectable.singleOrNull()?.id
+                            val suggestedLocId: Long? = existingLocId ?: if (line != null) {
+                                when (val s = wmsRepository.suggestLocation(receipt.warehouseId, line.nomenclatureId)) {
+                                    is ApiResult.Success -> s.data.locationId?.takeIf { id -> selectable.any { it.id == id } }
+                                    is ApiResult.Error -> null
+                                }
+                            } else {
+                                null
+                            }
+                            val autoLocId = suggestedLocId ?: selectable.singleOrNull()?.id
                             if (autoLocId != null) {
                                 rows[idx] = row.copy(locationId = autoLocId)
                             }

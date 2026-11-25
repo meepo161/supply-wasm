@@ -105,6 +105,63 @@ class WmsInventoryService(
         }
     }
 
+    fun pause(id: Long, request: InventoryActionRequest, currentUser: CurrentUser): CommandResponse {
+        currentUser.requirePermission("wms", "post")
+        val payload = json.encodeToString(InventoryActionRequest.serializer(), request)
+        return executeIdempotent(
+            "INVENTORY_PAUSE", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
+        ) {
+            val order = inventoryRepository.lockInventoryById(id) ?: throw NotFoundException("inventory", id)
+            if (order.version != request.version) {
+                throw ConflictException("Inventory was modified concurrently")
+            }
+            if (order.status !in setOf("BOOKED", "COUNTING", "DISCREPANCY")) {
+                throw ConflictException("Only active inventory in BOOKED/COUNTING/DISCREPANCY status can be paused")
+            }
+            val paused = inventoryRepository.markPaused(id, request.version, currentUser.userId, order.status)
+                ?: throw ConflictException("Inventory was modified concurrently")
+            auditService.log(
+                currentUser.userId, "PAUSE", "INVENTORY", id,
+                mapOf("number" to paused.number, "fromStatus" to order.status)
+            )
+            id to paused.toDto(
+                inventoryRepository.listSnapshot(id),
+                inventoryRepository.latestCounts(id),
+                inventoryRepository.latestDiscrepancies(id)
+            )
+        }
+    }
+
+    fun resume(id: Long, request: InventoryActionRequest, currentUser: CurrentUser): CommandResponse {
+        currentUser.requirePermission("wms", "post")
+        val payload = json.encodeToString(InventoryActionRequest.serializer(), request)
+        return executeIdempotent(
+            "INVENTORY_RESUME", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
+        ) {
+            val order = inventoryRepository.lockInventoryById(id) ?: throw NotFoundException("inventory", id)
+            if (order.version != request.version) {
+                throw ConflictException("Inventory was modified concurrently")
+            }
+            if (order.status != "PAUSED") {
+                throw ConflictException("Only PAUSED inventory can be resumed")
+            }
+            val targetStatus = order.pausedFromStatus
+                ?.takeIf { it in setOf("BOOKED", "COUNTING", "DISCREPANCY") }
+                ?: "BOOKED"
+            val resumed = inventoryRepository.markResumed(id, request.version, targetStatus)
+                ?: throw ConflictException("Inventory was modified concurrently")
+            auditService.log(
+                currentUser.userId, "RESUME", "INVENTORY", id,
+                mapOf("number" to resumed.number, "toStatus" to targetStatus)
+            )
+            id to resumed.toDto(
+                inventoryRepository.listSnapshot(id),
+                inventoryRepository.latestCounts(id),
+                inventoryRepository.latestDiscrepancies(id)
+            )
+        }
+    }
+
     fun cancel(id: Long, request: CancelInventoryRequest, currentUser: CurrentUser): CommandResponse {
         currentUser.requirePermission("wms", "post")
         if (request.reason.isBlank()) {
@@ -591,6 +648,9 @@ private fun InventoryOrdersRecord.toDto(
     approvedBy = this.approvedBy,
     postedAt = this.postedAt?.toString(),
     postedBy = this.postedBy,
+    pausedAt = this.pausedAt?.toString(),
+    pausedBy = this.pausedBy,
+    pausedFromStatus = this.pausedFromStatus?.let { runCatching { InventoryStatus.valueOf(it) }.getOrNull() },
     cancelledAt = this.cancelledAt?.toString(),
     cancelReason = this.cancelReason,
     createdAt = this.createdAt?.toString(),

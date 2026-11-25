@@ -201,7 +201,9 @@ class WmsService(
                     nomenclatureId = serial.nomenclatureId,
                     lotId = serial.lotId,
                     serialNumber = serial.serialNumber,
-                    createdAt = serial.createdAt?.toString()
+                    createdAt = serial.createdAt?.toString(),
+                    calibrationDate = serial.calibrationDate?.toString(),
+                    calibrationExpiryDate = serial.calibrationExpiryDate?.toString()
                 )
             },
             movements = wmsRepository.listMovements(id).let { rows ->
@@ -579,9 +581,130 @@ class WmsService(
                 nomenclatureId = it.nomenclatureId,
                 lotId = it.lotId,
                 serialNumber = it.serialNumber,
-                createdAt = it.createdAt?.toString()
+                createdAt = it.createdAt?.toString(),
+                calibrationDate = it.calibrationDate?.toString(),
+                calibrationExpiryDate = it.calibrationExpiryDate?.toString()
             )
         }
+    }
+
+    /**
+     * Подсказка наиболее частой ячейки хранения для номенклатуры на выбранном складе
+     * (перенесено из supply2 SuggestLocationUseCase).
+     */
+    fun suggestLocation(warehouseId: Long, nomenclatureId: Long, currentUser: CurrentUser): SuggestLocationDto {
+        currentUser.requirePermission("wms", "read")
+        wmsRepository.findWarehouseById(warehouseId) ?: throw NotFoundException("warehouse", warehouseId)
+
+        val sb = org.example.project.generated.jooq.tables.StockBalance.STOCK_BALANCE
+        val sl = org.example.project.generated.jooq.tables.StorageLocations.STORAGE_LOCATIONS
+        val sm = org.example.project.generated.jooq.tables.StockMovement.STOCK_MOVEMENT
+
+        val cntField = org.jooq.impl.DSL.count().`as`("cnt")
+        val balanceMatch = dsl.select(sl.ID, sl.CODE, sl.NAME, cntField)
+            .from(sb)
+            .join(sl).on(sb.LOCATION_ID.eq(sl.ID))
+            .where(sb.WAREHOUSE_ID.eq(warehouseId))
+            .and(sb.NOMENCLATURE_ID.eq(nomenclatureId))
+            .and(sl.ACTIVE.isTrue)
+            .and(sl.PURPOSE.notIn("QUARANTINE", "DEFECT"))
+            .groupBy(sl.ID, sl.CODE, sl.NAME)
+            .orderBy(cntField.desc(), org.jooq.impl.DSL.sum(sb.PHYSICAL_QTY).desc())
+            .limit(1)
+            .fetchOne()
+
+        if (balanceMatch != null) {
+            return SuggestLocationDto(
+                warehouseId = warehouseId,
+                nomenclatureId = nomenclatureId,
+                locationId = balanceMatch.get(sl.ID),
+                locationCode = balanceMatch.get(sl.CODE),
+                zoneCode = balanceMatch.get(sl.NAME),
+                usageCount = balanceMatch.get(cntField) ?: 1
+            )
+        }
+
+        val movementMatch = dsl.select(sl.ID, sl.CODE, sl.NAME, cntField)
+            .from(sm)
+            .join(sl).on(sm.TO_LOCATION_ID.eq(sl.ID))
+            .where(sl.WAREHOUSE_ID.eq(warehouseId))
+            .and(sm.NOMENCLATURE_ID.eq(nomenclatureId))
+            .and(sl.ACTIVE.isTrue)
+            .and(sl.PURPOSE.notIn("QUARANTINE", "DEFECT"))
+            .groupBy(sl.ID, sl.CODE, sl.NAME)
+            .orderBy(cntField.desc())
+            .limit(1)
+            .fetchOne()
+
+        return if (movementMatch != null) {
+            SuggestLocationDto(
+                warehouseId = warehouseId,
+                nomenclatureId = nomenclatureId,
+                locationId = movementMatch.get(sl.ID),
+                locationCode = movementMatch.get(sl.CODE),
+                zoneCode = movementMatch.get(sl.NAME),
+                usageCount = movementMatch.get(cntField) ?: 1
+            )
+        } else {
+            SuggestLocationDto(warehouseId = warehouseId, nomenclatureId = nomenclatureId)
+        }
+    }
+
+    /**
+     * Обновление дат поверки (метрологии) для серийного экземпляра
+     * (перенесено из supply2 EditCalibrationDatesDialog / UpdateItemInstanceUseCase).
+     */
+    fun updateSerialCalibration(
+        serialId: Long,
+        request: UpdateSerialCalibrationRequest,
+        currentUser: CurrentUser
+    ): SerialItemDto {
+        currentUser.requirePermission("wms", "post")
+        val calDate = request.calibrationDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            runCatching { java.time.LocalDate.parse(it) }.getOrElse {
+                throw ValidationException("Invalid calibrationDate (expected YYYY-MM-DD)", mapOf("calibrationDate" to "invalid"))
+            }
+        }
+        val expDate = request.calibrationExpiryDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            runCatching { java.time.LocalDate.parse(it) }.getOrElse {
+                throw ValidationException("Invalid calibrationExpiryDate (expected YYYY-MM-DD)", mapOf("calibrationExpiryDate" to "invalid"))
+            }
+        }
+        if (calDate != null && expDate != null && expDate.isBefore(calDate)) {
+            throw ValidationException(
+                "Дата окончания поверки не может быть раньше даты поверки",
+                mapOf("calibrationExpiryDate" to "before_calibration_date")
+            )
+        }
+
+        val ser = org.example.project.generated.jooq.tables.SerialItems.SERIAL_ITEMS
+        val updated = dsl.update(ser)
+            .set(ser.CALIBRATION_DATE, calDate)
+            .set(ser.CALIBRATION_EXPIRY_DATE, expDate)
+            .where(ser.ID.eq(serialId))
+            .returning()
+            .fetchOne() ?: throw NotFoundException("serial", serialId)
+
+        auditService.log(
+            currentUser.userId,
+            "UPDATE_CALIBRATION",
+            "SERIAL_ITEM",
+            serialId,
+            mapOf(
+                "serialNumber" to updated.serialNumber,
+                "calibrationDate" to (calDate?.toString() ?: ""),
+                "calibrationExpiryDate" to (expDate?.toString() ?: "")
+            )
+        )
+        return SerialItemDto(
+            id = updated.id,
+            nomenclatureId = updated.nomenclatureId,
+            lotId = updated.lotId,
+            serialNumber = updated.serialNumber,
+            createdAt = updated.createdAt?.toString(),
+            calibrationDate = updated.calibrationDate?.toString(),
+            calibrationExpiryDate = updated.calibrationExpiryDate?.toString()
+        )
     }
 
 

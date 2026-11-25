@@ -5,10 +5,12 @@ import org.example.project.dto.ConfirmSupplierInvoiceCheckRequest
 import org.example.project.dto.CreateReceiptFromInvoiceRequest
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.SupplierInvoiceActionRequest
+import org.example.project.dto.SupplierInvoiceAutofillDto
 import org.example.project.dto.SupplierInvoiceCheckDto
 import org.example.project.dto.SupplierInvoiceDto
 import org.example.project.dto.SupplierInvoiceHistoryDto
 import org.example.project.dto.SupplierInvoiceInput
+import org.example.project.dto.SupplierInvoicePreviewDto
 import org.example.project.dto.SupplierInvoiceStatus
 import org.example.project.dto.UpdateSupplierInvoiceRequest
 
@@ -29,4 +31,7 @@ interface SupplierInvoiceRepository {
     suspend fun createReceipt(id: Long, request: CreateReceiptFromInvoiceRequest): ApiResult<ReceiptDto>
     suspend fun history(id: Long): ApiResult<List<SupplierInvoiceHistoryDto>>
     suspend fun downloadFile(id: Long): ApiResult<DownloadedAttachment>
+    suspend fun parseDocumentPdf(documentId: Long): ApiResult<SupplierInvoiceAutofillDto>
+    suspend fun parsePdfBytes(fileName: String, bytes: ByteArray): ApiResult<SupplierInvoiceAutofillDto>
+    suspend fun previewHtml(id: Long): ApiResult<SupplierInvoicePreviewDto>
 }

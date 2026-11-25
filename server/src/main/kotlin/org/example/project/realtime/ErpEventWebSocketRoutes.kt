@@ -1,7 +1,9 @@
 package org.example.project.realtime
 
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.*
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
@@ -14,6 +16,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.example.project.dto.ApiResponse
+import org.example.project.dto.PresenceSnapshotDto
+import org.example.project.plugins.RequireAuthPlugin
 import org.example.project.service.SessionService
 import java.util.*
 
@@ -24,6 +29,13 @@ fun Route.erpEventWebSocketRoutes(
     allowedOrigins: List<String>
 ) {
     val json = Json { encodeDefaults = true }
+
+    route("/api/presence") {
+        install(RequireAuthPlugin) {}
+        get("/online") {
+            call.respond(HttpStatusCode.OK, ApiResponse.success(PresenceSnapshotDto(PresenceRegistry.onlineUserIds())))
+        }
+    }
 
     route("/api/erp-events") {
         install(ErpWsHandshakeGuard) {
@@ -42,6 +54,7 @@ fun Route.erpEventWebSocketRoutes(
                 return@webSocket
             }
 
+            PresenceRegistry.connect(user.userId, erpEventBus)
             val sendLock = Mutex()
             val subscribed = CompletableDeferred<Unit>()
             val liveJob = launch {
@@ -63,6 +76,7 @@ fun Route.erpEventWebSocketRoutes(
                 incoming.consumeEach { }
             } finally {
                 liveJob.cancel()
+                PresenceRegistry.disconnect(user.userId, erpEventBus)
             }
         }
     }

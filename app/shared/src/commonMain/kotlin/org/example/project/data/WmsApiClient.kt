@@ -5,6 +5,7 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -57,8 +58,11 @@ import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
+import org.example.project.dto.SerialItemDto
 import org.example.project.dto.StockBalanceDto
 import org.example.project.dto.StorageLocationDto
+import org.example.project.dto.SuggestLocationDto
+import org.example.project.dto.UpdateSerialCalibrationRequest
 import org.example.project.dto.WarehouseDto
 
 class WmsApiClient(private val client: HttpClient) : WmsRepository {
@@ -385,8 +389,31 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
     override suspend fun postInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto> =
         post("/api/wms/inventories/$id/post", request)
 
+    override suspend fun pauseInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto> =
+        post("/api/wms/inventories/$id/pause", request)
+
+    override suspend fun resumeInventory(id: Long, request: InventoryActionRequest): ApiResult<InventoryDto> =
+        post("/api/wms/inventories/$id/resume", request)
+
     override suspend fun cancelInventory(id: Long, request: CancelInventoryRequest): ApiResult<InventoryDto> =
         post("/api/wms/inventories/$id/cancel", request)
+
+    override suspend fun suggestLocation(warehouseId: Long, nomenclatureId: Long): ApiResult<SuggestLocationDto> =
+        getWithParams(
+            "/api/wms/suggest-location",
+            mapOf("warehouseId" to warehouseId.toString(), "nomenclatureId" to nomenclatureId.toString())
+        )
+
+    override suspend fun updateSerialCalibration(
+        serialId: Long,
+        request: UpdateSerialCalibrationRequest
+    ): ApiResult<SerialItemDto> =
+        execute {
+            client.patch("/api/wms/serials/$serialId/calibration") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+        }
 
     private suspend inline fun <reified T> put(path: String, body: Any): ApiResult<T> =
         execute {
