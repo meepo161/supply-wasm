@@ -477,7 +477,7 @@ class ReceiptRoutesTest {
             "/api/suppliers",
             CreateSupplierRequest(
                 name = "ООО Приёмка",
-                inn = "77${UUID.randomUUID().toString().take(8).hashCode().toString().takeLast(8)}",
+                inn = randomValidInn(),
                 idempotencyKey = "sup-${UUID.randomUUID()}"
             )
         )

@@ -139,7 +139,7 @@ class PurchaseOrderViewModel(
     }
 
     fun selectTab(tab: PurchaseOrderTab) {
-        update { it.copy(activeTab = tab, operationError = null) }
+        update { it.copy(activeTab = tab, operationError = null, successMessage = null) }
         if (tab == PurchaseOrderTab.DELIVERIES) loadDeliveries()
     }
 
@@ -190,11 +190,11 @@ class PurchaseOrderViewModel(
             lines = offer.lines.map { line ->
                 OrderLineForm(
                     offerLineId = line.id,
-                    label = "Позиция ${line.lineNo}",
+                    label = itemLabel(line.nomenclatureCode, line.nomenclatureName, line.lineNo),
                     unit = line.unit,
                     unitPrice = line.unitPrice,
-                    offeredQuantity = line.quantity,
-                    quantity = line.quantity
+                    offeredQuantity = line.quantity.plainQty(),
+                    quantity = line.quantity.plainQty()
                 )
             }
         )
@@ -299,14 +299,13 @@ class PurchaseOrderViewModel(
                     expectedAt = order.expectedAt?.substringBefore('T').orEmpty(),
                     note = order.note.orEmpty(),
                     lines = order.lines.map { line ->
-                        val remaining = line.remainingQuantity
                         OrderLineEditForm(
                             orderLineId = line.id,
-                            label = "Позиция ${line.lineNo}",
+                            label = itemLabel(line.nomenclatureCode, line.nomenclatureName, line.lineNo),
                             unit = line.unit,
-                            orderedQuantity = line.quantity,
-                            deliveredQuantity = "${line.deliveredQuantity} / осталось $remaining",
-                            quantity = line.quantity
+                            orderedQuantity = line.quantity.plainQty(),
+                            deliveredQuantity = "${line.deliveredQuantity.plainQty()} ${line.unit}, осталось ${line.remainingQuantity.plainQty()}",
+                            quantity = line.quantity.plainQty()
                         )
                     }
                 )
@@ -381,6 +380,16 @@ class PurchaseOrderViewModel(
 
     fun send() = action("send", "Заказ отправлен поставщику") { id, version ->
         purchaseOrderRepository.sendOrder(id, PurchaseOrderActionRequest(version, idempotencyKey = newKey("po-send")))
+    }
+
+    fun openCloseOrder() {
+        val order = _uiState.value.selectedOrder ?: return
+        update { it.copy(operationError = null, activeDialog = PurchaseOrderDialog.CloseOrder(order.number)) }
+    }
+
+    fun confirmClose() {
+        update { it.copy(activeDialog = null) }
+        close()
     }
 
     fun close() = action("close", "Заказ закрыт") { id, version ->
@@ -467,10 +476,10 @@ class PurchaseOrderViewModel(
             .map { line ->
                 DeliveryLineForm(
                     orderLineId = line.id,
-                    label = "Позиция ${line.lineNo}",
+                    label = itemLabel(line.nomenclatureCode, line.nomenclatureName, line.lineNo),
                     unit = line.unit,
-                    remaining = line.remainingQuantity,
-                    quantity = line.remainingQuantity
+                    remaining = line.remainingQuantity.plainQty(),
+                    quantity = line.remainingQuantity.plainQty()
                 )
             }
         if (lines.isEmpty()) {
@@ -602,6 +611,19 @@ class PurchaseOrderViewModel(
 
     private fun newKey(prefix: String): String =
         "$prefix-${currentUser.id}-${kotlin.random.Random.nextLong().toString(16)}"
+}
+
+/** Подпись позиции: «код — название», а при отсутствии справочных данных — «Позиция N». */
+private fun itemLabel(code: String?, name: String?, lineNo: Int): String = when {
+    !name.isNullOrBlank() && !code.isNullOrBlank() -> "$code — $name"
+    !name.isNullOrBlank() -> name
+    else -> "Позиция $lineNo"
+}
+
+/** «5.0000» -> «5», «2.5000» -> «2.5»: убирает лишние нули, пригодно для поля ввода. */
+internal fun String.plainQty(): String {
+    val value = trim()
+    return if (value.contains('.')) value.trimEnd('0').trimEnd('.').ifEmpty { "0" } else value
 }
 
 private fun String.isPositiveDecimal(): Boolean =

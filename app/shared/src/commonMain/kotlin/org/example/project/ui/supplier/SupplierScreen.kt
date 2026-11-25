@@ -124,7 +124,7 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
                 title = "Список",
                 count = state.suppliers.size,
                 accent = Brand.Orange,
-                subtitle = "Найдено по фильтру",
+                subtitle = "Поиск и фильтры применяются сразу",
                 action = { SoftButton(text = "Обновить", onClick = viewModel::loadSuppliers) }
             )
             Spacer(Modifier.height(8.dp))
@@ -146,14 +146,13 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
                     text = if (state.showArchived) "Без архива" else "С архивом",
                     onClick = { viewModel.toggleArchived(!state.showArchived) }
                 )
-                SoftButton(text = "Найти", onClick = viewModel::loadSuppliers)
             }
             Spacer(Modifier.height(8.dp))
             state.successMessage?.let { message ->
                 SuccessNote(message, viewModel::dismissSuccess)
                 Spacer(Modifier.height(6.dp))
             }
-            state.operationError?.let { error ->
+            state.operationError?.takeIf { state.activeDialog == null }?.let { error ->
                 ErrorMessageCard(error = error)
                 Spacer(Modifier.height(6.dp))
             }
@@ -222,23 +221,29 @@ private fun SupplierCardPane(
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (viewModel.canManage()) {
-                    SoftButton(text = "Править", onClick = { viewModel.showDialog(SupplierDialog.EditSupplier) })
+                    SoftButton(text = "Править карточку", onClick = { viewModel.showDialog(SupplierDialog.EditSupplier) })
                 }
                 if (viewModel.canVerify()) {
                     SoftButton(
-                        text = "Проверка",
+                        text = "Проверить контрагента",
                         onClick = { viewModel.showDialog(SupplierDialog.Verify) },
                         tint = Brand.Teal
                     )
                 }
                 if (viewModel.canManage()) {
                     SoftButton(
-                        text = if (supplier.archived) "Восстановить" else "В архив",
+                        text = if (supplier.archived) "Вернуть из архива" else "Убрать в архив",
                         onClick = { viewModel.toggleArchive(!supplier.archived) },
                         tint = if (supplier.archived) Brand.Mint else Brand.Slate
                     )
                 }
             }
+            Text(
+                text = "Проверенный поставщик допускается к выбору предложения. Архивный поставщик " +
+                    "скрыт из списков выбора, но его история сохраняется.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(Modifier.height(8.dp))
             var cardSection by remember(supplier.id) { mutableStateOf(0) }
             val sectionTitles = listOf("Реквизиты", "Контакты (${card.contacts.size + card.addresses.size})", "Документы (${card.documents.size})")
@@ -405,27 +410,29 @@ private fun OffersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
         GlassCard(modifier = Modifier.pane(0.46f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Предложения",
-                count = state.offers.size,
+                count = if (state.offersDemandFilter == null) state.offers.size
+                else state.offers.count { it.demandId == state.offersDemandFilter },
                 accent = Brand.Blue,
-                subtitle = "Все полученные предложения",
+                subtitle = if (state.offersDemandFilter == null) "Все полученные предложения" else "Предложения по выбранной потребности",
                 action = { SoftButton(text = "Обновить", onClick = viewModel::loadOffers) }
             )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 DemandFilterDropdown(
                     demands = state.demands,
-                    selectedId = state.comparisonDemandId,
-                    onSelect = viewModel::loadComparison,
-                    modifier = Modifier.weight(1f)
+                    selectedId = state.offersDemandFilter,
+                    onSelect = viewModel::filterOffersByDemand,
+                    modifier = Modifier.weight(1f),
+                    allowAll = true
                 )
-                SoftButton(text = "Сравнить", onClick = viewModel::refreshComparison)
+                SoftButton(text = "Обновить сравнение", onClick = viewModel::refreshComparison)
             }
             Spacer(Modifier.height(8.dp))
             state.successMessage?.let { message ->
                 SuccessNote(message, viewModel::dismissSuccess)
                 Spacer(Modifier.height(6.dp))
             }
-            state.operationError?.let { error ->
+            state.operationError?.takeIf { state.activeDialog == null }?.let { error ->
                 ErrorMessageCard(error = error)
                 Spacer(Modifier.height(6.dp))
             }
@@ -440,11 +447,26 @@ private fun OffersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                     glyph = ErpIconGlyph.Documents,
                     accent = Brand.Blue
                 )
-                else -> SupplierOffersGrid(
-                    offers = state.offers,
-                    onClick = { offer -> viewModel.loadComparison(offer.demandId) },
-                    modifier = Modifier.fillMaxWidth().weight(1f)
-                )
+                else -> {
+                    val visibleOffers = state.offersDemandFilter
+                        ?.let { demandId -> state.offers.filter { it.demandId == demandId } }
+                        ?: state.offers
+                    if (visibleOffers.isEmpty()) {
+                        EmptyState(
+                            title = "По потребности предложений нет",
+                            text = "Выберите «Все потребности» или внесите предложение по этой потребности",
+                            glyph = ErpIconGlyph.Documents,
+                            accent = Brand.Blue
+                        )
+                    } else {
+                        SupplierOffersGrid(
+                            offers = visibleOffers,
+                            demands = state.demands,
+                            onClick = { offer -> viewModel.loadComparison(offer.demandId) },
+                            modifier = Modifier.fillMaxWidth().weight(1f)
+                        )
+                    }
+                }
             }
         }
         ComparisonPane(state, viewModel, Modifier.pane(0.54f, narrowHeight = 640.dp))
@@ -500,7 +522,10 @@ private fun ComparisonPane(
                                 viewModel.openSelection(column.offerId, column.number)
                             },
                             onClearSelection = { viewModel.clearSelection(column.offerId) },
-                            canSelect = viewModel.canSelect()
+                            canSelect = viewModel.canSelect(),
+                            onEdit = if (viewModel.canEditOffer(column.status)) {
+                                { viewModel.openEditOffer(column.offerId) }
+                            } else null
                         )
                         Spacer(Modifier.height(10.dp))
                     }
@@ -544,7 +569,8 @@ private fun ComparisonCard(
     isRecommended: Boolean,
     onSelect: () -> Unit,
     onClearSelection: () -> Unit,
-    canSelect: Boolean
+    canSelect: Boolean,
+    onEdit: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -598,6 +624,7 @@ private fun ComparisonCard(
                     tint = Brand.Mint
                 )
             }
+            onEdit?.let { SoftButton(text = "Править предложение", onClick = it, tint = Brand.Blue) }
         }
     }
 }
@@ -625,7 +652,7 @@ private fun SuccessNote(text: String, onDismiss: () -> Unit) {
 @Composable
 private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        state.operationError?.let { ErrorMessageCard(it) }
+        state.operationError?.takeIf { state.activeDialog == null }?.let { ErrorMessageCard(it) }
         state.successMessage?.let { SuccessNote(it, viewModel::dismissSuccess) }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -667,7 +694,7 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                                 PillBadge(text = claim.status.localizedName(), accent = Brand.Orange)
                             }
                             Text(
-                                text = "Тип: ${claim.claimType.name} • Сумма: ${claim.claimAmount} ${claim.currency}",
+                                text = "Тип: ${claim.claimType.name} • Сумма: ${claim.claimAmount.asMoney(claim.currency)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -746,7 +773,7 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
             org.example.project.ui.theme.ErpTextField(
                 value = state.claimForm.claimAmount,
                 onValueChange = { viewModel.updateClaimForm(state.claimForm.copy(claimAmount = it)) },
-                label = "Сумма претензии (RUB)"
+                label = "Сумма претензии, ₽"
             )
         }
     }

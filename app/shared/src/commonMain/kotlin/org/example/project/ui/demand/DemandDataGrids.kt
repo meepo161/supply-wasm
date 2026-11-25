@@ -16,17 +16,27 @@ private val gridConfig = Un7KCMPDataGridConfig(
     defaultPageSizeListIndex = 0
 )
 
+/** В реестре потребностей номер уже есть отдельной колонкой, поэтому «#» с порядковым номером не нужен. */
+private val registryGridConfig = gridConfig.copy(isVisibilityRowNumber = false)
+
 @Composable
 fun DemandsGrid(
     demands: List<DemandHeaderDto>,
     onClick: (DemandHeaderDto) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    projects: List<org.example.project.dto.ProjectDto> = emptyList()
 ) {
     val todayIso = currentIsoDate()
     val data = mapOf(
         "Номер" to demands.map { it.number },
+        "Номенклатура" to demands.map { it.itemsSummary ?: "—" },
+        "Количество" to demands.map { it.quantitySummary ?: "—" },
         "Основание" to demands.map { it.sourceType.localizedName() },
-        "Проект" to demands.map { it.projectId?.let { id -> "Проект #$id" } ?: "—" },
+        "Проект" to demands.map { demand ->
+            demand.projectId?.let { id ->
+                projects.firstOrNull { it.id == id }?.let { "${it.number} · ${it.name}" } ?: "Проект №$id"
+            } ?: "—"
+        },
         "Приоритет" to demands.map { if (it.priority.name == "NORMAL") "—" else it.priority.localizedName() },
         "Статус" to demands.map { it.status.localizedName() },
         "Требуемая дата" to demands.map { ErpFormat.deadlineLabel(it.requiredDate, todayIso) }
@@ -34,8 +44,8 @@ fun DemandsGrid(
     PersistentDataGrid(
         data = data,
         modifier = modifier,
-        tableKey = "demands-registry",
-        config = gridConfig,
+        tableKey = "demands-registry-v2",
+        config = registryGridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->
                 demands.getOrNull(idx)?.let(onClick)

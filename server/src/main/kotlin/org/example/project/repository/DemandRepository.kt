@@ -4,6 +4,9 @@ import org.example.project.generated.jooq.tables.DemandHistory.DEMAND_HISTORY
 import org.example.project.generated.jooq.tables.DemandLineHistory.DEMAND_LINE_HISTORY
 import org.example.project.generated.jooq.tables.DemandLines.DEMAND_LINES
 import org.example.project.generated.jooq.tables.Demands.DEMANDS
+import org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
+import org.example.project.generated.jooq.tables.PurchaseOrderDemands.PURCHASE_ORDER_DEMANDS
+import org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS
 import org.example.project.generated.jooq.tables.ProjectMembers.PROJECT_MEMBERS
 import org.example.project.generated.jooq.tables.Reservations.RESERVATIONS
 import org.example.project.generated.jooq.tables.records.DemandLinesRecord
@@ -307,6 +310,37 @@ class DemandRepository(private val dsl: DSLContext) {
                     ?: BigDecimal.ZERO
             }
     }
+
+    /** Строка потребности для списка: название номенклатуры, количество и единица. */
+    data class LineSummary(val demandId: Long, val name: String, val quantity: BigDecimal, val unit: String)
+
+    /** Позиции потребностей с названиями номенклатуры — для колонок списка. */
+    fun lineSummaries(demandIds: Collection<Long>): Map<Long, List<LineSummary>> {
+        if (demandIds.isEmpty()) return emptyMap()
+        return dsl.select(DEMAND_LINES.DEMAND_ID, NOMENCLATURE.NAME, DEMAND_LINES.QUANTITY, DEMAND_LINES.UNIT)
+            .from(DEMAND_LINES)
+            .join(NOMENCLATURE).on(NOMENCLATURE.ID.eq(DEMAND_LINES.NOMENCLATURE_ID))
+            .where(DEMAND_LINES.DEMAND_ID.`in`(demandIds))
+            .orderBy(DEMAND_LINES.DEMAND_ID.asc(), DEMAND_LINES.LINE_NO.asc())
+            .fetch()
+            .map {
+                LineSummary(
+                    demandId = it.get(DEMAND_LINES.DEMAND_ID)!!,
+                    name = it.get(NOMENCLATURE.NAME)!!,
+                    quantity = it.get(DEMAND_LINES.QUANTITY)!!,
+                    unit = it.get(DEMAND_LINES.UNIT)!!
+                )
+            }
+            .groupBy { it.demandId }
+    }
+
+    /** Сколько предложений поставщиков внесено по потребности. */
+    fun countOffers(demandId: Long): Int =
+        dsl.fetchCount(SUPPLIER_OFFERS, SUPPLIER_OFFERS.DEMAND_ID.eq(demandId))
+
+    /** Сколько заказов поставщикам закрывают потребность. */
+    fun countOrders(demandId: Long): Int =
+        dsl.fetchCount(PURCHASE_ORDER_DEMANDS, PURCHASE_ORDER_DEMANDS.DEMAND_ID.eq(demandId))
 
     fun generateNumber(): String {
         val now = OffsetDateTime.now()

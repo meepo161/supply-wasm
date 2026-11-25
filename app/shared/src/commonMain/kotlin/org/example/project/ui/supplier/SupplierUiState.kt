@@ -48,7 +48,10 @@ data class SupplierUiState(
     val selectionReason: String = "",
     val verificationNote: String = "",
     val pendingSelectionOfferId: Long? = null,
-    val comparisonDemandId: Long? = null
+    val comparisonDemandId: Long? = null,
+    /** Фильтр списка предложений по потребности (выбирается в списке, не строкой таблицы). */
+    val offersDemandFilter: Long? = null,
+    val editOfferForm: EditOfferForm? = null
 )
 
 enum class SupplierTab(val title: String) {
@@ -73,6 +76,7 @@ sealed class SupplierDialog {
     data object EditCategories : SupplierDialog()
     data object Verify : SupplierDialog()
     data object CreateOffer : SupplierDialog()
+    data object EditOffer : SupplierDialog()
     data class SelectOffer(val offerId: Long, val offerNumber: String) : SupplierDialog()
     data object CreateClaim : SupplierDialog()
 }
@@ -172,4 +176,30 @@ data class OfferLineForm(
     val quantity: String = "",
     val unitPrice: String = "",
     val vatRate: String = "20"
+)
+
+/** Правка внесённого предложения (S-04): те же поля, что при вводе, кроме поставщика и потребности. */
+data class EditOfferForm(
+    val offerId: Long,
+    val version: Long,
+    val number: String,
+    val supplierName: String,
+    val compliance: SupplierOfferCompliance = SupplierOfferCompliance.UNKNOWN,
+    val documentsComplete: Boolean = false,
+    val deliveryDays: String = "",
+    val deliveryTerms: String = "",
+    val paymentTerms: String = "",
+    val warrantyMonths: String = "",
+    val validUntil: String = "",
+    val note: String = "",
+    val lines: List<EditOfferLineForm> = emptyList()
+)
+
+data class EditOfferLineForm(
+    val demandLineId: Long,
+    val label: String,
+    val unit: String,
+    val quantity: String,
+    val unitPrice: String,
+    val vatRate: String
 )

@@ -230,9 +230,35 @@ class DemandService(
 
     fun list(currentUser: CurrentUser): List<DemandHeaderDto> {
         val readAny = currentUser.hasPermission("demands", "read_any")
-        return demandRepository.listAccessible(currentUser.userId, readAny)
-            .map { it.toHeaderDto() }
+        val records = demandRepository.listAccessible(currentUser.userId, readAny)
+        val summaries = demandRepository.lineSummaries(records.map { it.id })
+        return records.map { record ->
+            val lines = summaries[record.id].orEmpty()
+            record.toHeaderDto().copy(
+                lineCount = lines.size,
+                itemsSummary = itemsSummary(lines),
+                quantitySummary = quantitySummary(lines)
+            )
+        }
     }
+
+    /** «Болт М8» или «Болт М8 и ещё 2» — коротко о составе потребности. */
+    private fun itemsSummary(lines: List<DemandRepository.LineSummary>): String? =
+        when (lines.size) {
+            0 -> null
+            1 -> lines.first().name
+            else -> "${lines.first().name} и ещё ${lines.size - 1}"
+        }
+
+    /** Количество по единицам измерения: «10 шт», «10 шт; 5 кг». */
+    private fun quantitySummary(lines: List<DemandRepository.LineSummary>): String? =
+        lines.groupBy { it.unit }
+            .map { (unit, group) ->
+                val total = group.fold(java.math.BigDecimal.ZERO) { acc, line -> acc + line.quantity }
+                "${total.stripTrailingZeros().toPlainString()} $unit"
+            }
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString("; ")
 
     fun submit(id: Long, request: SubmitDemandRequest, currentUser: CurrentUser): DemandDetailDto {
         currentUser.requirePermission("demands", "update")
@@ -480,14 +506,18 @@ class DemandService(
     private fun toDetail(header: DemandRepository.DemandHeaderProjection, lines: List<DemandLinesRecord>): DemandDetailDto {
         return DemandDetailDto(
             header = header.toHeaderDto(),
-            lines = lines.map { it.toLineDto() }
+            lines = lines.map { it.toLineDto() },
+            offersCount = demandRepository.countOffers(header.id),
+            ordersCount = demandRepository.countOrders(header.id)
         )
     }
 
     private fun toDetail(header: DemandsRecord, lines: List<DemandLinesRecord>): DemandDetailDto {
         return DemandDetailDto(
             header = header.toHeaderDto(),
-            lines = lines.map { it.toLineDto() }
+            lines = lines.map { it.toLineDto() },
+            offersCount = demandRepository.countOffers(header.id),
+            ordersCount = demandRepository.countOrders(header.id)
         )
     }
 

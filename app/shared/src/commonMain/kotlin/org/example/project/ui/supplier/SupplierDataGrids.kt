@@ -77,21 +77,26 @@ fun SupplierDocumentsGrid(
 fun SupplierOffersGrid(
     offers: List<SupplierOfferDto>,
     onClick: (SupplierOfferDto) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    demands: List<org.example.project.dto.DemandHeaderDto> = emptyList()
 ) {
     val data = mapOf(
         "Номер" to offers.map { it.number },
         "Поставщик" to offers.map { it.supplierName ?: "Поставщик #${it.supplierId}" },
         "Статус" to offers.map { it.status.localizedName() },
+        "Потребность" to offers.map { offer ->
+            demands.firstOrNull { it.id == offer.demandId }?.number ?: "Потребность №${offer.demandId}"
+        },
         "Соответствие" to offers.map { it.compliance.localizedName() },
-        "Срок" to offers.map { (it.deliveryDays?.toString() ?: "—") + " дн." },
-        "Сумма" to offers.map { ErpFormat.money(it.totals?.grossTotal, it.currency) },
+        "Срок поставки" to offers.map { it.deliveryDays.asDeliveryDays() },
+        "Сумма без НДС" to offers.map { it.totals?.netTotal.asMoney(it.currency) },
+        "Сумма с НДС" to offers.map { it.totals?.grossTotal.asMoney(it.currency) },
         "Действует до" to offers.map { ErpFormat.dateRu(it.validUntil) }
     )
     PersistentDataGrid(
         data = data,
         modifier = modifier,
-        tableKey = "supplier-offers",
+        tableKey = "supplier-offers-v2",
         config = gridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->

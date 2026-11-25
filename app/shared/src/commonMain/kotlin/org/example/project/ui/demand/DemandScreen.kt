@@ -197,7 +197,10 @@ private fun DemandListPage(
                                 selectedToMerge = if (isChecked) selectedToMerge + d.id else selectedToMerge - d.id
                             }
                         )
-                        Text("${d.number} (${d.status.name})", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            listOfNotNull(d.number, d.status.localizedName(), d.itemsSummary).joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             }
@@ -209,6 +212,7 @@ private fun DemandListPage(
             EmptyState("Нет потребностей. Создайте первую.")
         } else {
             DemandsGrid(
+                projects = state.projects,
                 demands = state.demands,
                 onClick = { viewModel.selectDemand(it.id) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
@@ -232,7 +236,7 @@ private fun DemandDetailPage(
             LoadingOverlay()
             return@Column
         }
-        DemandHeaderCard(demand, viewModel)
+        DemandHeaderCard(demand, viewModel, state.projects)
         state.operationError?.let { ErrorMessageCard(error = it) }
         ApprovalsSection(
             targetType = "DEMAND",
@@ -257,7 +261,8 @@ private fun DemandDetailPage(
 @Composable
 private fun DemandHeaderCard(
     demand: org.example.project.dto.DemandDetailDto,
-    viewModel: DemandViewModel
+    viewModel: DemandViewModel,
+    projects: List<org.example.project.dto.ProjectDto> = emptyList()
 ) {
     val header = demand.header
     GlassCard(
@@ -286,16 +291,37 @@ private fun DemandHeaderCard(
                 )
             }
             Text(text = "Приоритет: ${header.priority.localizedName()}", style = MaterialTheme.typography.bodyMedium)
-            Text(text = "Версия: ${header.version}", style = MaterialTheme.typography.bodyMedium)
             header.requiredDate?.let {
-                Text(text = "Требуемая дата: ${it.substringBefore("T")}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "Требуемая дата: ${org.example.project.ui.theme.ErpFormat.dateRu(it)}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
-            header.projectId?.let {
-                Text(text = "Проект: $it", style = MaterialTheme.typography.bodyMedium)
+            header.projectId?.let { id ->
+                val project = projects.firstOrNull { it.id == id }
+                Text(
+                    text = "Проект: " + (project?.let { "${it.number} · ${it.name}" } ?: "№$id"),
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
             if (!header.stockpileNote.isNullOrBlank()) {
-                Text(text = "Обоснование задела: ${header.stockpileNote}", style = MaterialTheme.typography.bodyMedium)
+                val noteTitle = if (header.sourceType == org.example.project.dto.DemandSourceType.STOCKPILE) {
+                    "Обоснование задела"
+                } else {
+                    "Примечание"
+                }
+                Text(text = "$noteTitle: ${header.stockpileNote}", style = MaterialTheme.typography.bodyMedium)
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                PillBadge(text = "Предложения: ${demand.offersCount}", accent = Brand.Blue)
+                PillBadge(text = "Заказы: ${demand.ordersCount}", accent = Brand.Violet)
+            }
+            Text(
+                text = "Предложения поставщиков вносятся и сравниваются в разделе «Поставщики» → «Предложения», " +
+                    "заказы оформляются в разделе «Заказы поставщикам».",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             header.sourceBomRevisionId?.let {
                 Text(text = "Ревизия BOM: $it, выпуск: ${header.bomReleaseQuantity ?: "—"}", style = MaterialTheme.typography.bodyMedium)
             }

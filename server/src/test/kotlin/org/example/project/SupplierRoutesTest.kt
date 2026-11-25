@@ -53,8 +53,8 @@ class SupplierRoutesTest {
         val demand = createDemand(initiator, material.id, "5", "pcs")
         val demandLineId = demand.lines.first().id
 
-        val expensiveButCompliant = createSupplier(buyer, "ООО Дорого", "7701234567")
-        val cheapButBroken = createSupplier(buyer, "ООО Дешево", "7709876543")
+        val expensiveButCompliant = createSupplier(buyer, "ООО Дорого", "7701234560")
+        val cheapButBroken = createSupplier(buyer, "ООО Дешево", "7709876545")
         setVerified(admin, expensiveButCompliant.supplier.id, expensiveButCompliant.supplier.version)
         setVerified(admin, cheapButBroken.supplier.id, cheapButBroken.supplier.version)
 
@@ -236,7 +236,7 @@ class SupplierRoutesTest {
             requiredDate = java.time.LocalDate.now().plusDays(1).toString()
         )
         val lineId = demand.lines.first().id
-        val supplier = createSupplier(buyer, "ООО Срок", "7701112233")
+        val supplier = createSupplier(buyer, "ООО Срок", "7701112234")
         setVerified(admin, supplier.supplier.id, supplier.supplier.version)
 
         val tomorrow = java.time.LocalDate.now().plusDays(1).toString()
@@ -276,6 +276,29 @@ class SupplierRoutesTest {
     }
 
     @Test
+    fun `supplier with wrong inn checksum is rejected`() = testApp {
+        val admin = jsonClient()
+        createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
+        createUserWithRole(admin, "buyer", "password", "Buyer", buyerPermissions())
+        val buyer = loginClient("buyer", "password")
+
+        val response = buyer.post("/api/suppliers") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                stringify(
+                    CreateSupplierRequest(
+                        name = "ООО Неверный ИНН",
+                        inn = "7707083894",
+                        idempotencyKey = "sup-${UUID.randomUUID()}"
+                    )
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status, response.bodyAsText())
+        createSupplier(buyer, "ООО Верный ИНН", "7707083893")
+    }
+
+    @Test
     fun `supplier card keeps contacts addresses documents and verification`() = testApp {
         val admin = jsonClient()
         createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
@@ -289,7 +312,7 @@ class SupplierRoutesTest {
         assertEquals(HttpStatusCode.Created, category.status, category.bodyAsText())
         val categoryDto = category.bodyAs<ApiResponse<SupplierCategoryDto>>().data!!
 
-        val created = createSupplier(buyer, "АО Реквизиты", "7705554433")
+        val created = createSupplier(buyer, "АО Реквизиты", "7705554434")
         assertEquals("SUP-", created.supplier.number.take(4))
         assertEquals(1, created.contacts.size)
         assertEquals("Иван Петров", created.contacts.first().fullName)
@@ -365,7 +388,7 @@ class SupplierRoutesTest {
 
         val material = createNomenclature(admin, "SUP-MAT-3", "1", "pcs")
         val demand = createDemand(initiator, material.id, "1", "pcs")
-        val supplier = createSupplier(buyer, "ООО Без Проверки", "7703332211")
+        val supplier = createSupplier(buyer, "ООО Без Проверки", "7703332210")
         val offer = createOffer(
             buyer,
             demand.header.id,

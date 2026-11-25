@@ -99,7 +99,14 @@ fun CreateDemandDialog(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
-            DemandSourceType.MANUAL -> { }
+            DemandSourceType.MANUAL -> OutlinedTextField(
+                value = form.stockpileNote,
+                onValueChange = { onFormChange(form.copy(stockpileNote = it)) },
+                label = { Text("Примечание") },
+                supportingText = { Text("Необязательно: зачем нужна потребность, для кого, особые условия") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
         }
         if (form.sourceType != DemandSourceType.PROJECT) {
             ManualLinesSection(

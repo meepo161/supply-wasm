@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import org.example.project.dto.SupplierVerificationStatus
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpDateField
 import org.example.project.ui.theme.ErpDialog
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.ErpTextField
@@ -41,6 +42,7 @@ fun SupplierDialogs(state: SupplierUiState, viewModel: SupplierViewModel) {
         SupplierDialog.EditCategories -> CategoriesDialog(state, viewModel)
         SupplierDialog.Verify -> VerifyDialog(state, viewModel)
         SupplierDialog.CreateOffer -> CreateOfferDialog(state, viewModel)
+        SupplierDialog.EditOffer -> EditOfferDialog(state, viewModel)
         is SupplierDialog.SelectOffer -> SelectOfferDialog(dialog, state, viewModel)
         SupplierDialog.CreateClaim -> { }
     }
@@ -65,10 +67,15 @@ private fun CreateSupplierDialog(state: SupplierUiState, viewModel: SupplierView
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             state.operationError?.let { ErrorMessageCard(error = it) }
+            Text(
+                text = "Поля со звёздочкой (*) обязательны",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             ErpTextField(
                 value = form.name,
                 onValueChange = { viewModel.updateCreateForm(form.copy(name = it)) },
-                label = "Краткое наименование",
+                label = "Краткое наименование *",
                 modifier = Modifier.fillMaxWidth()
             )
             ErpTextField(
@@ -82,6 +89,7 @@ private fun CreateSupplierDialog(state: SupplierUiState, viewModel: SupplierView
                     value = form.inn,
                     onValueChange = { viewModel.updateCreateForm(form.copy(inn = it)) },
                     label = "ИНН",
+                    supportingText = "10 цифр (организация) или 12 (ИП)",
                     modifier = Modifier.weight(1f)
                 )
                 ErpTextField(
@@ -184,7 +192,7 @@ private fun EditSupplierDialog(state: SupplierUiState, viewModel: SupplierViewMo
             ErpTextField(
                 value = form.name,
                 onValueChange = { viewModel.updateEditForm(form.copy(name = it)) },
-                label = "Краткое наименование",
+                label = "Краткое наименование *",
                 modifier = Modifier.fillMaxWidth()
             )
             ErpTextField(
@@ -198,6 +206,7 @@ private fun EditSupplierDialog(state: SupplierUiState, viewModel: SupplierViewMo
                     value = form.inn,
                     onValueChange = { viewModel.updateEditForm(form.copy(inn = it)) },
                     label = "ИНН",
+                    supportingText = "10 цифр (организация) или 12 (ИП)",
                     modifier = Modifier.weight(1f)
                 )
                 ErpTextField(
@@ -254,7 +263,7 @@ private fun AddContactDialog(state: SupplierUiState, viewModel: SupplierViewMode
             ErpTextField(
                 value = form.fullName,
                 onValueChange = { viewModel.updateContactForm(form.copy(fullName = it)) },
-                label = "ФИО",
+                label = "ФИО *",
                 modifier = Modifier.fillMaxWidth()
             )
             ErpTextField(
@@ -313,7 +322,7 @@ private fun AddAddressDialog(state: SupplierUiState, viewModel: SupplierViewMode
             ErpTextField(
                 value = form.address,
                 onValueChange = { viewModel.updateAddressForm(form.copy(address = it)) },
-                label = "Адрес",
+                label = "Адрес *",
                 singleLine = false,
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth()
@@ -360,7 +369,7 @@ private fun AddDocumentDialog(state: SupplierUiState, viewModel: SupplierViewMod
             ErpTextField(
                 value = form.title,
                 onValueChange = { viewModel.updateDocumentForm(form.copy(title = it)) },
-                label = "Название",
+                label = "Название *",
                 modifier = Modifier.fillMaxWidth()
             )
             ErpTextField(
@@ -370,18 +379,16 @@ private fun AddDocumentDialog(state: SupplierUiState, viewModel: SupplierViewMod
                 modifier = Modifier.fillMaxWidth()
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ErpTextField(
+                ErpDateField(
                     value = form.validFrom,
                     onValueChange = { viewModel.updateDocumentForm(form.copy(validFrom = it)) },
                     label = "Действует с",
-                    placeholder = "2026-01-01",
                     modifier = Modifier.weight(1f)
                 )
-                ErpTextField(
+                ErpDateField(
                     value = form.validTo,
                     onValueChange = { viewModel.updateDocumentForm(form.copy(validTo = it)) },
                     label = "Действует до",
-                    placeholder = "2027-01-01",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -469,8 +476,9 @@ private fun VerifyDialog(state: SupplierUiState, viewModel: SupplierViewModel) {
                 )
             }
             Text(
-                text = "Отклонение требует примечания. Проверка собственной карточки: " +
-                    "только с правом suppliers:verify_any.",
+                text = "Отклонение требует примечания. Если вы указаны ответственным за этого " +
+                    "поставщика, проверить его карточку может только сотрудник с правом " +
+                    "«Проверка любых контрагентов» — обратитесь к администратору.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -505,26 +513,37 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                 demands = state.demands,
                 selectedId = form.demandId,
                 onSelect = viewModel::onOfferDemandChanged,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                label = "Потребность *"
             )
             SupplierDropdown(
                 suppliers = state.suppliers,
                 selectedId = form.supplierId,
                 onSelect = { viewModel.updateOfferForm(form.copy(supplierId = it)) },
                 onlyVerified = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                label = "Поставщик *"
             )
+            viewModel.existingOfferFor(form.demandId, form.supplierId)?.let { existing ->
+                Text(
+                    text = "Внимание: у этого поставщика уже есть предложение ${existing.number} " +
+                        "по этой потребности (${existing.status.localizedName()}). Если нужно " +
+                        "исправить условия, откройте сравнение и нажмите «Править предложение»; " +
+                        "новое вносите, только если это отдельное предложение.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Brand.Amber
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ComplianceDropdown(
                     selected = form.compliance,
                     onSelect = { viewModel.updateOfferForm(form.copy(compliance = it)) },
                     modifier = Modifier.weight(1f)
                 )
-                ErpTextField(
+                ErpDateField(
                     value = form.validUntil,
                     onValueChange = { viewModel.updateOfferForm(form.copy(validUntil = it)) },
-                    label = "Действует до",
-                    placeholder = "2026-12-31",
+                    label = "Действует до *",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -545,6 +564,7 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                     value = form.currency,
                     onValueChange = { viewModel.updateOfferForm(form.copy(currency = it)) },
                     label = "Валюта",
+                    supportingText = "RUB — рубли (₽)",
                     modifier = Modifier.weight(0.7f)
                 )
             }
@@ -595,13 +615,13 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                     ErpTextField(
                         value = line.quantity,
                         onValueChange = { viewModel.updateOfferLine(index, line.copy(quantity = it)) },
-                        label = "Кол-во",
+                        label = "Кол-во *",
                         modifier = Modifier.weight(0.7f)
                     )
                     ErpTextField(
                         value = line.unitPrice,
                         onValueChange = { viewModel.updateOfferLine(index, line.copy(unitPrice = it)) },
-                        label = "Цена",
+                        label = "Цена, ₽ *",
                         modifier = Modifier.weight(0.7f)
                     )
                     ErpTextField(
@@ -657,6 +677,123 @@ private fun SelectOfferDialog(
                     "превышает требуемую дату или поставщик не проверен.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditOfferDialog(state: SupplierUiState, viewModel: SupplierViewModel) {
+    val form = state.editOfferForm ?: return
+    ErpDialog(
+        title = "Правка предложения ${form.number}",
+        subtitle = "${form.supplierName}. Изменения фиксируются в истории предложения",
+        glyph = ErpIconGlyph.Documents,
+        gradient = Gradients.Ocean,
+        onDismiss = viewModel::dismissDialog,
+        confirmText = "Сохранить изменения",
+        onConfirm = viewModel::saveOffer,
+        confirmEnabled = !state.isActionRunning,
+        width = 700.dp
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+            Text(
+                text = "Поля со звёздочкой (*) обязательны. Поставщика и потребность изменить нельзя: " +
+                    "для другого поставщика внесите новое предложение.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ComplianceDropdown(
+                    selected = form.compliance,
+                    onSelect = { viewModel.updateEditOfferForm(form.copy(compliance = it)) },
+                    modifier = Modifier.weight(1f)
+                )
+                ErpDateField(
+                    value = form.validUntil,
+                    onValueChange = { viewModel.updateEditOfferForm(form.copy(validUntil = it)) },
+                    label = "Действует до *",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ErpTextField(
+                    value = form.deliveryDays,
+                    onValueChange = { viewModel.updateEditOfferForm(form.copy(deliveryDays = it)) },
+                    label = "Срок поставки, дн.",
+                    modifier = Modifier.weight(1f)
+                )
+                ErpTextField(
+                    value = form.warrantyMonths,
+                    onValueChange = { viewModel.updateEditOfferForm(form.copy(warrantyMonths = it)) },
+                    label = "Гарантия, мес.",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            ErpTextField(
+                value = form.paymentTerms,
+                onValueChange = { viewModel.updateEditOfferForm(form.copy(paymentTerms = it)) },
+                label = "Условия оплаты",
+                modifier = Modifier.fillMaxWidth()
+            )
+            ErpTextField(
+                value = form.deliveryTerms,
+                onValueChange = { viewModel.updateEditOfferForm(form.copy(deliveryTerms = it)) },
+                label = "Доставка",
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = form.documentsComplete,
+                    onCheckedChange = { viewModel.updateEditOfferForm(form.copy(documentsComplete = it)) }
+                )
+                Text("Комплект документов подтверждён", style = MaterialTheme.typography.bodySmall)
+            }
+            form.lines.forEachIndexed { index, line ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1.2f)) {
+                        Text(text = line.label, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            text = "ед. изм.: ${line.unit}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    ErpTextField(
+                        value = line.quantity,
+                        onValueChange = { viewModel.updateEditOfferLine(index, line.copy(quantity = it)) },
+                        label = "Кол-во *",
+                        modifier = Modifier.weight(0.7f)
+                    )
+                    ErpTextField(
+                        value = line.unitPrice,
+                        onValueChange = { viewModel.updateEditOfferLine(index, line.copy(unitPrice = it)) },
+                        label = "Цена, ₽ *",
+                        modifier = Modifier.weight(0.7f)
+                    )
+                    ErpTextField(
+                        value = line.vatRate,
+                        onValueChange = { viewModel.updateEditOfferLine(index, line.copy(vatRate = it)) },
+                        label = "НДС %",
+                        modifier = Modifier.weight(0.5f)
+                    )
+                }
+            }
+            ErpTextField(
+                value = form.note,
+                onValueChange = { viewModel.updateEditOfferForm(form.copy(note = it)) },
+                label = "Примечание",
+                singleLine = false,
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -256,6 +257,12 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
                 "Поступление на склад",
                 invoice.receiptNumber?.let { "$it · ${receiptStatusTitle(invoice.receiptStatus)}" } ?: "не оформлено"
             )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Что дальше: " + nextStepText(invoice),
+                style = MaterialTheme.typography.bodySmall,
+                color = Brand.Teal
+            )
 
             Spacer(Modifier.height(12.dp))
             SectionHeader(title = "Строки счёта", count = invoice.lines.size, accent = Brand.Blue)
@@ -319,12 +326,17 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
 
             Spacer(Modifier.height(12.dp))
             SectionHeader(title = "История", count = state.history.size, accent = Brand.Amber)
+            val userNames = rememberUserNames()
             state.history.forEach { h ->
-                Text(
-                    "${h.changedAt.asDate()} · ${historyTitle(h.action)}" + (h.reason?.let { ": $it" } ?: ""),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text(historyTitle(h.action) + (h.reason?.let { ": $it" } ?: ""), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "${org.example.project.ui.theme.ErpFormat.dateTimeRu(h.changedAt)} · " +
+                            (userNames[h.changedBy] ?: "пользователь №${h.changedBy}"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -605,9 +617,39 @@ private fun ConfirmCheckDialog(state: SupplierInvoiceUiState, viewModel: Supplie
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             state.error?.let { ErrorMessageCard(error = it) }
-            state.check?.issues?.filter { it.severity == InvoiceIssueSeverity.REQUIRES_REASON }?.forEach {
-                Text("• " + (it.lineNo?.let { n -> "Строка $n: " } ?: "") + it.message, style = MaterialTheme.typography.bodySmall, color = Brand.Amber)
+            Text(
+                text = listOfNotNull(
+                    invoice.supplierName,
+                    invoice.purchaseOrderNumber?.let { "заказ $it" },
+                    "сумма ${invoice.grossTotal.asMoney(invoice.currency)}"
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            val issues = state.check?.issues.orEmpty()
+            if (issues.isEmpty()) {
+                Text(
+                    "Расхождений со сверкой нет: счёт совпадает с заказом по поставщику, позициям, количеству и ценам.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Brand.Teal
+                )
+            } else {
+                Text("Результат сверки:", style = MaterialTheme.typography.labelLarge)
+                issues.forEach {
+                    Text(
+                        "• " + SupplierInvoiceViewModel.severityTitle(it.severity) + ": " +
+                            (it.lineNo?.let { n -> "строка $n, " } ?: "") + it.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = it.severity.accent()
+                    )
+                }
             }
+            Text(
+                "После подтверждения счёт нельзя править. Дальше можно оформить поступление на склад " +
+                    "или вернуть счёт в черновик.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (needsReason) {
                 ErpTextField(
                     value = state.acceptReason,
@@ -678,4 +720,29 @@ private fun ReceiptDialog(state: SupplierInvoiceUiState, viewModel: SupplierInvo
             )
         }
     }
+}
+
+/** Следующий шаг по счёту простыми словами: куда идти и что нажать. */
+private fun nextStepText(invoice: SupplierInvoiceDto): String = when {
+    invoice.status == SupplierInvoiceStatus.CANCELLED -> "счёт отменён, дальнейших действий не требуется."
+    invoice.receiptNumber != null ->
+        "поступление ${invoice.receiptNumber} (${receiptStatusTitle(invoice.receiptStatus)}) принимает склад: " +
+            "в разделе «Склад» откройте очередь «Ожидается к приёмке», внесите фактическое количество и проведите приёмку."
+    invoice.status == SupplierInvoiceStatus.CHECKED ->
+        "нажмите «Оформить поступление на склад», чтобы передать счёт на приёмку."
+    else -> "проверьте результат сверки с заказом и нажмите «Подтвердить сверку»; при ошибках исправьте счёт."
+}
+
+/** Имена сотрудников для истории; список подгружается один раз и не мешает показу карточки. */
+@Composable
+internal fun rememberUserNames(): Map<Long, String> {
+    val repository: org.example.project.data.UserRepository = org.koin.compose.koinInject()
+    var names by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Map<Long, String>>(emptyMap()) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        when (val result = repository.listOptions()) {
+            is org.example.project.data.ApiResult.Success -> names = result.data.associate { it.id to it.fullName }
+            is org.example.project.data.ApiResult.Error -> Unit
+        }
+    }
+    return names
 }

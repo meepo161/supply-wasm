@@ -25,15 +25,16 @@ fun PurchaseOrdersGrid(
         "Номер" to orders.map { it.number },
         "Поставщик" to orders.map { it.supplierName ?: "Поставщик #${it.supplierId}" },
         "Статус" to orders.map { it.status.localizedName() },
-        "Сумма с НДС" to orders.map { ErpFormat.money(it.totals?.grossTotal, it.currency) },
-        "Заказано" to orders.map { ErpFormat.qty(it.totals?.orderedQuantity) },
-        "Поставлено" to orders.map { ErpFormat.qty(it.totals?.deliveredQuantity) },
+        "Сумма с НДС" to orders.map { it.totals?.grossTotal.asMoney(it.currency) },
+        "Поставлено" to orders.map {
+            "${ErpFormat.qty(it.totals?.deliveredQuantity)} из ${ErpFormat.qty(it.totals?.orderedQuantity)}"
+        },
         "Ожидается" to orders.map { ErpFormat.dateRu(it.expectedAt) }
     )
     PersistentDataGrid(
         data = data,
         modifier = modifier,
-        tableKey = "purchase-orders",
+        tableKey = "purchase-orders-v2",
         config = ordersGridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->
@@ -44,45 +45,38 @@ fun PurchaseOrdersGrid(
 }
 
 @Composable
-fun PurchaseOrderLinesGrid(
-    order: PurchaseOrderDto,
-    modifier: Modifier = Modifier
-) {
-    val lines = order.lines
-    val data = mapOf(
-        "№" to lines.map { it.lineNo.toString() },
-        "Код" to lines.map { it.nomenclatureCode ?: "—" },
-        "Наименование" to lines.map { it.nomenclatureName ?: "—" },
-        "Заказано" to lines.map { "${ErpFormat.qty(it.quantity)} ${it.unit}" },
-        "Поставлено" to lines.map { "${ErpFormat.qty(it.deliveredQuantity)} ${it.unit}" },
-        "Осталось" to lines.map { "${ErpFormat.qty(it.remainingQuantity)} ${it.unit}" },
-        "Цена" to lines.map { ErpFormat.money(it.unitPrice, order.currency) },
-        "НДС" to lines.map { ErpFormat.percent(it.vatRate) },
-        "Сумма" to lines.map { ErpFormat.money(it.lineTotal, order.currency) }
-    )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-lines", config = ordersGridConfig, onClick = { })
-}
-
-@Composable
 fun PurchaseDeliveriesGrid(
     deliveries: List<PurchaseDeliveryDto>,
     statuses: Map<Long, org.example.project.dto.PurchaseOrderStatus>,
     onClick: (PurchaseDeliveryDto) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    orders: List<PurchaseOrderDto> = emptyList()
 ) {
-    val data = mapOf(
+    val ordersById = orders.associateBy { it.id }
+    val data = linkedMapOf<String, List<String>>(
         "Номер" to deliveries.map { it.number },
-        "Заказ" to deliveries.map { it.orderNumber ?: "Заказ #${it.orderId}" },
-        "Статус заказа" to deliveries.map { statuses[it.orderId]?.localizedName() ?: "—" },
+        "Заказ" to deliveries.map { it.orderNumber ?: "Заказ №${it.orderId}" },
+        "Поставщик" to deliveries.map { ordersById[it.orderId]?.supplierName ?: "—" },
         "Дата" to deliveries.map { ErpFormat.dateRu(it.deliveredAt) },
+        "Что поставлено" to deliveries.map { delivery ->
+            val order = ordersById[delivery.orderId]
+            delivery.lines.joinToString("; ") { line ->
+                val orderLine = order?.lines?.firstOrNull { it.id == line.orderLineId }
+                val name = line.nomenclatureName ?: orderLine?.nomenclatureName ?: "Позиция"
+                "$name — ${ErpFormat.qty(line.quantity)} ${orderLine?.unit.orEmpty()}".trim()
+            }.ifEmpty { "—" }
+        },
         "Статус поставки" to deliveries.map { it.status.localizedName() },
-        "Позиций" to deliveries.map { it.lines.size.toString() },
-        "Основание" to deliveries.map { it.sourceDocument ?: "—" }
+        "Статус заказа" to deliveries.map { statuses[it.orderId]?.localizedName() ?: "—" }
     )
+    // Колонка «Основание» нужна, только если документ-основание указан хотя бы в одной поставке.
+    if (deliveries.any { !it.sourceDocument.isNullOrBlank() }) {
+        data["Основание"] = deliveries.map { it.sourceDocument ?: "—" }
+    }
     PersistentDataGrid(
         data = data,
         modifier = modifier,
-        tableKey = "purchase-deliveries",
+        tableKey = "purchase-deliveries-v2",
         config = ordersGridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->
@@ -103,24 +97,4 @@ fun PurchaseDeliveryLinesGrid(
         "Примечание" to delivery.lines.map { it.note ?: "—" }
     )
     PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-delivery-lines", config = ordersGridConfig, onClick = { })
-}
-
-@Composable
-fun PurchaseOrderHistoryGrid(
-    history: List<PurchaseOrderHistoryDto>,
-    modifier: Modifier = Modifier
-) {
-    val data = mapOf(
-        "Действие" to history.map { it.action.historyActionTitle() },
-        "Было" to history.map { it.fromStatus?.let(::statusTitle) ?: "—" },
-        "Стало" to history.map { it.toStatus?.let(::statusTitle) ?: "—" },
-        "Основание" to history.map { it.reason ?: "—" },
-        "Когда" to history.map { ErpFormat.dateTimeRu(it.changedAt) }
-    )
-    PersistentDataGrid(data = data, modifier = modifier, tableKey = "purchase-order-history", config = ordersGridConfig, onClick = { })
-}
-
-private fun statusTitle(raw: String): String {
-    val status = org.example.project.dto.PurchaseOrderStatus.entries.firstOrNull { it.name == raw }
-    return status?.localizedName() ?: raw
 }

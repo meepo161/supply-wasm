@@ -106,7 +106,7 @@ class ErpFullScenariosTest {
         val cpRes = client.post("/api/crm/counterparties") {
             header(HttpHeaders.Cookie, cookie)
             contentType(ContentType.Application.Json)
-            setBody("""{"name":"АвиаЗаказчик","kind":"CUSTOMER","inn":"7701234567"}""")
+            setBody("""{"name":"АвиаЗаказчик","kind":"CUSTOMER","inn":"7701234560"}""")
         }
         assertEquals(HttpStatusCode.Created, cpRes.status)
         val cpJson = Json.parseToJsonElement(cpRes.bodyAsText()).jsonObject["data"]!!.jsonObject

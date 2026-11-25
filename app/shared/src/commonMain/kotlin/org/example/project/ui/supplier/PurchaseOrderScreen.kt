@@ -57,7 +57,11 @@ fun PurchaseOrderScreen(
             title = "Заказы поставщикам",
             glyph = ErpIconGlyph.Documents,
             gradient = Gradients.Berry,
-            subtitle = "Заказ из выбранного предложения, согласование и частичные поставки",
+            subtitle = when (state.activeTab) {
+                PurchaseOrderTab.ORDERS -> "Заказ из выбранного предложения, согласование и отправка поставщику"
+                PurchaseOrderTab.DELIVERIES -> "Журнал поставок: что, от кого и в каком количестве пришло по заказам"
+                PurchaseOrderTab.INVOICES -> "Счета поставщиков: сверка с заказом и передача поступления на склад"
+            },
             actions = {
                 if (state.activeTab == PurchaseOrderTab.ORDERS && viewModel.canOrder()) {
                     GradientButton(
@@ -85,7 +89,7 @@ fun PurchaseOrderScreen(
                 PurchaseOrderSuccessNote(message, viewModel::dismissSuccess)
             }
         }
-        state.operationError?.takeIf { state.activeTab != PurchaseOrderTab.INVOICES }?.let { error ->
+        state.operationError?.takeIf { state.activeTab != PurchaseOrderTab.INVOICES && state.activeDialog == null }?.let { error ->
             Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp)) {
                 ErrorMessageCard(error = error)
             }
@@ -114,7 +118,7 @@ private fun OrdersPane(
     invoiceViewModel: SupplierInvoiceViewModel?
 ) {
     ErpSplitRow {
-        GlassCard(modifier = Modifier.pane(0.42f), contentPadding = 14.dp) {
+        GlassCard(modifier = Modifier.pane(0.5f), contentPadding = 14.dp) {
             SectionHeader(
                 title = "Заказы",
                 count = state.orders.size,
@@ -147,7 +151,7 @@ private fun OrdersPane(
                 )
             }
         }
-        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.pane(0.58f, narrowHeight = 640.dp))
+        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.pane(0.5f, narrowHeight = 640.dp))
     }
 }
 
@@ -198,7 +202,14 @@ private fun OrderCardPane(
                 )
             }
             order.note?.takeIf { it.isNotBlank() }?.let { DetailRow("Примечание", it) }
-            DetailRow("Потребности", if (order.demandIds.isEmpty()) "—" else order.demandIds.joinToString(", ") { "#$it" })
+            DetailRow(
+                "Потребности",
+                when {
+                    order.demandNumbers.isNotEmpty() -> order.demandNumbers.joinToString(", ")
+                    order.demandIds.isNotEmpty() -> order.demandIds.joinToString(", ") { "№$it" }
+                    else -> "—"
+                }
+            )
 
             Spacer(Modifier.height(12.dp))
             SectionHeader(
@@ -214,7 +225,7 @@ private fun OrderCardPane(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                PurchaseOrderLinesGrid(order = order, modifier = Modifier.fillMaxWidth().height(180.dp))
+                OrderLinesList(order)
                 Spacer(Modifier.height(8.dp))
                 TotalsRow(order)
             }
@@ -259,8 +270,8 @@ private fun OrderCardPane(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = delivery.lines.joinToString(", ") { "${it.quantity}" } +
-                                    (delivery.sourceDocument?.let { " · $it" } ?: ""),
+                                text = deliveryItemsText(delivery, order) +
+                                    (delivery.sourceDocument?.let { " · основание: $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -289,10 +300,7 @@ private fun OrderCardPane(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                PurchaseOrderHistoryGrid(
-                    history = state.history,
-                    modifier = Modifier.fillMaxWidth().height(180.dp)
-                )
+                OrderHistoryList(state.history, viewModel::userName)
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -382,7 +390,7 @@ private fun OrderActions(
                 org.example.project.dto.PurchaseOrderStatus.PARTIALLY_DELIVERED
             )
         ) {
-            SoftButton(text = "Закрыть", onClick = viewModel::close, tint = Brand.Slate)
+            SoftButton(text = "Закрыть заказ", onClick = viewModel::openCloseOrder, tint = Brand.Slate)
         }
         if (viewModel.canOrder() && order.status in setOf(
                 org.example.project.dto.PurchaseOrderStatus.DRAFT,
@@ -472,18 +480,98 @@ private fun DeliveriesPane(state: PurchaseOrderUiState, viewModel: PurchaseOrder
             else -> Column {
                 PurchaseDeliveriesGrid(
                     deliveries = state.deliveries,
+                    orders = state.orders,
                     statuses = state.orders.associate { it.id to it.status },
                     onClick = { delivery -> viewModel.selectOrder(delivery.orderId) },
                     modifier = Modifier.fillMaxWidth().weight(1f)
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Всего позиций в показанных поставках: " +
-                        state.deliveries.sumOf { it.lines.size },
+                    text = "Строк поставок: " + state.deliveries.sumOf { it.lines.size } +
+                        ". Нажмите на поставку, чтобы открыть заказ на вкладке «Заказы».",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+/** Позиции заказа списком: названия и числа переносятся, а не обрезаются, высота по содержимому. */
+@Composable
+private fun OrderLinesList(order: PurchaseOrderDto) {
+    order.lines.forEach { line ->
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 3.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "${line.lineNo}. " + listOfNotNull(line.nomenclatureCode, line.nomenclatureName)
+                    .joinToString(" — ").ifEmpty { "Позиция ${line.lineNo}" },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LineFact("Заказано", "${org.example.project.ui.theme.ErpFormat.qty(line.quantity)} ${line.unit}")
+                LineFact("Поставлено", "${org.example.project.ui.theme.ErpFormat.qty(line.deliveredQuantity)} ${line.unit}")
+                LineFact("Осталось", "${org.example.project.ui.theme.ErpFormat.qty(line.remainingQuantity)} ${line.unit}")
+            }
+            Text(
+                text = "Цена ${line.unitPrice.asMoney(order.currency)} · НДС " +
+                    "${org.example.project.ui.theme.ErpFormat.percent(line.vatRate)} · сумма ${line.lineTotal.asMoney(order.currency)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun LineFact(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** История заказа: когда, кто и что сделал; причина — отдельной строкой. */
+@Composable
+private fun OrderHistoryList(
+    history: List<org.example.project.dto.PurchaseOrderHistoryDto>,
+    userName: (Long) -> String
+) {
+    history.forEach { entry ->
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+            val from = entry.fromStatus
+            val to = entry.toStatus
+            Text(
+                text = entry.action.historyActionTitle() +
+                    (if (from != null && to != null) ": ${from.statusTitle()} → ${to.statusTitle()}" else ""),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = "${org.example.project.ui.theme.ErpFormat.dateTimeRu(entry.changedAt)} · ${userName(entry.changedBy)}" +
+                    (entry.reason?.let { " · $it" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private fun String.statusTitle(): String =
+    org.example.project.dto.PurchaseOrderStatus.entries.firstOrNull { it.name == this }?.localizedName() ?: this
+
+/** «Болт М8 — 10 шт; Гайка — 5 шт» по строкам поставки. */
+private fun deliveryItemsText(
+    delivery: org.example.project.dto.PurchaseDeliveryDto,
+    order: PurchaseOrderDto
+): String = delivery.lines.joinToString("; ") { line ->
+    val orderLine = order.lines.firstOrNull { it.id == line.orderLineId }
+    val name = line.nomenclatureName ?: orderLine?.nomenclatureName ?: "Позиция"
+    "$name — ${org.example.project.ui.theme.ErpFormat.qty(line.quantity)} ${orderLine?.unit.orEmpty()}".trim()
 }

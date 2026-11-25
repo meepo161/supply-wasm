@@ -44,7 +44,8 @@ internal fun PurchaseOrdersRecord.toDto(
     offerNumber: String?,
     demandIds: List<Long>,
     lines: List<PurchaseOrderLineDto>,
-    totals: Record?
+    totals: Record?,
+    demandNumbers: List<String> = emptyList()
 ): PurchaseOrderDto = PurchaseOrderDto(
     id = this.id,
     number = this.number,
@@ -68,6 +69,7 @@ internal fun PurchaseOrdersRecord.toDto(
     reapprovalRequired = this.reapprovalRequired,
     reapprovalReason = this.reapprovalReason,
     demandIds = demandIds,
+    demandNumbers = demandNumbers,
     createdAt = this.createdAt?.toString(),
     createdBy = this.createdBy,
     updatedAt = this.updatedAt?.toString(),

@@ -723,6 +723,7 @@ class PurchaseOrderService(
         val orderIds = orders.map { it.id }
         val linesByOrder = purchaseRepository.listOrderLinesForOrders(orderIds).groupBy { it.orderId }
         val demandIds = purchaseRepository.listDemandIdsForOrders(orderIds)
+        val demandNumbers = purchaseRepository.demandNumbers(demandIds.values.flatten().distinct())
         val totals = purchaseRepository.orderTotalsBatch(orderIds)
         val nomenclatureCache = mutableMapOf<Long, Pair<String?, String?>?>()
         return orders.map { order ->
@@ -737,7 +738,8 @@ class PurchaseOrderService(
                     }
                     line.toDto(nomenclature?.first, nomenclature?.second)
                 },
-                totals = totals[order.id]
+                totals = totals[order.id],
+                demandNumbers = demandIds[order.id].orEmpty().mapNotNull { demandNumbers[it] }
             )
         }
     }
