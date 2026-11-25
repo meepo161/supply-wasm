@@ -34,11 +34,14 @@ import org.example.project.dto.UpdateProjectRiskRequest
 import org.example.project.dto.UpdateProjectStageRequest
 import org.example.project.dto.CreateProjectRequest
 import org.example.project.dto.OpenProjectRequest
+import org.example.project.dto.DemandDetailDto
 import org.example.project.dto.DemandHeaderDto
 import org.example.project.dto.DocumentDto
+import org.example.project.dto.HandoffProjectSpecRequest
 import org.example.project.dto.ProjectDto
 import org.example.project.dto.ProjectHistoryEntryDto
 import org.example.project.dto.ProjectSummaryDto
+import org.example.project.dto.ProjectSupplyOverviewDto
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
 
@@ -74,6 +77,14 @@ class ProjectApiClient(private val client: HttpClient) : ProjectRepository {
 
     override suspend fun demands(id: Long): ApiResult<List<DemandHeaderDto>> =
         get("/api/projects/$id/demands")
+
+    override suspend fun getSupplyOverview(projectId: Long): ApiResult<ProjectSupplyOverviewDto> =
+        get("/api/projects/$projectId/supply-overview")
+
+    override suspend fun handoffSpecification(
+        projectId: Long,
+        request: HandoffProjectSpecRequest
+    ): ApiResult<DemandDetailDto> = post("/api/projects/$projectId/handoff-specification", request)
 
     override suspend fun documents(id: Long): ApiResult<List<DocumentDto>> =
         get("/api/projects/$id/documents")

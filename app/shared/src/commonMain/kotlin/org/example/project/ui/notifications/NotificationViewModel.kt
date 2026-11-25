@@ -139,7 +139,9 @@ class NotificationViewModel(
     fun openPendingNotification(
         onOpenTask: (Long) -> Unit,
         onOpenConversation: (Long) -> Unit,
-        onOpenProjectChat: (Long) -> Unit
+        onOpenProjectChat: (Long) -> Unit,
+        onOpenDemand: (Long) -> Unit = {},
+        onOpenPurchaseOrder: (Long, String) -> Unit = { _, _ -> }
     ) {
         if (pendingOpenJob?.isActive == true) return
         val eventId = BrowserNotifications.consumePendingEventId() ?: return
@@ -148,7 +150,14 @@ class NotificationViewModel(
                 is ApiResult.Success -> {
                     result.data.notifications.find { it.id == eventId }?.let { notification ->
                         markRead(notification)
-                        openNotification(notification, onOpenTask, onOpenConversation, onOpenProjectChat)
+                        openNotification(
+                            notification,
+                            onOpenTask,
+                            onOpenConversation,
+                            onOpenProjectChat,
+                            onOpenDemand,
+                            onOpenPurchaseOrder
+                        )
                     }
                 }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
@@ -165,7 +174,9 @@ class NotificationViewModel(
         notification: NotificationDto,
         onOpenTask: (Long) -> Unit,
         onOpenConversation: (Long) -> Unit,
-        onOpenProjectChat: (Long) -> Unit
+        onOpenProjectChat: (Long) -> Unit,
+        onOpenDemand: (Long) -> Unit = {},
+        onOpenPurchaseOrder: (Long, String) -> Unit = { _, _ -> }
     ) {
         if (notification.entityType.equals("CONVERSATION", ignoreCase = true)) {
             _uiState.value = _uiState.value.copy(operationError = null)
@@ -193,6 +204,14 @@ class NotificationViewModel(
                     is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = result.error)
                 }
             }
+            return
+        }
+        if (notification.entityType.equals("DEMAND", ignoreCase = true)) {
+            onOpenDemand(notification.entityId)
+            return
+        }
+        if (notification.entityType.equals("PURCHASE_ORDER", ignoreCase = true)) {
+            onOpenPurchaseOrder(notification.entityId, notification.type)
             return
         }
         val taskId = notification.taskId ?: notification.entityId.takeIf {

@@ -6,9 +6,13 @@ import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.config.HoconApplicationConfig
@@ -496,10 +500,31 @@ class ReceiptRoutesTest {
         )
     }
 
+    private suspend fun uploadInvoiceDocument(client: HttpClient): Long {
+        val docResp = client.post("/api/documents") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(CreateDocumentRequest("Счёт поставщика", DocumentType.INVOICE)))
+        }
+        assertEquals(HttpStatusCode.Created, docResp.status, docResp.bodyAsText())
+        val doc = docResp.bodyAs<ApiResponse<DocumentDto>>().data!!
+        val verResp = client.submitFormWithBinaryData(
+            url = "/api/documents/${doc.id}/versions",
+            formData = formData {
+                append("file", "%PDF-1.4 test invoice".toByteArray(Charsets.UTF_8), Headers.build {
+                    append(HttpHeaders.ContentType, "application/pdf")
+                    append(HttpHeaders.ContentDisposition, "filename=\"invoice.pdf\"")
+                })
+            }
+        )
+        assertEquals(HttpStatusCode.Created, verResp.status, verResp.bodyAsText())
+        return doc.id
+    }
+
     /** Заказ в статусе SENT: предложение → выбор → согласование → отправка. */
     private suspend fun ApplicationTestBuilder.sentOrder(ctx: Ctx, quantity: String): PurchaseOrderDto {
         val demand = ctx.initiator.get("/api/demands/${ctx.demandId}")
             .bodyAs<ApiResponse<DemandDetailDto>>().data!!
+        val invoiceDocId = uploadInvoiceDocument(ctx.keeper)
         val offer = postCreated<SupplierOfferDto, CreateSupplierOfferRequest>(
             ctx.keeper,
             "/api/supplier-offers",
@@ -518,7 +543,8 @@ class ReceiptRoutesTest {
                         vatRate = "20"
                     )
                 ),
-                idempotencyKey = "offer-${UUID.randomUUID()}"
+                idempotencyKey = "offer-${UUID.randomUUID()}",
+                invoiceDocumentId = invoiceDocId
             )
         )
         // Строки предложения читаются отдельно: в списке они не приходят.

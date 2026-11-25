@@ -197,7 +197,7 @@ fun TaskActionsSection(
                         users = users,
                         selected = users.find { it.id == state.unblockResponsibleId },
                         onSelect = { viewModel.updateUnblockResponsible(it.id) },
-                        label = "Ответственный за снятие блокировки",
+                        label = "Ответственный за снятие блокировки *",
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

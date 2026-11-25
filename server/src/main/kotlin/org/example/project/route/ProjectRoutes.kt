@@ -92,6 +92,23 @@ fun Route.projectRoutes(
             )
         }
 
+        get("/{id}/supply-overview") {
+            val id = call.longParamOrThrow("id")
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(demandService.projectSupplyOverview(id, call.currentUser()))
+            )
+        }
+
+        post("/{id}/handoff-specification") {
+            val id = call.longParamOrThrow("id")
+            val request = call.receive<HandoffProjectSpecRequest>()
+            call.respond(
+                HttpStatusCode.Created,
+                ApiResponse.success(demandService.handoffProjectSpecification(id, request, call.currentUser()))
+            )
+        }
+
         get("/{id}/documents") {
             val id = call.longParamOrThrow("id")
             call.respond(

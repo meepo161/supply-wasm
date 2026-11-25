@@ -7,7 +7,10 @@ import org.example.project.model.CurrentUser
 import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.NotificationRepository
 
-class NotificationService(private val notificationRepository: NotificationRepository) {
+class NotificationService(
+    private val notificationRepository: NotificationRepository,
+    private val notificationEventBus: NotificationEventBus = NotificationEventBus()
+) {
 
     fun createForNewMessage(taskId: Long, messageId: Long, authorId: Long): List<NotificationEventBus.Event> =
         notificationRepository.insertForMessage(taskId, messageId, authorId)
@@ -19,6 +22,42 @@ class NotificationService(private val notificationRepository: NotificationReposi
     ): List<NotificationEventBus.Event> =
         notificationRepository.insertForConversation(conversationId, recipientIds)
             .map { NotificationEventBus.Event(it.userId, it.toDto()) }
+
+    fun createSystemNotifications(
+        recipientIds: Collection<Long>,
+        type: String,
+        entityType: String,
+        entityId: Long,
+        title: String
+    ): List<NotificationEventBus.Event> =
+        notificationRepository.insertSystemNotifications(
+            recipientIds = recipientIds,
+            type = type,
+            entityType = entityType,
+            entityId = entityId,
+            title = title
+        ).map { NotificationEventBus.Event(it.userId, it.toDto()) }
+
+    fun publishEvents(events: List<NotificationEventBus.Event>) {
+        if (events.isNotEmpty()) {
+            notificationEventBus.publishAll(events)
+        }
+    }
+
+    fun sendSystemNotifications(
+        recipientIds: Collection<Long>,
+        type: String,
+        entityType: String,
+        entityId: Long,
+        title: String
+    ): List<NotificationEventBus.Event> {
+        val events = createSystemNotifications(recipientIds, type, entityType, entityId, title)
+        publishEvents(events)
+        return events
+    }
+
+    fun findUserIdsWithPermission(resource: String, action: String): List<Long> =
+        notificationRepository.findUserIdsWithPermission(resource, action)
 
     fun list(after: Long?, before: Long?, limit: Int, currentUser: CurrentUser): NotificationPageDto {
         val effectiveLimit = limit.coerceIn(1, 200)

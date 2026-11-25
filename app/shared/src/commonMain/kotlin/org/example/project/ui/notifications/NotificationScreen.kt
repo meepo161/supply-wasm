@@ -55,7 +55,9 @@ fun NotificationScreen(
     onOpenConversation: (Long) -> Unit,
     onOpenProjectChat: (Long) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenDemand: (Long) -> Unit = {},
+    onOpenPurchaseOrder: (Long, String) -> Unit = { _, _ -> }
 ) {
     val state by viewModel.uiState.collectAsState()
     val unread = state.notifications.count { !it.isRead }
@@ -67,9 +69,13 @@ fun NotificationScreen(
 
     LaunchedEffect(viewModel) {
         BrowserNotifications.setPendingOpenListener {
-            viewModel.openPendingNotification(onOpenTask, onOpenConversation, onOpenProjectChat)
+            viewModel.openPendingNotification(
+                onOpenTask, onOpenConversation, onOpenProjectChat, onOpenDemand, onOpenPurchaseOrder
+            )
         }
-        viewModel.openPendingNotification(onOpenTask, onOpenConversation, onOpenProjectChat)
+        viewModel.openPendingNotification(
+            onOpenTask, onOpenConversation, onOpenProjectChat, onOpenDemand, onOpenPurchaseOrder
+        )
     }
 
     Column(
@@ -157,7 +163,9 @@ fun NotificationScreen(
                                 notification,
                                 onOpenTask,
                                 onOpenConversation,
-                                onOpenProjectChat
+                                onOpenProjectChat,
+                                onOpenDemand,
+                                onOpenPurchaseOrder
                             )
                         }
                     )
@@ -243,6 +251,11 @@ private fun localizedNotificationMeta(notification: NotificationDto): String {
         "TASK_COMMENT", "MENTION" -> "Комментарий / упоминание"
         "APPROVAL_ASSIGNED" -> "Требуется согласование"
         "APPROVAL_DECISION" -> "Решение по согласованию"
+        "DEMAND_OFFER_CREATED" -> "Новое предложение по заявке"
+        "DEMAND_OFFER_SELECTED" -> "Выбрано предложение"
+        "DEMAND_PAID" -> "Заявка оплачена"
+        "PURCHASE_ORDER_PAID" -> "Оплачен заказ (ждёт приёмки)"
+        "DEMAND_RECEIPT_POSTED" -> "Приход по заявке на склад"
         else -> notification.type
     }
     val entityLabel = when (notification.entityType.uppercase()) {

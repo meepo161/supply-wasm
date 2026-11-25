@@ -7,6 +7,8 @@ import org.example.project.dto.CreateStorageLocationRequest
 import org.example.project.dto.CreateWarehouseRequest
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.PostReceiptRequest
+import org.example.project.dto.QuickReceiveOrderRequest
+import org.example.project.dto.ReceiveOrderItemsRequest
 import org.example.project.dto.ExpectedReceiptLineDto
 import org.example.project.dto.LinkReceiptRequest
 import org.example.project.dto.ReceiptDto
@@ -121,6 +123,9 @@ interface WmsRepository {
 
     /** Ожидаемые к приёмке позиции по заказам: заказано/поставлено/принято/осталось. */
     suspend fun listExpectedReceipts(purchaseOrderId: Long? = null): ApiResult<List<ExpectedReceiptLineDto>>
+
+    suspend fun quickReceiveOrder(request: QuickReceiveOrderRequest): ApiResult<ReceiptDto>
+    suspend fun receiveOrderItems(request: ReceiveOrderItemsRequest): ApiResult<ReceiptDto>
 
     suspend fun createReservation(request: CreateReservationRequest): ApiResult<ReservationDto>
     suspend fun listReservations(

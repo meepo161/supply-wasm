@@ -1,7 +1,8 @@
 package org.example.project.ui.demand
 
+import org.example.project.data.AttachmentFileData
 import org.example.project.dto.ApiError
-import org.example.project.dto.DemandCoverageDto
+import org.example.project.dto.BomRevisionSummaryDto
 import org.example.project.dto.DemandDetailDto
 import org.example.project.dto.DemandHeaderDto
 import org.example.project.dto.DemandPriority
@@ -10,38 +11,58 @@ import org.example.project.dto.DemandStatus
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ProductModelDto
 import org.example.project.dto.ProjectDto
-import org.example.project.dto.BomRevisionSummaryDto
+import org.example.project.dto.SupplierDto
 
 data class DemandUiState(
     val demands: List<DemandHeaderDto> = emptyList(),
     val selectedDemand: DemandDetailDto? = null,
-    val coverage: DemandCoverageDto? = null,
     val projects: List<ProjectDto> = emptyList(),
     val models: List<ProductModelDto> = emptyList(),
     val revisions: List<BomRevisionSummaryDto> = emptyList(),
     val nomenclature: List<NomenclatureDto> = emptyList(),
+    val suppliers: List<SupplierDto> = emptyList(),
+    val offersCountByDemand: Map<Long, Int> = emptyMap(),
+    val offersCountLoaded: Boolean = false,
+    val stageFilter: DemandStageFilter = DemandStageFilter.ALL,
+    val searchQuery: String = "",
     val currentPage: DemandPage = DemandPage.LIST,
     val isLoading: Boolean = false,
+    val isActionRunning: Boolean = false,
     val operationError: ApiError? = null,
+    val successMessage: String? = null,
     val activeDialog: DemandDialog? = null,
     val createDemandForm: CreateDemandForm = CreateDemandForm(),
-    val cancelReason: String = ""
+    val createOfferForm: DemandCreateOfferForm = DemandCreateOfferForm(),
+    val cancelReason: String = "",
+    val paymentExpectedAt: String = "",
+    val paymentNote: String = ""
 )
 
+enum class DemandStageFilter(val label: String) {
+    ALL("Все"),
+    WAITING_OFFERS("Ждут предложений"),
+    WAITING_SELECTION("Ждут выбора ведущего"),
+    WAITING_PAYMENT("Ждут оплаты"),
+    IN_TRANSIT("В пути на склад"),
+    CLOSED("На складе / Закрыты"),
+    CANCELLED("Отменённые")
+}
+
 enum class DemandPage(val title: String) {
-    LIST("Потребности"),
-    DETAIL("Карточка потребности"),
-    COVERAGE("Покрытие потребности")
+    LIST("Снабжение (Заявки)"),
+    DETAIL("Пульт заявки")
 }
 
 sealed class DemandDialog {
     data object CreateDemand : DemandDialog()
     data object CancelDemand : DemandDialog()
+    data object CreateOffer : DemandDialog()
 }
 
 data class CreateDemandForm(
     val sourceType: DemandSourceType = DemandSourceType.MANUAL,
     val projectId: Long? = null,
+    val useBomForProject: Boolean = false,
     val modelId: Long? = null,
     val revisionId: Long? = null,
     val releaseQuantity: String = "1",
@@ -58,6 +79,38 @@ data class CreateDemandLineForm(
     val unit: String = ""
 )
 
+data class DemandOfferLineForm(
+    val demandLineId: Long,
+    val nomenclatureId: Long,
+    val label: String,
+    val unit: String,
+    val deficit: String,
+    val quantity: String,
+    val unitPrice: String = "",
+    val vatRate: String = "20",
+    val included: Boolean = true
+)
+
+data class DemandCreateOfferForm(
+    val demandId: Long? = null,
+    val demandNumber: String = "",
+    val supplierId: Long? = null,
+    val deliveryDays: String = "",
+    val paymentTerms: String = "100% предоплата",
+    val validUntil: String = "",
+    val note: String = "",
+    val pendingInvoiceFile: AttachmentFileData? = null,
+    val invoiceDocumentId: Long? = null,
+    val invoiceFileName: String? = null,
+    val invoiceNumber: String = "",
+    val invoiceDate: String = "",
+    val lines: List<DemandOfferLineForm> = emptyList()
+) {
+    val hasInvoiceFile: Boolean get() = pendingInvoiceFile != null || invoiceDocumentId != null
+    val invoiceFileLabel: String? get() = pendingInvoiceFile?.fileName ?: invoiceFileName
+}
+
 fun DemandStatus.canSubmit(): Boolean = this == DemandStatus.DRAFT
 fun DemandStatus.canApprove(): Boolean = this == DemandStatus.PENDING_APPROVAL
-fun DemandStatus.canCancel(): Boolean = this == DemandStatus.DRAFT || this == DemandStatus.PENDING_APPROVAL
+fun DemandStatus.canCancel(): Boolean =
+    this == DemandStatus.DRAFT || this == DemandStatus.PENDING_APPROVAL || this == DemandStatus.APPROVED

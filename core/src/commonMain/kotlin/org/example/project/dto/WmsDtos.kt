@@ -489,7 +489,8 @@ data class ReceiptLineDto(
     val discrepancyKind: ReceiptDiscrepancyKind? = null,
     val discrepancyQuantity: String? = null,
     val discrepancyReason: String? = null,
-    val purchaseOrderLineId: Long? = null
+    val purchaseOrderLineId: Long? = null,
+    val autoReservedQuantity: String = "0"
 )
 
 @Serializable
@@ -520,7 +521,8 @@ data class ReceiptDto(
     val hasDiscrepancies: Boolean = false,
     /** Счёт поставщика, по которому снабжение оформило поступление (D-61). */
     val supplierInvoiceId: Long? = null,
-    val supplierInvoiceNumber: String? = null
+    val supplierInvoiceNumber: String? = null,
+    val projectReservations: List<ReceiptProjectReservationSummaryDto> = emptyList()
 )
 
 @Serializable
@@ -553,7 +555,57 @@ data class ExpectedReceiptLineDto(
     val deliveredQuantity: String,
     val acceptedQuantity: String,
     val expectedRemaining: String,
-    val notAcceptedQuantity: String
+    val notAcceptedQuantity: String,
+    val supplierName: String? = null,
+    val demandNumbers: List<String> = emptyList(),
+    val isPaid: Boolean = false,
+    val paidAt: String? = null,
+    val offerId: Long? = null,
+    val invoiceDocumentId: Long? = null,
+    val unit: String? = null,
+    val invoiceNo: String? = null,
+    val projectId: Long? = null,
+    val projectNumber: String? = null,
+    val projectName: String? = null
+)
+
+@Serializable
+data class QuickReceiveOrderRequest(
+    val orderId: Long,
+    val warehouseId: Long,
+    val locationId: Long,
+    val note: String? = null
+)
+
+@Serializable
+data class ReceiveOrderItemLineInput(
+    val orderLineId: Long,
+    val receivedQuantity: String
+)
+
+@Serializable
+data class ReceiveOrderItemsRequest(
+    val orderId: Long,
+    val warehouseId: Long,
+    val locationId: Long,
+    val lines: List<ReceiveOrderItemLineInput>,
+    val note: String? = null
+)
+
+@Serializable
+data class ReceiptProjectReservationSummaryDto(
+    val projectId: Long,
+    val projectNumber: String,
+    val projectName: String,
+    val nomenclatureId: Long,
+    val nomenclatureCode: String,
+    val nomenclatureName: String,
+    val unit: String,
+    val receivedNow: String,
+    val autoReservedNow: String,
+    val totalReservedForProject: String,
+    val totalRequiredForProject: String,
+    val stillAwaitingOnOrder: String
 )
 
 @Serializable

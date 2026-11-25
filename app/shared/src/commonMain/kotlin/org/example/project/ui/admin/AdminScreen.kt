@@ -67,7 +67,9 @@ fun AdminScreen(
                     )
                 }
             }
-            state.operationError?.let { ErrorMessageCard(error = it) }
+            if (state.activeDialog == null) {
+                state.operationError?.let { ErrorMessageCard(error = it) }
+            }
             state.successMessage?.let { message ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),

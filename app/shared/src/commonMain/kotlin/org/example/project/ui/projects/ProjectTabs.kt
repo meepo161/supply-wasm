@@ -464,7 +464,7 @@ private fun DemandsTab(demands: List<DemandHeaderDto>, modifier: Modifier = Modi
     if (demands.isEmpty()) {
         EmptyState(
             title = "Потребностей нет",
-            text = "Потребности оформляются в разделе «Снабжение» с привязкой к проекту."
+            text = "Потребности оформляются в разделе «Потребности» с привязкой к проекту."
         )
         return
     }

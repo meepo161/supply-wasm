@@ -49,6 +49,28 @@ fun Route.receiptRoutes(receiptService: ReceiptService, receiptQcService: Receip
             call.respond(HttpStatusCode.Created, ApiResponse.success(receipt))
         }
 
+        get("/expected") {
+            val orderId = call.request.queryParameters["purchaseOrderId"]?.let {
+                it.toLongOrNull() ?: throw ValidationException("Invalid purchaseOrderId")
+            }
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(receiptService.listExpectedReceipts(orderId, call.currentUser()))
+            )
+        }
+
+        post("/quick-receive-order") {
+            val request = call.receive<QuickReceiveOrderRequest>()
+            val receipt = receiptService.quickReceiveOrder(request, call.currentUser())
+            call.respond(HttpStatusCode.OK, ApiResponse.success(receipt))
+        }
+
+        post("/receive-order") {
+            val request = call.receive<ReceiveOrderItemsRequest>()
+            val receipt = receiptService.receiveOrderItems(request, call.currentUser())
+            call.respond(HttpStatusCode.OK, ApiResponse.success(receipt))
+        }
+
         get("/{id}") {
             val id = call.parameters["id"]?.toLongOrNull()
                 ?: throw ValidationException("Invalid receipt id")

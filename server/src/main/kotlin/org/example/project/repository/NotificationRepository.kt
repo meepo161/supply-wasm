@@ -1,8 +1,11 @@
 package org.example.project.repository
 
 import org.example.project.generated.jooq.tables.Notifications.NOTIFICATIONS
+import org.example.project.generated.jooq.tables.Permissions.PERMISSIONS
 import org.example.project.generated.jooq.tables.TaskChatMessages.TASK_CHAT_MESSAGES
 import org.example.project.generated.jooq.tables.TaskParticipants.TASK_PARTICIPANTS
+import org.example.project.generated.jooq.tables.UserRoles.USER_ROLES
+import org.example.project.generated.jooq.tables.Users.USERS
 import org.example.project.generated.jooq.tables.records.NotificationsRecord
 import org.jooq.DSLContext
 import org.jooq.Record
@@ -107,6 +110,67 @@ class NotificationRepository(private val dsl: DSLContext) {
             .orderBy(NOTIFICATIONS.ID.asc())
             .fetch { mapNotificationRow(it) }
     }
+
+    fun insertSystemNotifications(
+        recipientIds: Collection<Long>,
+        type: String,
+        entityType: String,
+        entityId: Long,
+        title: String
+    ): List<NotificationRow> {
+        val uniqueRecipients = recipientIds.distinct()
+        if (uniqueRecipients.isEmpty()) return emptyList()
+        val safeTitle = title.take(500)
+        val insert = dsl.insertInto(
+            NOTIFICATIONS,
+            NOTIFICATIONS.USER_ID,
+            NOTIFICATIONS.TYPE,
+            NOTIFICATIONS.ENTITY_TYPE,
+            NOTIFICATIONS.ENTITY_ID,
+            NOTIFICATIONS.TITLE
+        )
+        uniqueRecipients.forEach { recipientId ->
+            insert.values(recipientId, type, entityType, entityId, safeTitle)
+        }
+        val insertedIds = insert.returning(NOTIFICATIONS.ID).fetch(NOTIFICATIONS.ID).filterNotNull()
+        if (insertedIds.isEmpty()) return emptyList()
+        return dsl.select(
+            NOTIFICATIONS.ID,
+            NOTIFICATIONS.USER_ID,
+            NOTIFICATIONS.TYPE,
+            NOTIFICATIONS.ENTITY_TYPE,
+            NOTIFICATIONS.ENTITY_ID,
+            NOTIFICATIONS.TITLE,
+            NOTIFICATIONS.IS_READ,
+            NOTIFICATIONS.CREATED_AT
+        )
+            .from(NOTIFICATIONS)
+            .where(NOTIFICATIONS.ID.`in`(insertedIds))
+            .orderBy(NOTIFICATIONS.ID.asc())
+            .fetch { record ->
+                NotificationRow(
+                    id = record.get(NOTIFICATIONS.ID)!!,
+                    userId = record.get(NOTIFICATIONS.USER_ID)!!,
+                    type = record.get(NOTIFICATIONS.TYPE)!!,
+                    entityType = record.get(NOTIFICATIONS.ENTITY_TYPE)!!,
+                    entityId = record.get(NOTIFICATIONS.ENTITY_ID)!!,
+                    taskId = null,
+                    title = record.get(NOTIFICATIONS.TITLE)!!,
+                    isRead = record.get(NOTIFICATIONS.IS_READ)!!,
+                    createdAt = record.get(NOTIFICATIONS.CREATED_AT)!!
+                )
+            }
+    }
+
+    fun findUserIdsWithPermission(resource: String, action: String): List<Long> =
+        dsl.selectDistinct(USER_ROLES.USER_ID)
+            .from(USER_ROLES)
+            .join(PERMISSIONS).on(PERMISSIONS.ROLE_ID.eq(USER_ROLES.ROLE_ID))
+            .join(USERS).on(USERS.ID.eq(USER_ROLES.USER_ID))
+            .where(PERMISSIONS.RESOURCE.eq(resource))
+            .and(PERMISSIONS.ACTION.eq(action))
+            .and(USERS.ACTIVE.eq(true))
+            .fetch(USER_ROLES.USER_ID)
 
     fun listForUser(userId: Long, after: Long?, before: Long?, limit: Int): List<NotificationRow> {
         val effectiveLimit = limit + 1

@@ -9,6 +9,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import org.example.project.dto.AddSupplierAddressRequest
 import org.example.project.dto.AddSupplierContactRequest
@@ -19,6 +20,7 @@ import org.example.project.dto.CreateSupplierCategoryRequest
 import org.example.project.dto.CreateSupplierClaimRequest
 import org.example.project.dto.CreateSupplierOfferRequest
 import org.example.project.dto.CreateSupplierRequest
+import org.example.project.dto.ReturnOfferForRevisionRequest
 import org.example.project.dto.SelectSupplierOfferRequest
 import org.example.project.dto.SetSupplierCategoriesRequest
 import org.example.project.dto.SupplierCardDto
@@ -139,6 +141,11 @@ class SupplierApiClient(private val client: HttpClient) : SupplierRepository {
         request: SelectSupplierOfferRequest
     ): ApiResult<SupplierOfferDto> = post("/api/supplier-offers/$id/select", request)
 
+    override suspend fun returnOfferForRevision(
+        offerId: Long,
+        request: ReturnOfferForRevisionRequest
+    ): ApiResult<SupplierOfferDto> = post("/api/suppliers/offers/$offerId/return-for-revision", request)
+
     override suspend fun clearSelection(id: Long, version: Long): ApiResult<SupplierOfferDto> =
         post("/api/supplier-offers/$id/clear-selection?version=$version")
 
@@ -147,6 +154,32 @@ class SupplierApiClient(private val client: HttpClient) : SupplierRepository {
 
     override suspend fun compareOffers(demandId: Long): ApiResult<SupplierOfferComparisonDto> =
         get("/api/demands/$demandId/supplier-offers/comparison")
+
+    override suspend fun downloadOfferInvoiceFile(offerId: Long): ApiResult<DownloadedAttachment> =
+        try {
+            val response = client.get("/api/suppliers/offers/$offerId/invoice-file")
+            if (response.status.value in 200..299) {
+                ApiResult.Success(
+                    DownloadedAttachment(
+                        bytes = response.body(),
+                        mimeType = response.contentType()?.toString(),
+                        fileName = extractContentDispositionFileName(
+                            response.headers[HttpHeaders.ContentDisposition]
+                        )
+                    )
+                )
+            } else {
+                val error = runCatching { response.body<ApiResponse<SupplierOfferDto>>() }.getOrNull()?.error
+                    ?: ApiError("UNKNOWN_ERROR", "Unexpected server response")
+                ApiResult.Error(error, response.status.value)
+            }
+        } catch (e: HttpRequestTimeoutException) {
+            ApiResult.Error(networkError(e.message ?: "Request timeout"))
+        } catch (e: ClientRequestException) {
+            ApiResult.Error(networkError(e.message))
+        } catch (e: Exception) {
+            ApiResult.Error(networkError(e.message ?: "Unexpected error"))
+        }
 
     // --- служебное ---
 

@@ -18,6 +18,9 @@ import org.example.project.dto.CreateDemandRequest
 import org.example.project.dto.DemandCoverageDto
 import org.example.project.dto.DemandDetailDto
 import org.example.project.dto.DemandHeaderDto
+import org.example.project.dto.MarkDemandPaidRequest
+import org.example.project.dto.PlaceDemandOrderRequest
+import org.example.project.dto.ReserveDemandStockRequest
 import org.example.project.dto.SubmitDemandRequest
 
 class DemandApiClient(private val client: HttpClient) : DemandRepository {
@@ -43,6 +46,22 @@ class DemandApiClient(private val client: HttpClient) : DemandRepository {
 
     override suspend fun coveragePreview(id: Long): ApiResult<DemandCoverageDto> =
         get("/api/demands/$id/coverage")
+
+    override suspend fun markDemandPaid(
+        id: Long,
+        request: MarkDemandPaidRequest
+    ): ApiResult<DemandDetailDto> = post("/api/demands/$id/mark-paid", request)
+
+    override suspend fun reserveDemandLineStock(
+        demandId: Long,
+        lineId: Long,
+        request: ReserveDemandStockRequest
+    ): ApiResult<DemandDetailDto> = post("/api/demands/$demandId/lines/$lineId/reserve-stock", request)
+
+    override suspend fun placeDemandOrder(
+        demandId: Long,
+        request: PlaceDemandOrderRequest
+    ): ApiResult<DemandDetailDto> = post("/api/demands/$demandId/place-order", request)
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> =
         execute { client.get(path) }

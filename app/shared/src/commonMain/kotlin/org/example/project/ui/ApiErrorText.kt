@@ -158,6 +158,16 @@ private fun ApiError.knownMessage(): String? {
         }
         m.startsWith("Delivery time is unknown") ->
             "У предложения не указан срок поставки: без него нельзя проверить требуемую дату. Внесите предложение со сроком."
+        m.startsWith("Offer validity expired on") ->
+            "Срок действия предложения истёк: запросите обновлённое предложение."
+        m.startsWith("Supplier ") && m.contains(" is rejected") ->
+            "Поставщик отклонён при проверке."
+        m.startsWith("Supplier ") && m.contains(" is archived") ->
+            "Поставщик в архиве."
+        m.startsWith("Offer ") && m.endsWith(" is already selected") ->
+            "Это предложение уже выбрано."
+        m.startsWith("Delivered quantity ") && m.contains("exceeds remaining") ->
+            "Поставленное количество превышает остаток по строке заказа."
         m.startsWith("Nothing picked") -> "Сначала отберите товар по строкам (кнопка «Отобрать»)."
         m.startsWith("Quantity must be positive") || m.startsWith("Quantity is invalid") -> "Количество должно быть больше нуля."
         m.startsWith("Invalid quantity") || m.startsWith("Invalid decimal value") ->
@@ -216,5 +226,33 @@ private val knownPhrases: List<Pair<String, String>> = listOf(
     "Only project member or owner can create project task" to "Создавать проектные задачи могут только руководитель или участники проекта.",
     "Unblock responsible is required" to "Укажите ответственного за снятие блокировки.",
     "Offered quantity exceeds the open deficit" to "Предложенное количество превышает открытый дефицит по строке потребности.",
-    "already produced purchase order" to "По этому предложению уже оформлен заказ поставщику."
+    "already produced purchase order" to "По этому предложению уже оформлен заказ поставщику.",
+    "Only the demand initiator can select the preferred offer" to "Выбрать предпочтительное предложение может только инициатор потребности.",
+    "Only the demand initiator can withdraw the preferred offer" to "Снять выбор предложения может только инициатор потребности.",
+    "Offer does not fully comply with technical requirements" to "Предложение не полностью соответствует техническим требованиям: сначала устраните отклонения.",
+    "Technical compliance is not confirmed" to "Соответствие техническим требованиям не подтверждено.",
+    "Offer cannot be selected in status" to "В текущем статусе предложение нельзя выбрать.",
+    "Demand already has a preferred offer" to "По заявке уже выбрано предложение: сначала снимите текущий выбор.",
+    "is closed for offers" to "По заявке уже закрыт приём предложений.",
+    "Offer validity date is already in the past" to "Срок действия предложения уже истёк.",
+    "Each demand line may appear only once in an offer" to "Каждая позиция заявки может встречаться в предложении только один раз.",
+    "Selected offer cannot be edited" to "Выбранное предложение нельзя редактировать: сначала снимите выбор.",
+    "Purchase order requires a SELECTED offer" to "Для оформления заказа поставщику нужно выбранное предложение.",
+    "Purchase order cannot be changed in status" to "В текущем статусе заказ поставщику нельзя изменить.",
+    "Purchase order approval requires" to "Согласование собственного заказа требует расширенных прав.",
+    "Purchase order requires re-approval" to "Заказ поставщику требует повторного согласования.",
+    "Purchase order can be cancelled only before delivery starts" to "Отменить заказ поставщику можно только до начала поставки.",
+    "Expected delivery date is in the past" to "Ожидаемая дата поставки уже в прошлом.",
+    "Delivery can be registered only for" to "Поставку можно зарегистрировать только по отправленному или частично поставленному заказу.",
+    "Ordered quantity cannot exceed the offered quantity" to "Заказанное количество превышает количество в выбранном предложении.",
+    "Ordered quantity exceeds the selected offer" to "Заказанное количество превышает количество в выбранном предложении.",
+    "Ordered quantity cannot be less than already delivered" to "Заказанное количество не может быть меньше уже поставленного.",
+    "Quick receive is only allowed for" to "Быстрая приёмка доступна только для заказов в статусе «Отправлен», «Частично доставлен» или «Доставлен».",
+    "has no remaining quantity to receive" to "По этому заказу нет непринятого остатка для приёмки.",
+    "Acceptance would exceed the ordered quantity" to "Принимаемое количество превышает заказанное по строке.",
+    "Receipt cannot be changed in status" to "В текущем статусе приёмку нельзя изменить.",
+    "Receipt cannot be posted from status" to "В текущем статусе приёмку нельзя провести.",
+    "Receipt has nothing received" to "Не указано принятое количество ни по одной строке.",
+    "Nomenclature is archived" to "Номенклатура находится в архиве.",
+    "Receipt is already registered for document" to "Приёмка по этому документу уже зарегистрирована."
 )

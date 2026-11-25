@@ -35,12 +35,30 @@ enum class NavigationDestination(
         group = NavGroup.SUPPLY, gradient = Gradients.Aurora, description = "Заказы и выпуск"),
     BOM("Спецификации (BOM)", listOf("bom:read_any"), glyph = ErpIconGlyph.Layers, group = NavGroup.SUPPLY,
         gradient = Gradients.Berry, description = "Состав изделий и ревизии"),
-    SUPPLIERS("Поставщики", listOf("suppliers:read"), glyph = ErpIconGlyph.Cart,
-        group = NavGroup.SUPPLY, gradient = Gradients.Sunset, description = "Контрагенты и предложения"),
-    PURCHASE_ORDERS("Заказы поставщикам", listOf("suppliers:read"), glyph = ErpIconGlyph.Documents,
-        group = NavGroup.SUPPLY, gradient = Gradients.Berry, description = "Заказы и поставки"),
-    DEMANDS("Потребности", listOf("demands:create", "demands:read_any"), glyph = ErpIconGlyph.Cart,
-        group = NavGroup.SUPPLY, gradient = Gradients.Sunset, description = "Заявки и закупки"),
+    DEMANDS(
+        "Снабжение (Заявки)",
+        listOf("demands:create", "demands:read_any", "suppliers:read", "suppliers:offer", "suppliers:order"),
+        glyph = ErpIconGlyph.Cart,
+        group = NavGroup.SUPPLY,
+        gradient = Gradients.Sunset,
+        description = "Пульт заявок, предложения, оплата и статус склада"
+    ),
+    PURCHASE_ORDERS(
+        "Реестр заказов и счетов",
+        listOf("suppliers:read"),
+        glyph = ErpIconGlyph.Documents,
+        group = NavGroup.SUPPLY,
+        gradient = Gradients.Berry,
+        description = "Все заказы, поставки и счета"
+    ),
+    SUPPLIERS(
+        "База поставщиков",
+        listOf("suppliers:read"),
+        glyph = ErpIconGlyph.Cart,
+        group = NavGroup.SUPPLY,
+        gradient = Gradients.Sunset,
+        description = "Справочник контрагентов и предложения"
+    ),
     DOCUMENTS("Документы", glyph = ErpIconGlyph.Documents, group = NavGroup.SUPPLY,
         gradient = Gradients.AmberGlow, description = "Файлы и версии"),
     ANALYTICS("Аналитика и календарь", glyph = ErpIconGlyph.TrendUp, group = NavGroup.SUPPLY,

@@ -53,6 +53,8 @@ import org.example.project.dto.SubmitInventoryCountsRequest
 import org.example.project.dto.ExpectedReceiptLineDto
 import org.example.project.dto.LinkReceiptRequest
 import org.example.project.dto.PostReceiptRequest
+import org.example.project.dto.QuickReceiveOrderRequest
+import org.example.project.dto.ReceiveOrderItemsRequest
 import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReleaseReservationRequest
@@ -197,6 +199,12 @@ class WmsApiClient(private val client: HttpClient) : WmsRepository {
         val params = buildMap { purchaseOrderId?.let { put("purchaseOrderId", it.toString()) } }
         return getWithParams("/api/wms/expected-receipts", params)
     }
+
+    override suspend fun quickReceiveOrder(request: QuickReceiveOrderRequest): ApiResult<ReceiptDto> =
+        post("/api/wms/receipts/quick-receive-order", request)
+
+    override suspend fun receiveOrderItems(request: ReceiveOrderItemsRequest): ApiResult<ReceiptDto> =
+        post("/api/wms/receipts/receive-order", request)
 
     override suspend fun createReservation(request: CreateReservationRequest): ApiResult<ReservationDto> =
         post("/api/wms/reservations", request)

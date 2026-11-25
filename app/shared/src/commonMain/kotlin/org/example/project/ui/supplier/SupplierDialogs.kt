@@ -1,15 +1,24 @@
 package org.example.project.ui.supplier
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import org.example.project.ui.theme.ErpFilterChip
 import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import org.example.project.dto.SupplierVerificationStatus
 import org.example.project.ui.projects.ErrorMessageCard
@@ -486,6 +496,7 @@ private fun VerifyDialog(state: SupplierUiState, viewModel: SupplierViewModel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewModel) {
     val form = state.offerForm
@@ -500,23 +511,27 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
         localLines = form.demandLines
     }
     ErpDialog(
-        title = "Предложение поставщика",
-        subtitle = "Позиции берутся из потребности, количество ограничено дефицитом",
+        title = "Предложение поставщика со счётом",
+        subtitle = "Позиции берутся из потребности; прикрепите файл счёта поставщика",
         glyph = ErpIconGlyph.Documents,
         gradient = Gradients.Ocean,
         onDismiss = viewModel::dismissDialog,
-        confirmText = "Сохранить предложение",
+        confirmText = if (state.isActionRunning) "Сохранение…" else "Сохранить предложение",
         onConfirm = viewModel::createOffer,
-        confirmEnabled = !state.isActionRunning,
-        width = 700.dp
+        confirmEnabled = !state.isActionRunning && form.hasInvoiceFile && form.demandId != null && form.supplierId != null,
+        width = 700.dp,
+        scrollToTopKey = state.operationError
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             state.operationError?.let { ErrorMessageCard(error = it) }
             DemandFilterDropdown(
-                demands = state.demands,
+                demands = state.demands.filter {
+                    it.status != org.example.project.dto.DemandStatus.DRAFT &&
+                        it.status != org.example.project.dto.DemandStatus.CANCELLED
+                },
                 selectedId = form.demandId,
                 onSelect = viewModel::onOfferDemandChanged,
                 modifier = Modifier.fillMaxWidth(),
@@ -531,7 +546,7 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                     suppliers = state.suppliers,
                     selectedId = form.supplierId,
                     onSelect = { viewModel.updateOfferForm(form.copy(supplierId = it)) },
-                    onlyVerified = true,
+                    onlyVerified = false,
                     modifier = Modifier.weight(1f),
                     label = "Поставщик *"
                 )
@@ -553,6 +568,58 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                     color = Brand.Amber
                 )
             }
+
+            val invoiceAccent = if (form.hasInvoiceFile) Brand.Mint else Brand.Amber
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(invoiceAccent.copy(alpha = 0.08f))
+                    .border(1.dp, invoiceAccent.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Счёт поставщика (файл PDF/скан) *",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            text = form.invoiceFileLabel?.let { "Файл: $it" }
+                                ?: "Сначала прикрепите файл счёта от поставщика",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (form.hasInvoiceFile) Brand.Teal else Brand.Amber
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    SoftButton(
+                        text = if (form.hasInvoiceFile) "Заменить файл" else "Прикрепить файл счёта *",
+                        onClick = viewModel::pickOfferInvoiceFile,
+                        leadingIcon = ErpIconGlyph.Attachment,
+                        tint = if (form.hasInvoiceFile) Brand.Teal else Brand.Blue
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ErpTextField(
+                        value = form.invoiceNumber,
+                        onValueChange = { viewModel.updateOfferForm(form.copy(invoiceNumber = it)) },
+                        label = "Номер счёта",
+                        modifier = Modifier.weight(1f)
+                    )
+                    ErpDateField(
+                        value = form.invoiceDate,
+                        onValueChange = { viewModel.updateOfferForm(form.copy(invoiceDate = it)) },
+                        label = "Дата счёта",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ErpTextField(
                     value = form.deliveryDays,
@@ -563,7 +630,7 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                 ErpDateField(
                     value = form.validUntil,
                     onValueChange = { viewModel.updateOfferForm(form.copy(validUntil = it)) },
-                    label = "Действует до *",
+                    label = "Действует до",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -573,6 +640,18 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                 label = "Условия оплаты",
                 modifier = Modifier.fillMaxWidth()
             )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf("100% предоплата", "50/50", "Постоплата").forEach { preset ->
+                    ErpFilterChip(
+                        selected = form.paymentTerms == preset,
+                        onClick = { viewModel.updateOfferForm(form.copy(paymentTerms = preset)) },
+                        label = { Text(preset) }
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -674,7 +753,9 @@ private fun CreateOfferDialog(state: SupplierUiState, viewModel: SupplierViewMod
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SoftButton(text = "Добавить позицию", onClick = viewModel::addOfferLine)
+                if (form.demandLines.size > form.lines.size) {
+                    SoftButton(text = "Вернуть позицию", onClick = viewModel::addOfferLine)
+                }
                 TextButton(
                     onClick = { viewModel.removeOfferLine(form.lines.size - 1) },
                     enabled = form.lines.size > 1
@@ -761,8 +842,7 @@ private fun SelectOfferDialog(
             )
             Text(
                 text = "Выбор недоступен, если предложение просрочено, не соответствует " +
-                    "техническим требованиям, документы не подтверждены, срок поставки " +
-                    "превышает требуемую дату или поставщик не проверен.",
+                    "техническим требованиям, документы не подтверждены или поставщик отклонён/в архиве.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

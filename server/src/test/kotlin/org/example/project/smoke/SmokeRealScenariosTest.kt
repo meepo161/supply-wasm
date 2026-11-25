@@ -1,7 +1,11 @@
 package org.example.project.smoke
 
 import io.ktor.client.request.get
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import org.example.project.TestDatabase
 import org.example.project.dto.*
@@ -60,7 +64,7 @@ class SmokeRealScenariosTest {
             HttpStatusCode.Created
         )
 
-        // Снабжение: инженер создаёт потребность, начальник согласует
+        // Снабжение: инженер создаёт потребность — по D-64 она сразу в статусе APPROVED
         val demand = engineer.client.postOk<CreateDemandRequest, DemandDetailDto>(
             "/api/demands",
             CreateDemandRequest(
@@ -71,21 +75,9 @@ class SmokeRealScenariosTest {
             ),
             HttpStatusCode.Created
         )
-        val submitted = engineer.client.postOk<SubmitDemandRequest, DemandDetailDto>(
-            "/api/demands/${demand.header.id}/submit", SubmitDemandRequest(demand.header.version)
-        )
-        assertEquals(DemandStatus.PENDING_APPROVAL, submitted.header.status)
-        // Инициатор не может согласовать сам себе
-        val selfApprove = engineer.client.postJson(
-            "/api/demands/${demand.header.id}/approve", encode(ApproveDemandRequest(submitted.header.version))
-        )
-        assertEquals(HttpStatusCode.Forbidden, selfApprove.status, selfApprove.bodyAsText())
-        val approved = chief.client.postOk<ApproveDemandRequest, DemandDetailDto>(
-            "/api/demands/${demand.header.id}/approve", ApproveDemandRequest(submitted.header.version)
-        )
-        assertEquals(DemandStatus.APPROVED, approved.header.status)
+        assertEquals(DemandStatus.APPROVED, demand.header.status)
 
-        // Поставщики: карточка, проверка, предложение, выбор инициатором
+        // Поставщики: карточка, проверка, предложение (с обязательным счётом), выбор инициатором
         val supplier = buyer.client.postOk<CreateSupplierRequest, SupplierCardDto>(
             "/api/suppliers",
             CreateSupplierRequest(name = "ООО «КрепёжСнаб»", inn = "7701555123", idempotencyKey = newKey("sup")),
@@ -96,6 +88,19 @@ class SmokeRealScenariosTest {
             encode(SupplierVerificationRequest(SupplierVerificationStatus.VERIFIED, "Проверен СБ", supplier.supplier.version, newKey("ver")))
         )
         assertEquals(HttpStatusCode.OK, verified.status, verified.bodyAsText())
+        val invoiceDoc = buyer.client.postOk<CreateDocumentRequest, DocumentDto>(
+            "/api/documents", CreateDocumentRequest("Счёт КрепёжСнаб", DocumentType.INVOICE), HttpStatusCode.Created
+        )
+        val verResp = buyer.client.submitFormWithBinaryData(
+            url = "/api/documents/${invoiceDoc.id}/versions",
+            formData = formData {
+                append("file", "%PDF-1.4 krepezh".toByteArray(Charsets.UTF_8), Headers.build {
+                    append(HttpHeaders.ContentType, "application/pdf")
+                    append(HttpHeaders.ContentDisposition, "filename=\"krepezh.pdf\"")
+                })
+            }
+        )
+        assertEquals(HttpStatusCode.Created, verResp.status, verResp.bodyAsText())
         val offer = buyer.client.postOk<CreateSupplierOfferRequest, SupplierOfferDto>(
             "/api/supplier-offers",
             CreateSupplierOfferRequest(
@@ -106,8 +111,9 @@ class SmokeRealScenariosTest {
                 deliveryDays = 5,
                 paymentTerms = "Постоплата 30 дней",
                 validUntil = LocalDate.now().plusDays(30).toString(),
-                lines = listOf(SupplierOfferLineInput(approved.lines.first().id, "100", "12.50", "20")),
-                idempotencyKey = newKey("offer")
+                lines = listOf(SupplierOfferLineInput(demand.lines.first().id, "100", "12.50", "20")),
+                idempotencyKey = newKey("offer"),
+                invoiceDocumentId = invoiceDoc.id
             ),
             HttpStatusCode.Created
         )

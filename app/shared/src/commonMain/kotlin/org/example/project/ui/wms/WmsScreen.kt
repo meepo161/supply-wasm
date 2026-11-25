@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -43,6 +45,7 @@ import org.example.project.ui.theme.Tab
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +62,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.example.project.data.ApiResult
+import org.example.project.data.SupplierRepository
+import org.example.project.data.previewAttachmentFile
+import org.example.project.data.safeAttachmentFileName
+import org.example.project.dto.ExpectedReceiptLineDto
 import org.example.project.dto.LowStockItemDto
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.ReceiptDto
@@ -66,10 +74,13 @@ import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReceiptSourceType
 import org.example.project.dto.StockMovementDto
 import org.example.project.dto.StockMovementType
+import org.example.project.dto.StorageLocationDto
+import org.example.project.dto.UserDto
 import org.example.project.dto.WarehouseDto
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
 import org.example.project.dto.StorageLocationPurpose
+import org.example.project.dto.hasPermission
 import org.example.project.ui.components.SearchableDropdown
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
@@ -79,6 +90,7 @@ import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.GlassCard
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.PageHeader
+import org.example.project.ui.theme.PillBadge
 
 @Composable
 fun WmsScreen(
@@ -129,7 +141,7 @@ fun WmsScreen(
                     .weight(1f)
                     .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
-                WmsTabContent(state, viewModel)
+                WmsTabContent(state, viewModel, currentUser)
             }
         }
 
@@ -635,8 +647,29 @@ private fun totalsByUnit(
 @Composable
 private fun ReceiptsTab(
     state: WmsUiState,
-    viewModel: WmsViewModel
+    viewModel: WmsViewModel,
+    currentUser: UserDto? = null
 ) {
+    val canPost = currentUser?.hasPermission("wms", "post") == true
+    LaunchedEffect(Unit) {
+        if (!state.expectedReceiptsLoaded && !state.expectedReceiptsLoading) {
+            viewModel.loadExpectedReceipts()
+        }
+    }
+    val pendingExpected = remember(state.expectedReceipts) {
+        state.expectedReceipts.filter {
+            it.orderStatus in setOf("SENT", "PARTIALLY_DELIVERED", "DELIVERED") &&
+                (it.notAcceptedQuantity.replace(',', '.').toDoubleOrNull() ?: 0.0) > 0.0
+        }
+    }
+    val expectedOrders = remember(pendingExpected) {
+        pendingExpected
+            .groupBy { it.orderId }
+            .values
+            .sortedByDescending { lines -> lines.any { it.isPaid } }
+    }
+    var queueCollapsed by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -644,30 +677,42 @@ private fun ReceiptsTab(
         TabHeader(
             title = "Приёмка",
             onCreate = { viewModel.showDialog(WmsDialog.CreateReceipt) },
-            onRefresh = viewModel::loadReceipts,
+            onRefresh = {
+                viewModel.loadReceipts()
+                viewModel.loadExpectedReceipts()
+            },
             createLabel = "Новая приёмка"
         )
         // Основание приёмки не свободная строка: заказ, счёт, накладная/УПД,
         // возврат, перемещение, начальный остаток, прочий документ.
         Text(
             text = "Основание: заказ поставщику, накладная/УПД, возврат, перемещение, " +
-                "начальный остаток или прочий документ. Приёмку по счёту оформляет снабжение. " +
+                "начальный остаток или прочий документ. Оплаченные заказы принимаются в 1 клик прямо из очереди ниже. " +
                 "Один документ проводится один раз.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         state.successMessage?.let { message ->
-            Row(
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                shape = RoundedCornerShape(8.dp),
+                color = Brand.Mint.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, Brand.Mint.copy(alpha = 0.4f))
             ) {
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = viewModel::dismissSuccess) { Text("Ок") }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = org.example.project.ui.theme.readableAccent(Brand.Mint),
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = viewModel::dismissSuccess) { Text("Ок") }
+                }
             }
         }
         Row(
@@ -695,59 +740,69 @@ private fun ReceiptsTab(
         }
         state.operationError?.let { ErrorMessageCard(error = it) }
 
-        TextButton(
-            onClick = {
-                if (state.expectedReceiptsLoaded) viewModel.hideExpectedReceipts() else viewModel.loadExpectedReceipts()
-            }
-        ) {
-            Text(if (state.expectedReceiptsLoaded) "Скрыть ожидаемые поставки" else "Показать ожидаемые поставки по заказам")
-        }
-
-        if (state.expectedReceiptsLoaded) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+        if (state.currentReceipt == null) {
+            if (state.expectedReceiptsLoading && !state.expectedReceiptsLoaded) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Ожидается к приёмке по заказам поставщикам", style = MaterialTheme.typography.titleSmall)
-                    // Ждём только отправленные поставщику заказы и только то, что склад ещё не принял.
-                    val names = LocalWmsNames.current
-                    val pending = state.expectedReceipts.filter {
-                        it.orderStatus in setOf("SENT", "PARTIALLY_DELIVERED", "DELIVERED") &&
-                            (it.notAcceptedQuantity.toDoubleOrNull() ?: 0.0) > 0.0
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(
+                        "Загрузка очереди ожидаемых заказов…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else if (expectedOrders.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Ожидается к приёмке по заказам",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            PillBadge(text = "${expectedOrders.size}", accent = Brand.Blue)
+                        }
+                        TextButton(onClick = { queueCollapsed = !queueCollapsed }) {
+                            Text(if (queueCollapsed) "Развернуть" else "Свернуть")
+                        }
                     }
-                    if (pending.isEmpty()) {
-                        Text(
-                            "Непринятых позиций по заказам нет.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    pending.take(20).forEach { line ->
-                        Text(
-                            text = "${line.orderNumber} · ${names.item(line.nomenclatureId)}: " +
-                                "заказано ${names.qty(line.orderedQuantity, line.nomenclatureId)}, " +
-                                "поставлено ${ErpFormat.qty(line.deliveredQuantity)}, " +
-                                "принято ${ErpFormat.qty(line.acceptedQuantity)}, осталось ${ErpFormat.qty(line.notAcceptedQuantity)}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (pending.size > 20) {
-                        Text(
-                            "Показаны первые 20 из ${pending.size}.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    if (!queueCollapsed) {
+                        expectedOrders.forEach { orderLines ->
+                            val first = orderLines.first()
+                            androidx.compose.runtime.key(first.orderId) {
+                                ExpectedOrderCard(
+                                    lines = orderLines,
+                                    warehouses = state.warehouses,
+                                    defaultWarehouseId = state.receiptFilters.warehouseId,
+                                    locationsByWarehouse = state.locationsByWarehouse,
+                                    ensureLocationsLoaded = viewModel::ensureWarehouseLocationsLoaded,
+                                    canPost = canPost,
+                                    isReceiving = state.quickReceivingOrderId == first.orderId,
+                                    anyReceivingInFlight = state.quickReceivingOrderId != null,
+                                    onQuickReceive = viewModel::quickReceiveOrder,
+                                    onPartialReceive = viewModel::openCreateReceiptForOrder
+                                )
+                            }
+                        }
                     }
                 }
+            } else if (state.expectedReceiptsLoaded) {
+                Text(
+                    "Ожидаемых к приёмке заказов нет.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        }
 
-        if (state.currentReceipt == null) {
             if (state.receipts.isEmpty()) {
                 if (!state.isLoading) {
                     val filtered = state.receiptFilters.warehouseId != null || state.receiptFilters.status != null
@@ -840,11 +895,266 @@ private fun ReceiptsTab(
                 warehouse = state.warehouses.find { it.id == state.currentReceipt.warehouseId },
                 nomenclature = state.nomenclature,
                 stock = state.stock,
+                isBusy = state.isLoading,
                 onPost = viewModel::postReceipt,
                 onClose = viewModel::clearCurrentReceipt,
                 onAccept = viewModel::acceptReceiptLines,
                 onAcceptAndPost = viewModel::acceptAndPostReceipt
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ExpectedOrderCard(
+    lines: List<ExpectedReceiptLineDto>,
+    warehouses: List<WarehouseDto>,
+    defaultWarehouseId: Long?,
+    locationsByWarehouse: Map<Long, List<StorageLocationDto>>,
+    ensureLocationsLoaded: (Long) -> Unit,
+    canPost: Boolean,
+    isReceiving: Boolean,
+    anyReceivingInFlight: Boolean,
+    onQuickReceive: (orderId: Long, warehouseId: Long, locationId: Long) -> Unit,
+    onPartialReceive: (
+        orderId: Long,
+        orderNumber: String,
+        lines: List<ExpectedReceiptLineDto>,
+        warehouseId: Long?,
+        locationId: Long?
+    ) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val first = lines.first()
+    val orderId = first.orderId
+    val orderNumber = first.orderNumber
+    val supplierName = lines.firstNotNullOfOrNull { it.supplierName }?.takeIf { it.isNotBlank() } ?: "Поставщик"
+    val demandNumbers = remember(lines) { lines.flatMap { it.demandNumbers }.distinct() }
+    val isPaid = lines.any { it.isPaid }
+    val offerId = lines.firstNotNullOfOrNull { it.offerId }
+    val invoiceDocumentId = lines.firstNotNullOfOrNull { it.invoiceDocumentId }
+    val names = LocalWmsNames.current
+
+    val supplierRepository: SupplierRepository = koinInject()
+    val scope = rememberCoroutineScope()
+    var openingInvoice by remember(orderId) { mutableStateOf(false) }
+    var invoiceError by remember(orderId) { mutableStateOf<String?>(null) }
+
+    val activeWarehouses = remember(warehouses) {
+        warehouses.filter { it.active }.ifEmpty { warehouses }
+    }
+    var selectedWarehouseId by remember(orderId) {
+        mutableStateOf(
+            defaultWarehouseId?.takeIf { id -> activeWarehouses.any { it.id == id } }
+                ?: activeWarehouses.firstOrNull()?.id
+        )
+    }
+    LaunchedEffect(defaultWarehouseId, activeWarehouses) {
+        if (selectedWarehouseId == null || activeWarehouses.none { it.id == selectedWarehouseId }) {
+            selectedWarehouseId = defaultWarehouseId?.takeIf { id -> activeWarehouses.any { it.id == id } }
+                ?: activeWarehouses.firstOrNull()?.id
+        }
+    }
+    LaunchedEffect(selectedWarehouseId) {
+        selectedWarehouseId?.let(ensureLocationsLoaded)
+    }
+    val allLocationsForWarehouse = selectedWarehouseId?.let { locationsByWarehouse[it] }.orEmpty()
+    val warehouseLocations = remember(allLocationsForWarehouse) {
+        allLocationsForWarehouse.filter { it.active && it.code != TRANSIT_LOCATION_CODE }
+    }
+    var selectedLocationId by remember(orderId, selectedWarehouseId) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(selectedWarehouseId, warehouseLocations) {
+        if (selectedLocationId == null || warehouseLocations.none { it.id == selectedLocationId }) {
+            selectedLocationId = defaultQuickReceiveLocationId(warehouseLocations)
+        }
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        border = BorderStroke(
+            1.dp,
+            if (isPaid) Brand.Mint.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Заказ $orderNumber",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (isPaid) {
+                            PillBadge(text = "✓ Оплачено", accent = Brand.Mint, filled = true)
+                        } else {
+                            PillBadge(text = "В пути", accent = Brand.Amber)
+                        }
+                    }
+                    Text(
+                        text = supplierName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (demandNumbers.isNotEmpty()) {
+                        Text(
+                            text = "Заявки: ${demandNumbers.joinToString(", ")}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (offerId != null && invoiceDocumentId != null) {
+                    OutlinedButton(
+                        enabled = !openingInvoice,
+                        onClick = {
+                            scope.launch {
+                                openingInvoice = true
+                                invoiceError = null
+                                try {
+                                    when (val res = supplierRepository.downloadOfferInvoiceFile(offerId)) {
+                                        is ApiResult.Success -> {
+                                            val downloaded = res.data
+                                            previewAttachmentFile(
+                                                safeAttachmentFileName(
+                                                    downloaded.fileName ?: "invoice-$orderNumber.pdf",
+                                                    offerId
+                                                ),
+                                                downloaded.mimeType,
+                                                downloaded.bytes
+                                            )
+                                        }
+                                        is ApiResult.Error -> invoiceError = res.error.userText()
+                                    }
+                                } finally {
+                                    openingInvoice = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text(if (openingInvoice) "Загрузка…" else "📄 Открыть счёт")
+                    }
+                }
+            }
+            invoiceError?.let { err ->
+                Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+
+            HorizontalDivider()
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                lines.forEach { line ->
+                    val item = names.itemDto(line.nomenclatureId)
+                    val code = line.nomenclatureCode ?: item?.code
+                    val name = line.nomenclatureName ?: item?.name
+                    val title = listOfNotNull(code, name).joinToString(" · ").ifBlank { "Позиция #${line.nomenclatureId}" }
+                    val unit = line.unit?.takeIf { it.isNotBlank() } ?: item?.unit.orEmpty()
+                    val qtyText = listOf(ErpFormat.qty(line.notAcceptedQuantity), unit)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ")
+                    val acceptedNum = line.acceptedQuantity.replace(',', '.').toDoubleOrNull() ?: 0.0
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "№${line.lineNo} · $title",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f).padding(end = 12.dp)
+                        )
+                        Text(
+                            text = if (acceptedNum > 0.0) {
+                                "К приёмке: $qtyText (принято ${ErpFormat.qty(line.acceptedQuantity)} из ${ErpFormat.qty(line.orderedQuantity)})"
+                            } else {
+                                "К приёмке: $qtyText"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+            if (canPost) {
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    WarehouseDropdown(
+                        warehouses = activeWarehouses,
+                        selected = activeWarehouses.find { it.id == selectedWarehouseId },
+                        onSelect = {
+                            selectedWarehouseId = it.id
+                            selectedLocationId = null
+                        },
+                        label = "Склад",
+                        modifier = Modifier.weight(1f)
+                    )
+                    LocationDropdown(
+                        locations = warehouseLocations,
+                        selected = warehouseLocations.find { it.id == selectedLocationId },
+                        onSelect = { selectedLocationId = it.id },
+                        label = "Ячейка",
+                        showWarehouse = false,
+                        emptyText = if (selectedWarehouseId == null) "Сначала выберите склад" else "Нет активных ячеек",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (selectedWarehouseId != null && locationsByWarehouse.containsKey(selectedWarehouseId) && warehouseLocations.isEmpty()) {
+                    Text(
+                        "На выбранном складе нет активных ячеек. Создайте ячейку во вкладке «Ячейки».",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val whId = selectedWarehouseId ?: return@Button
+                            val locId = selectedLocationId ?: return@Button
+                            onQuickReceive(orderId, whId, locId)
+                        },
+                        enabled = selectedWarehouseId != null && selectedLocationId != null && !anyReceivingInFlight,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Gradients.Emerald.first(),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(if (isReceiving) "Проведение…" else "✓ Принять на склад в 1 клик")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            onPartialReceive(orderId, orderNumber, lines, selectedWarehouseId, selectedLocationId)
+                        },
+                        enabled = !anyReceivingInFlight
+                    ) {
+                        Text("Принять частично / с расхождением")
+                    }
+                }
+            }
         }
     }
 }
@@ -862,6 +1172,7 @@ private fun ReceiptDetailCard(
     warehouse: WarehouseDto?,
     nomenclature: List<NomenclatureDto>,
     stock: List<org.example.project.dto.StockBalanceDto> = emptyList(),
+    isBusy: Boolean = false,
     onPost: () -> Unit,
     onClose: () -> Unit,
     onAccept: (List<org.example.project.dto.AcceptReceiptLineInput>) -> Unit = {},
@@ -949,6 +1260,7 @@ private fun ReceiptDetailCard(
                     stock = stock,
                     onSave = onAccept,
                     onSaveAndPost = onAcceptAndPost,
+                    isBusy = isBusy,
                     onDirtyChange = { acceptanceDirty = it }
                 )
             }
@@ -959,13 +1271,7 @@ private fun ReceiptDetailCard(
             var qcStatusMsg by remember(receipt.id) { mutableStateOf<String?>(null) }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (receipt.status == ReceiptStatus.DRAFT || receipt.status == ReceiptStatus.IN_PROGRESS) {
-                    Button(
-                        onClick = onPost,
-                        // Несохранённый факт приёмки проводить нельзя: сервер проведёт старые значения.
-                        enabled = receipt.lines.none { it.locationId == null } && !acceptanceDirty
-                    ) { Text("Принять на склад") }
-                }
+
                 if (receipt.status == ReceiptStatus.POSTED) {
                     Button(onClick = {
                         showQcDialog = true
@@ -983,7 +1289,7 @@ private fun ReceiptDetailCard(
                 receipt.lines.any { it.locationId == null }
             ) {
                 Text(
-                    "Выберите ячейку для каждой строки, сохраните факт приёмки и нажмите «Принять на склад».",
+                    "Выберите ячейку для каждой строки и нажмите «✓ Принять и провести».",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1892,13 +2198,17 @@ private fun movementDocTypeLabel(docType: String): String = when (docType.upperc
 }
 
 @Composable
-private fun WmsTabContent(state: WmsUiState, viewModel: WmsViewModel) {
+private fun WmsTabContent(
+    state: WmsUiState,
+    viewModel: WmsViewModel,
+    currentUser: UserDto? = null
+) {
     when (state.selectedTab) {
         WmsTab.WAREHOUSES -> WarehousesTab(state, viewModel)
         WmsTab.LOCATIONS -> LocationsTab(state, viewModel)
         WmsTab.NOMENCLATURE -> NomenclatureTab(state, viewModel)
         WmsTab.STOCK -> StockTab(state, viewModel)
-        WmsTab.RECEIPTS -> ReceiptsTab(state, viewModel)
+        WmsTab.RECEIPTS -> ReceiptsTab(state, viewModel, currentUser)
         WmsTab.RESERVATIONS -> ReservationsTab(state, viewModel)
         WmsTab.TRANSFERS -> TransfersTab(state, viewModel)
         WmsTab.ISSUES -> IssuesTab(state, viewModel)

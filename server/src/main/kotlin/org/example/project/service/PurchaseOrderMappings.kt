@@ -45,7 +45,9 @@ internal fun PurchaseOrdersRecord.toDto(
     demandIds: List<Long>,
     lines: List<PurchaseOrderLineDto>,
     totals: Record?,
-    demandNumbers: List<String> = emptyList()
+    demandNumbers: List<String> = emptyList(),
+    paidByName: String? = null,
+    invoiceDocumentId: Long? = null
 ): PurchaseOrderDto = PurchaseOrderDto(
     id = this.id,
     number = this.number,
@@ -84,7 +86,11 @@ internal fun PurchaseOrdersRecord.toDto(
             orderedQuantity = (it.get("ordered_quantity", BigDecimal::class.java) ?: BigDecimal.ZERO).toPlainString(),
             deliveredQuantity = (it.get("delivered_quantity", BigDecimal::class.java) ?: BigDecimal.ZERO).toPlainString()
         )
-    }
+    },
+    paidAt = this.paidAt?.toString(),
+    paidBy = this.paidBy,
+    paidByName = paidByName,
+    invoiceDocumentId = invoiceDocumentId
 )
 
 internal fun PurchaseDeliveriesRecord.toDto(

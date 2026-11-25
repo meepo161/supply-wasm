@@ -94,7 +94,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
         )
     }
     single { TaskService(get(), get(), get(), get(), get(), get()) }
-    single { NotificationService(get()) }
+    single { NotificationService(get(), get()) }
     single<PushSubscriptionStore> { PushSubscriptionRepository(get()) }
     single<PushTransport> { pushTransport ?: WebPushTransport(config.push) }
     single { PushService(get(), get(), config.push) }
@@ -110,7 +110,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { WmsService(get(), get(), get()) }
     single { org.example.project.repository.NomenclatureCardRepository(get()) }
     single { NomenclatureCardService(get(), get(), get(), get()) }
-    single { ReceiptService(get(), get(), get(), get()) }
+    single { ReceiptService(get(), get(), get(), get(), get()) }
     single { ReceiptQcService(get(), get()) }
     single { WmsTransferService(get(), get(), get()) }
     single { WmsIssueService(get(), get(), get()) }
@@ -123,12 +123,12 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { ProductionService(get(), get(), get()) }
     single { ProductionExtrasService(get(), get(), get()) }
     single { SupplierRepository(get()) }
-    single { SupplierService(get(), get(), get(), get()) }
+    single { SupplierService(get(), get(), get(), get(), get(), get(), get()) }
     single { SupplierClaimService(get(), get()) }
     single { org.example.project.service.SupplierInvoiceService(get(), get(), get(), get(), get()) }
     single { AnalyticsService(get(), get()) }
     single { PurchaseOrderRepository(get()) }
-    single { PurchaseOrderService(get(), get(), get(), get()) }
+    single { PurchaseOrderService(get(), get(), get(), get(), get()) }
     single { AttachmentService(get(), get(), get(), get(), get(), get(), get()) }
     single { BomService(get(), get(), get()) }
     single { DocumentRepository(get()) }
@@ -154,7 +154,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
             get(), get(), get(), get()
         )
     }
-    single { DemandService(get(), get(), get(), get(), get(), get()) }
+    single { DemandService(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { ErpExtrasService(get(), get(), get()) }
     single<LlmProvider> { OllamaLlmProvider(config.assistant) }
     single { AssistantConversationRepository(get()) }

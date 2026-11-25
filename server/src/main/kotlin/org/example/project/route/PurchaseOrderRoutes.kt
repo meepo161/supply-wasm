@@ -5,11 +5,14 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.json.Json
 import org.example.project.dto.*
 import org.example.project.exception.ValidationException
 import org.example.project.plugins.RequireAuthPlugin
 import org.example.project.plugins.currentUser
 import org.example.project.service.PurchaseOrderService
+
+private val optionalBodyJson = Json { ignoreUnknownKeys = true }
 
 fun Route.purchaseOrderRoutes(purchaseOrderService: PurchaseOrderService) {
     route("/api/purchase-orders") {
@@ -96,6 +99,24 @@ fun Route.purchaseOrderRoutes(purchaseOrderService: PurchaseOrderService) {
             val request = call.receive<CancelPurchaseOrderRequest>()
             val result = purchaseOrderService.cancel(id, request, call.currentUser())
             call.respondText(result.body, ContentType.Application.Json, result.status)
+        }
+
+        post("/{id}/mark-paid") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid purchase order id")
+            val request = if (call.request.contentType().match(ContentType.Application.Json)) {
+                val bodyText = call.receiveText()
+                if (bodyText.isBlank()) MarkDemandPaidRequest()
+                else try {
+                    optionalBodyJson.decodeFromString<MarkDemandPaidRequest>(bodyText)
+                } catch (_: Exception) {
+                    throw ValidationException("Invalid request body")
+                }
+            } else {
+                MarkDemandPaidRequest()
+            }
+            val order = purchaseOrderService.markOrderPaid(id, request.paymentNote, call.currentUser())
+            call.respond(HttpStatusCode.OK, ApiResponse.success(order))
         }
 
         get("/{id}/history") {

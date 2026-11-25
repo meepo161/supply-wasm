@@ -64,6 +64,7 @@ fun SupplierVerificationStatus.accentColor(): Color = when (this) {
 fun SupplierOfferStatus.localizedName(): String = when (this) {
     SupplierOfferStatus.RECEIVED -> "Получено"
     SupplierOfferStatus.SHORTLISTED -> "В шорт-листе"
+    SupplierOfferStatus.NEEDS_REVISION -> "На доработке"
     SupplierOfferStatus.SELECTED -> "Выбрано"
     SupplierOfferStatus.REJECTED -> "Отклонено"
     SupplierOfferStatus.WITHDRAWN -> "Отозвано"
@@ -73,6 +74,7 @@ fun SupplierOfferStatus.localizedName(): String = when (this) {
 fun SupplierOfferStatus.accentColor(): Color = when (this) {
     SupplierOfferStatus.RECEIVED -> Brand.Blue
     SupplierOfferStatus.SHORTLISTED -> Brand.Indigo
+    SupplierOfferStatus.NEEDS_REVISION -> Brand.Amber
     SupplierOfferStatus.SELECTED -> Brand.Mint
     SupplierOfferStatus.REJECTED -> Brand.Rose
     SupplierOfferStatus.WITHDRAWN -> Brand.Slate

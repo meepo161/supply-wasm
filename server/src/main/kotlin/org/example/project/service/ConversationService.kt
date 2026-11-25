@@ -563,7 +563,9 @@ class ConversationService(
         if (!conversationRepository.projectExists(projectId)) {
             throw NotFoundException("project", projectId)
         }
-        if (!conversationRepository.isProjectMemberOrOwner(projectId, currentUser.userId)) {
+        if (!currentUser.hasPermission("projects", "read_any") &&
+            !conversationRepository.isProjectMemberOrOwner(projectId, currentUser.userId)
+        ) {
             throw ForbiddenException("Access to project chat denied")
         }
         conversationRepository.findByProjectId(projectId)?.let { return toDto(it) }

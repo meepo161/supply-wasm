@@ -8,7 +8,9 @@ import org.example.project.exception.ForbiddenException
 import org.example.project.exception.NotFoundException
 import org.example.project.exception.ValidationException
 import org.example.project.generated.jooq.tables.records.PurchaseOrdersRecord
+import org.example.project.generated.jooq.tables.records.SupplierOffersRecord
 import org.example.project.model.CurrentUser
+import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.PurchaseOrderRepository
 import org.example.project.repository.SupplierRepository
 import org.jooq.DSLContext
@@ -38,6 +40,7 @@ import java.time.format.DateTimeParseException
 class PurchaseOrderService(
     private val purchaseRepository: PurchaseOrderRepository,
     private val supplierRepository: SupplierRepository,
+    private val notificationService: NotificationService,
     private val auditService: AuditService,
     private val dsl: DSLContext
 ) {
@@ -66,6 +69,12 @@ class PurchaseOrderService(
         currentUser.requirePermission("suppliers", "read")
         val order = purchaseRepository.findOrderById(id) ?: throw NotFoundException("purchase_order", id)
         return build(order)
+    }
+
+    internal fun listOrdersForDemandInternal(demandId: Long): List<PurchaseOrderDto> {
+        val orders = purchaseRepository.listOrdersForDemand(demandId)
+        if (orders.isEmpty()) return emptyList()
+        return buildMany(orders)
     }
 
     fun listOrderHistory(id: Long, currentUser: CurrentUser): List<PurchaseOrderHistoryDto> {
@@ -109,8 +118,11 @@ class PurchaseOrderService(
                 }
                 val supplier = purchaseRepository.findSupplierById(offer.supplierId)
                     ?: throw NotFoundException("supplier", offer.supplierId)
-                if (supplier.verificationStatus != "VERIFIED") {
-                    throw ConflictException("Supplier ${supplier.number} is not verified")
+                if (supplier.verificationStatus == "REJECTED") {
+                    throw ConflictException("Supplier ${supplier.number} is rejected")
+                }
+                if (supplier.archived) {
+                    throw ConflictException("Supplier ${supplier.number} is archived")
                 }
                 val expectedAt = request.expectedAt?.let { parseDate(it, "expectedAt") }
                 if (expectedAt != null && expectedAt.isBefore(LocalDate.now())) {
@@ -351,6 +363,341 @@ class PurchaseOrderService(
                 )
                 id to json.encodeToString(PurchaseOrderDto.serializer(), build(cancelled))
         }
+    }
+
+    fun markOrderPaid(id: Long, paymentNote: String?, currentUser: CurrentUser): PurchaseOrderDto {
+        currentUser.requirePermission("suppliers", "order")
+        var pendingEvents: List<NotificationEventBus.Event> = emptyList()
+        val updated = dsl.transactionResult(TransactionalCallable {
+            val order = purchaseRepository.lockOrderById(id)
+                ?: throw NotFoundException("purchase_order", id)
+            if (order.status == "CANCELLED") {
+                throw ConflictException("Заказ ${order.number} отменён")
+            }
+            val wasAlreadyPaid = order.paidAt != null
+            val note = paymentNote?.trim()?.takeIf { it.isNotEmpty() }
+            val saved = purchaseRepository.markOrderPaid(order.id, currentUser.userId, OffsetDateTime.now())!!
+            if (!wasAlreadyPaid || order.status != saved.status) {
+                purchaseRepository.insertOrderHistory(
+                    saved.id, "PAID", order.status, saved.status, note, currentUser.userId
+                )
+                auditService.log(
+                    currentUser.userId, "PURCHASE_ORDER_PAID", "PURCHASE_ORDER", saved.id,
+                    mapOf("number" to saved.number, "note" to note)
+                )
+            }
+            if (!wasAlreadyPaid) {
+                val demandIds = purchaseRepository.listDemandIds(saved.id).ifEmpty {
+                    listOfNotNull(purchaseRepository.findOfferById(saved.offerId)?.demandId)
+                }
+                val demands = demandIds.mapNotNull { purchaseRepository.findDemandById(it) }
+                val events = mutableListOf<NotificationEventBus.Event>()
+                val wmsPosters = notificationService.findUserIdsWithPermission("wms", "post")
+                    .filter { it != currentUser.userId }
+                demands.forEach { d ->
+                    if (d.initiatorId != currentUser.userId) {
+                        events += notificationService.createSystemNotifications(
+                            recipientIds = listOf(d.initiatorId),
+                            type = "DEMAND_PAID",
+                            entityType = "DEMAND",
+                            entityId = d.id,
+                            title = "Заявка ${d.number} оплачена (заказ ${saved.number}), ожидается приход на склад"
+                        )
+                    }
+                    if (wmsPosters.isNotEmpty()) {
+                        events += notificationService.createSystemNotifications(
+                            recipientIds = wmsPosters,
+                            type = "PURCHASE_ORDER_PAID",
+                            entityType = "PURCHASE_ORDER",
+                            entityId = saved.id,
+                            title = "Оплачен заказ ${saved.number} по заявке ${d.number} — ожидается поставка"
+                        )
+                    }
+                }
+                pendingEvents = events
+            }
+            build(saved)
+        })
+        notificationService.publishEvents(pendingEvents)
+        return updated
+    }
+
+    internal fun markOfferPaidAndEnsureSentOrder(
+        demandId: Long,
+        demandNumber: String,
+        demandInitiatorId: Long,
+        offer: SupplierOffersRecord,
+        request: MarkDemandPaidRequest,
+        currentUser: CurrentUser
+    ): PurchaseOrdersRecord {
+        var pendingEvents: List<NotificationEventBus.Event> = emptyList()
+        val order = dsl.transactionResult(TransactionalCallable {
+            val lockedOffer = purchaseRepository.lockOfferById(offer.id)
+                ?: throw NotFoundException("supplier_offer", offer.id)
+            val existing = purchaseRepository.findOrderByOfferId(lockedOffer.id)
+            val now = OffsetDateTime.now()
+            val note = request.paymentNote?.trim()?.takeIf { it.isNotEmpty() }
+            var wasAlreadyPaid = false
+            val resultOrder = if (existing == null) {
+                val offerLines = supplierRepository.listOfferLines(lockedOffer.id)
+                if (offerLines.isEmpty()) {
+                    throw ConflictException("Offer ${lockedOffer.number} has no lines")
+                }
+                val expectedAt = request.expectedAt?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { parseDate(it, "expectedAt") }
+                    ?: lockedOffer.deliveryDays?.let { LocalDate.now().plusDays(it.toLong()) }
+                val number = purchaseRepository.generateNumber()
+                val created = purchaseRepository.insertOrder(
+                    number = number,
+                    supplierId = lockedOffer.supplierId,
+                    offerId = lockedOffer.id,
+                    currency = lockedOffer.currency,
+                    deliveryAddress = null,
+                    paymentTerms = lockedOffer.paymentTerms,
+                    contractNo = null,
+                    invoiceNo = lockedOffer.invoiceNumber,
+                    note = note ?: lockedOffer.note,
+                    responsibleId = currentUser.userId,
+                    expectedAt = expectedAt,
+                    createdBy = currentUser.userId,
+                    status = "SENT",
+                    approvedBy = currentUser.userId,
+                    approvedAt = now,
+                    orderedAt = now,
+                    paidAt = now,
+                    paidBy = currentUser.userId
+                )
+                purchaseRepository.insertOrderLines(
+                    created.id,
+                    offerLines.mapIndexed { index, line ->
+                        PurchaseOrderRepository.NewOrderLine(
+                            lineNo = index + 1,
+                            nomenclatureId = line.nomenclatureId,
+                            quantity = line.quantity,
+                            unit = line.unit,
+                            unitPrice = line.unitPrice,
+                            vatRate = line.vatRate,
+                            offerLineId = line.id,
+                            note = line.note
+                        )
+                    },
+                    currentUser.userId
+                )
+                purchaseRepository.linkDemands(created.id, listOf(demandId), currentUser.userId)
+                purchaseRepository.insertOrderHistory(
+                    created.id, "PAID", null, "SENT", note ?: "Оплачено по заявке $demandNumber", currentUser.userId
+                )
+                auditService.log(
+                    currentUser.userId, "PURCHASE_ORDER_PAID", "PURCHASE_ORDER", created.id,
+                    mapOf(
+                        "number" to created.number,
+                        "demandId" to demandId,
+                        "offerId" to lockedOffer.id,
+                        "note" to note
+                    )
+                )
+                created
+            } else {
+                val locked = purchaseRepository.lockOrderById(existing.id)!!
+                if (locked.status == "CANCELLED") {
+                    throw ConflictException("Заказ ${locked.number} отменён")
+                }
+                wasAlreadyPaid = locked.paidAt != null
+                val updated = purchaseRepository.markOrderPaid(locked.id, currentUser.userId, now)!!
+                purchaseRepository.linkDemands(updated.id, listOf(demandId), currentUser.userId)
+                if (!wasAlreadyPaid || locked.status != updated.status) {
+                    purchaseRepository.insertOrderHistory(
+                        updated.id, "PAID", locked.status, updated.status, note, currentUser.userId
+                    )
+                    auditService.log(
+                        currentUser.userId, "PURCHASE_ORDER_PAID", "PURCHASE_ORDER", updated.id,
+                        mapOf("number" to updated.number, "demandId" to demandId, "note" to note)
+                    )
+                }
+                updated
+            }
+
+            if (!wasAlreadyPaid) {
+                val events = mutableListOf<NotificationEventBus.Event>()
+                if (demandInitiatorId != currentUser.userId) {
+                    events += notificationService.createSystemNotifications(
+                        recipientIds = listOf(demandInitiatorId),
+                        type = "DEMAND_PAID",
+                        entityType = "DEMAND",
+                        entityId = demandId,
+                        title = "Заявка $demandNumber оплачена (заказ ${resultOrder.number}), ожидается приход на склад"
+                    )
+                }
+                val wmsPosters = notificationService.findUserIdsWithPermission("wms", "post")
+                    .filter { it != currentUser.userId }
+                if (wmsPosters.isNotEmpty()) {
+                    events += notificationService.createSystemNotifications(
+                        recipientIds = wmsPosters,
+                        type = "PURCHASE_ORDER_PAID",
+                        entityType = "PURCHASE_ORDER",
+                        entityId = resultOrder.id,
+                        title = "Оплачен заказ ${resultOrder.number} по заявке $demandNumber — ожидается поставка"
+                    )
+                }
+                pendingEvents = events
+            }
+            resultOrder
+        })
+        notificationService.publishEvents(pendingEvents)
+        return order
+    }
+
+    internal fun placeOrderForDemandOffer(
+        demandId: Long,
+        demandNumber: String,
+        demandInitiatorId: Long,
+        offer: SupplierOffersRecord,
+        request: PlaceDemandOrderRequest,
+        currentUser: CurrentUser
+    ): PurchaseOrdersRecord {
+        var pendingEvents: List<NotificationEventBus.Event> = emptyList()
+        val expectedAt = request.expectedAt?.trim()?.takeIf { it.isNotEmpty() }?.let { parseDate(it, "expectedAt") }
+        val invoiceNo = request.invoiceNo?.trim()?.takeIf { it.isNotEmpty() }
+        val paymentTerms = request.paymentTerms?.trim()?.takeIf { it.isNotEmpty() }
+        val deliveryAddress = request.deliveryAddress?.trim()?.takeIf { it.isNotEmpty() }
+        val note = request.note?.trim()?.takeIf { it.isNotEmpty() }
+
+        val order = dsl.transactionResult(TransactionalCallable {
+            val lockedOffer = purchaseRepository.lockOfferById(offer.id)
+                ?: throw NotFoundException("supplier_offer", offer.id)
+            val existing = purchaseRepository.findOrderByOfferId(lockedOffer.id)
+            val now = OffsetDateTime.now()
+            val resolvedExpectedAt = expectedAt ?: lockedOffer.deliveryDays?.let { LocalDate.now().plusDays(it.toLong()) }
+            var shouldNotify = false
+            val resultOrder = if (existing == null) {
+                val offerLines = supplierRepository.listOfferLines(lockedOffer.id)
+                if (offerLines.isEmpty()) {
+                    throw ConflictException("Offer ${lockedOffer.number} has no lines")
+                }
+                val number = purchaseRepository.generateNumber()
+                val created = purchaseRepository.insertOrder(
+                    number = number,
+                    supplierId = lockedOffer.supplierId,
+                    offerId = lockedOffer.id,
+                    currency = lockedOffer.currency,
+                    deliveryAddress = deliveryAddress,
+                    paymentTerms = paymentTerms ?: lockedOffer.paymentTerms,
+                    contractNo = null,
+                    invoiceNo = invoiceNo ?: lockedOffer.invoiceNumber,
+                    note = note ?: lockedOffer.note,
+                    responsibleId = currentUser.userId,
+                    expectedAt = resolvedExpectedAt,
+                    createdBy = currentUser.userId,
+                    status = "SENT",
+                    approvedBy = currentUser.userId,
+                    approvedAt = now,
+                    orderedAt = now,
+                    paidAt = if (request.markPaid) now else null,
+                    paidBy = if (request.markPaid) currentUser.userId else null
+                )
+                purchaseRepository.insertOrderLines(
+                    created.id,
+                    offerLines.mapIndexed { index, line ->
+                        PurchaseOrderRepository.NewOrderLine(
+                            lineNo = index + 1,
+                            nomenclatureId = line.nomenclatureId,
+                            quantity = line.quantity,
+                            unit = line.unit,
+                            unitPrice = line.unitPrice,
+                            vatRate = line.vatRate,
+                            offerLineId = line.id,
+                            note = line.note
+                        )
+                    },
+                    currentUser.userId
+                )
+                purchaseRepository.linkDemands(created.id, listOf(demandId), currentUser.userId)
+                purchaseRepository.insertOrderHistory(
+                    created.id,
+                    if (request.markPaid) "PAID" else "SEND",
+                    null,
+                    "SENT",
+                    note ?: "Заказ оформлен по заявке $demandNumber",
+                    currentUser.userId
+                )
+                auditService.log(
+                    currentUser.userId, "PLACE_ORDER", "PURCHASE_ORDER", created.id,
+                    mapOf(
+                        "number" to created.number,
+                        "demandId" to demandId,
+                        "offerId" to lockedOffer.id,
+                        "markPaid" to request.markPaid
+                    )
+                )
+                shouldNotify = true
+                created
+            } else {
+                val locked = purchaseRepository.lockOrderById(existing.id)!!
+                if (locked.status == "CANCELLED") {
+                    throw ConflictException("Заказ ${locked.number} отменён")
+                }
+                val wasSent = locked.status in setOf("SENT", "PARTIALLY_DELIVERED", "DELIVERED", "CLOSED")
+                val wasPaid = locked.paidAt != null
+                val updated = purchaseRepository.placeOrderSent(
+                    orderId = locked.id,
+                    actorId = currentUser.userId,
+                    now = now,
+                    expectedAt = expectedAt,
+                    invoiceNo = invoiceNo,
+                    paymentTerms = paymentTerms,
+                    deliveryAddress = deliveryAddress,
+                    note = note,
+                    markPaid = request.markPaid
+                )!!
+                purchaseRepository.linkDemands(updated.id, listOf(demandId), currentUser.userId)
+                val statusChanged = locked.status != updated.status
+                val paidNow = !wasPaid && updated.paidAt != null
+                if (statusChanged || paidNow || expectedAt != null || invoiceNo != null || paymentTerms != null || deliveryAddress != null || note != null) {
+                    purchaseRepository.insertOrderHistory(
+                        updated.id,
+                        if (paidNow) "PAID" else "SEND",
+                        locked.status,
+                        updated.status,
+                        note ?: "Оформлен заказ по заявке $demandNumber",
+                        currentUser.userId
+                    )
+                    auditService.log(
+                        currentUser.userId, "PLACE_ORDER", "PURCHASE_ORDER", updated.id,
+                        mapOf("number" to updated.number, "demandId" to demandId, "markPaid" to request.markPaid)
+                    )
+                }
+                shouldNotify = !wasSent || paidNow
+                updated
+            }
+
+            if (shouldNotify) {
+                val events = mutableListOf<NotificationEventBus.Event>()
+                if (demandInitiatorId != currentUser.userId) {
+                    events += notificationService.createSystemNotifications(
+                        recipientIds = listOf(demandInitiatorId),
+                        type = if (resultOrder.paidAt != null) "DEMAND_PAID" else "DEMAND_ORDER_PLACED",
+                        entityType = "DEMAND",
+                        entityId = demandId,
+                        title = "По заявке $demandNumber оформлен заказ ${resultOrder.number} — ожидается поставка на склад"
+                    )
+                }
+                val wmsPosters = notificationService.findUserIdsWithPermission("wms", "post")
+                    .filter { it != currentUser.userId }
+                if (wmsPosters.isNotEmpty()) {
+                    events += notificationService.createSystemNotifications(
+                        recipientIds = wmsPosters,
+                        type = "PURCHASE_ORDER_SENT",
+                        entityType = "PURCHASE_ORDER",
+                        entityId = resultOrder.id,
+                        title = "Оформлен заказ ${resultOrder.number} по заявке $demandNumber — ожидается поставка"
+                    )
+                }
+                pendingEvents = events
+            }
+            resultOrder
+        })
+        notificationService.publishEvents(pendingEvents)
+        return order
     }
 
     // -----------------------------------------------------------------------
@@ -725,6 +1072,8 @@ class PurchaseOrderService(
         val demandIds = purchaseRepository.listDemandIdsForOrders(orderIds)
         val demandNumbers = purchaseRepository.demandNumbers(demandIds.values.flatten().distinct())
         val totals = purchaseRepository.orderTotalsBatch(orderIds)
+        val userNames = purchaseRepository.findUserNames(orders.mapNotNull { it.paidBy })
+        val offerInvoiceDocs = purchaseRepository.findOfferInvoiceDocumentIds(orders.map { it.offerId })
         val nomenclatureCache = mutableMapOf<Long, Pair<String?, String?>?>()
         return orders.map { order ->
             order.toDto(
@@ -739,7 +1088,9 @@ class PurchaseOrderService(
                     line.toDto(nomenclature?.first, nomenclature?.second)
                 },
                 totals = totals[order.id],
-                demandNumbers = demandIds[order.id].orEmpty().mapNotNull { demandNumbers[it] }
+                demandNumbers = demandIds[order.id].orEmpty().mapNotNull { demandNumbers[it] },
+                paidByName = order.paidBy?.let { userNames[it] },
+                invoiceDocumentId = offerInvoiceDocs[order.offerId]
             )
         }
     }

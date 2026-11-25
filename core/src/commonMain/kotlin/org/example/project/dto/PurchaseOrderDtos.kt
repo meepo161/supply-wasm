@@ -76,7 +76,11 @@ data class PurchaseOrderDto(
     val updatedBy: Long? = null,
     val version: Long = 0,
     val lines: List<PurchaseOrderLineDto> = emptyList(),
-    val totals: PurchaseOrderTotalsDto? = null
+    val totals: PurchaseOrderTotalsDto? = null,
+    val paidAt: String? = null,
+    val paidBy: Long? = null,
+    val paidByName: String? = null,
+    val invoiceDocumentId: Long? = null
 )
 
 /**

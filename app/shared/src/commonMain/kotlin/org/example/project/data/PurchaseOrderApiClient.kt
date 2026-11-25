@@ -74,6 +74,9 @@ class PurchaseOrderApiClient(private val client: HttpClient) : PurchaseOrderRepo
         request: CancelPurchaseOrderRequest
     ): ApiResult<PurchaseOrderDto> = post("/api/purchase-orders/$id/cancel", request)
 
+    override suspend fun markOrderPaid(id: Long): ApiResult<PurchaseOrderDto> =
+        execute { client.post("/api/purchase-orders/$id/mark-paid") }
+
     override suspend fun orderHistory(id: Long): ApiResult<List<PurchaseOrderHistoryDto>> =
         get("/api/purchase-orders/$id/history")
 

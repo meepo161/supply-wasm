@@ -49,7 +49,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -161,8 +161,8 @@ fun GlobalSearchBox(
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) expanded = true
                         }
-                        .onKeyEvent { event ->
-                            if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                        .onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             when (event.key) {
                                 Key.DirectionDown -> {
                                     viewModel.moveHighlight(1)
@@ -319,7 +319,7 @@ private fun SearchDropdown(
                     color = scheme.onSurface
                 )
                 Text(
-                    text = "Ни проектов, ни задач, ни сотрудников по запросу «${state.query.trim()}»",
+                    text = "Ничего не найдено по запросу «${state.query.trim()}»",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant
                 )
@@ -513,9 +513,32 @@ private fun SearchResultRow(
         }
         item.status?.let { status ->
             Spacer(Modifier.width(8.dp))
-            PillBadge(text = status, accent = accent)
+            PillBadge(text = localizedSearchStatus(status), accent = accent)
         }
     }
+}
+
+private fun localizedSearchStatus(status: String): String = when (status.uppercase()) {
+    "NEW" -> "Новая"
+    "IN_PROGRESS" -> "В работе"
+    "BLOCKED" -> "Заблокирована"
+    "CLOSED" -> "Закрыта"
+    "CANCELLED" -> "Отменена"
+    "DRAFT" -> "Черновик"
+    "PLANNED" -> "Запланирован"
+    "ACTIVE" -> "Активен"
+    "COMPLETED" -> "Завершён"
+    "APPROVED" -> "Утверждён"
+    "SENT" -> "Отправлен"
+    "PARTIALLY_DELIVERED" -> "Частично поставлен"
+    "DELIVERED" -> "Поставлен"
+    "POSTED" -> "Проведён"
+    "SUBMITTED" -> "На согласовании"
+    "IN_PROCUREMENT" -> "В закупке"
+    "COVERED" -> "Обеспечена"
+    "VERIFIED" -> "Проверен"
+    "UNVERIFIED" -> "Не проверен"
+    else -> status
 }
 
 @Composable

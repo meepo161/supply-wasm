@@ -29,37 +29,26 @@ class DemandRoutesTest {
     }
 
     @Test
-    fun `create manual demand submit approve and cancel`() = testApp {
+    fun `create manual demand starts approved and can be cancelled`() = testApp {
         val admin = jsonClient()
         val creator = createUserWithRole(
             admin, "demand-creator", "password", "Demand Creator",
             demandCreatorPermissions()
         )
-        val approver = createUserWithRole(
-            admin, "demand-approver", "password", "Demand Approver",
-            demandApproverPermissions()
-        )
         val creatorClient = loginClient("demand-creator", "password")
-        val approverClient = loginClient("demand-approver", "password")
 
         val material = createNomenclature(admin, "MAT-1", NomenclatureType.RAW_MATERIAL)
         val demand = createManualDemand(
             creatorClient,
             lines = listOf(DemandLineInput(1, material.id, "10", "kg"))
         )
-        assertEquals(DemandStatus.DRAFT, demand.header.status)
+        assertEquals(DemandStatus.APPROVED, demand.header.status)
+        assertEquals(creator.id, demand.header.approvedBy)
+        assertNotNull(demand.header.approvedAt)
         assertEquals(1, demand.lines.size)
         assertTrue(demand.header.number.startsWith("DM-"))
 
-        val submitted = submitDemand(creatorClient, demand.header.id, demand.header.version)
-        assertEquals(DemandStatus.PENDING_APPROVAL, submitted.header.status)
-
-        val approved = approveDemand(approverClient, demand.header.id, submitted.header.version)
-        assertEquals(DemandStatus.APPROVED, approved.header.status)
-        assertEquals(approver.id, approved.header.approvedBy)
-        assertNotNull(approved.header.approvedAt)
-
-        val cancelled = cancelDemand(creatorClient, demand.header.id, approved.header.version, "No longer needed")
+        val cancelled = cancelDemand(creatorClient, demand.header.id, demand.header.version, "No longer needed")
         assertEquals(DemandStatus.CANCELLED, cancelled.header.status)
         assertTrue(cancelled.lines.all { it.status == DemandLineStatus.CANCELLED })
     }
@@ -123,7 +112,7 @@ class DemandRoutesTest {
             revisionId = approved.id,
             releaseQuantity = "5"
         )
-        assertEquals(DemandStatus.DRAFT, demand.header.status)
+        assertEquals(DemandStatus.APPROVED, demand.header.status)
         assertEquals(DemandSourceType.PROJECT, demand.header.sourceType)
         assertEquals(approved.id, demand.header.sourceBomRevisionId)
         assertEquals(approved.version, demand.header.bomRevisionVersion)
@@ -131,6 +120,16 @@ class DemandRoutesTest {
         assertEquals(1, demand.lines.size)
         assertEquals(comp.id, demand.lines.first().nomenclatureId)
         assertEquals(approved.id, demand.lines.first().sourceBomRevisionId)
+
+        val manualProjectDemand = createManualDemand(
+            client,
+            sourceType = DemandSourceType.PROJECT,
+            projectId = project.id,
+            lines = listOf(DemandLineInput(1, comp.id, "3", "pcs"))
+        )
+        assertEquals(DemandStatus.APPROVED, manualProjectDemand.header.status)
+        assertEquals(DemandSourceType.PROJECT, manualProjectDemand.header.sourceType)
+        assertEquals(project.id, manualProjectDemand.header.projectId)
     }
 
     @Test
@@ -154,8 +153,7 @@ class DemandRoutesTest {
         val approved = approveRevision(client, revision.id, revision.version)
 
         val demand = createDemandFromBom(client, project.id, approved.id, "10")
-        val submitted = submitDemand(client, demand.header.id, demand.header.version)
-        approveDemand(client, demand.header.id, submitted.header.version)
+        assertEquals(DemandStatus.APPROVED, demand.header.status)
 
         postInitialStock(client, warehouse.id, location.id, comp.id, "5")
 

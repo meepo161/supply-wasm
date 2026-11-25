@@ -374,21 +374,24 @@ fun AddPermissionDialog(
         OutlinedTextField(
             value = form.resource,
             onValueChange = { onFormChange(form.copy(resource = it)) },
-            label = { Text("Resource *") },
+            label = { Text("Ресурс *") },
+            placeholder = { Text("Например: tasks, wms, *") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
             value = form.action,
             onValueChange = { onFormChange(form.copy(action = it)) },
-            label = { Text("Action *") },
+            label = { Text("Действие *") },
+            placeholder = { Text("Например: read, create, *") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
             value = form.scope,
             onValueChange = { onFormChange(form.copy(scope = it)) },
-            label = { Text("Scope") },
+            label = { Text("Область доступа") },
+            placeholder = { Text("Необязательно, например: own, all") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -409,14 +412,14 @@ private fun PermissionRow(
             OutlinedTextField(
                 value = permission.resource,
                 onValueChange = { onChange(permission.copy(resource = it)) },
-                label = { Text("Resource") },
+                label = { Text("Ресурс") },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
             OutlinedTextField(
                 value = permission.action,
                 onValueChange = { onChange(permission.copy(action = it)) },
-                label = { Text("Action") },
+                label = { Text("Действие") },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
@@ -427,7 +430,7 @@ private fun PermissionRow(
         OutlinedTextField(
             value = permission.scope,
             onValueChange = { onChange(permission.copy(scope = it)) },
-            label = { Text("Scope") },
+            label = { Text("Область") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )

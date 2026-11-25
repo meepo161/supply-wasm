@@ -11,7 +11,8 @@ data class AttachmentFileData(
 
 data class DownloadedAttachment(
     val bytes: ByteArray,
-    val mimeType: String?
+    val mimeType: String?,
+    val fileName: String? = null
 )
 
 interface AttachmentRepository {

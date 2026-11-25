@@ -2,18 +2,15 @@ package org.example.project.ui.demand
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-
-import org.example.project.ui.theme.Button
-import org.example.project.ui.theme.OutlinedButton
-
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,14 +32,18 @@ import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.NomenclatureType
 import org.example.project.dto.ProductModelDto
 import org.example.project.dto.ProjectDto
-import org.example.project.ui.bom.localizedName
 import org.example.project.ui.projects.ErrorMessageCard
+import org.example.project.ui.theme.ErpDateField
 import org.example.project.ui.theme.ErpDialog
+import org.example.project.ui.theme.ErpFilterChip
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.Gradients
+import org.example.project.ui.theme.OutlinedButton
+import org.example.project.ui.theme.TextButton
 import org.example.project.ui.userText
 import org.koin.compose.koinInject
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CreateDemandDialog(
     form: CreateDemandForm,
@@ -50,9 +51,12 @@ fun CreateDemandDialog(
     models: List<ProductModelDto>,
     revisions: List<BomRevisionSummaryDto>,
     nomenclature: List<NomenclatureDto>,
+    canCreateNomenclature: Boolean = false,
+    isLoading: Boolean = false,
     error: ApiError?,
     onFormChange: (CreateDemandForm) -> Unit,
     onSourceTypeChange: (DemandSourceType) -> Unit,
+    onToggleProjectBomMode: (Boolean) -> Unit,
     onProjectSelected: (Long?) -> Unit,
     onModelSelected: (Long?) -> Unit,
     onRevisionSelected: (Long?) -> Unit,
@@ -68,10 +72,12 @@ fun CreateDemandDialog(
     }
     ErpDialog(
         title = "Новая потребность",
+        subtitle = "После создания заявка сразу уходит в работу снабжению без лишних согласований",
         glyph = ErpIconGlyph.Cart,
         gradient = Gradients.Primary,
-        width = 720.dp,
-        confirmText = "Создать",
+        width = 740.dp,
+        confirmText = if (isLoading) "Создание…" else "Создать заявку",
+        confirmEnabled = !isLoading,
         onConfirm = onCreate,
         onDismiss = onDismiss
     ) {
@@ -88,23 +94,56 @@ fun CreateDemandDialog(
                 modifier = Modifier.weight(1f)
             )
         }
-        org.example.project.ui.theme.ErpDateField(
+        ErpDateField(
             value = form.requiredDate,
             onValueChange = { onFormChange(form.copy(requiredDate = it)) },
             label = "Требуемая дата",
             modifier = Modifier.fillMaxWidth()
         )
         when (form.sourceType) {
-            DemandSourceType.PROJECT -> ProjectDemandFields(
-                form = form,
-                projects = projects,
-                models = models,
-                revisions = approvedActiveRevisions,
-                onProjectSelected = onProjectSelected,
-                onModelSelected = onModelSelected,
-                onRevisionSelected = onRevisionSelected,
-                onReleaseQuantityChange = { onFormChange(form.copy(releaseQuantity = it)) }
-            )
+            DemandSourceType.PROJECT -> {
+                ProjectDropdown(
+                    projects = projects,
+                    selected = projects.find { it.id == form.projectId },
+                    onSelect = { onProjectSelected(it.id) },
+                    label = "Проект *",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ErpFilterChip(
+                        selected = !form.useBomForProject,
+                        onClick = { onToggleProjectBomMode(false) },
+                        label = { Text("Добавить позиции вручную") }
+                    )
+                    ErpFilterChip(
+                        selected = form.useBomForProject,
+                        onClick = { onToggleProjectBomMode(true) },
+                        label = { Text("Заполнить автоматически из спецификации (BOM)") }
+                    )
+                }
+                if (form.useBomForProject) {
+                    ProjectBomFields(
+                        form = form,
+                        models = models,
+                        revisions = approvedActiveRevisions,
+                        onModelSelected = onModelSelected,
+                        onRevisionSelected = onRevisionSelected,
+                        onReleaseQuantityChange = { onFormChange(form.copy(releaseQuantity = it)) }
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = form.stockpileNote,
+                        onValueChange = { onFormChange(form.copy(stockpileNote = it)) },
+                        label = { Text("Примечание") },
+                        supportingText = { Text("Необязательно: участок, этап проекта или особые требования") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
+                }
+            }
             DemandSourceType.STOCKPILE -> OutlinedTextField(
                 value = form.stockpileNote,
                 onValueChange = { onFormChange(form.copy(stockpileNote = it)) },
@@ -121,10 +160,12 @@ fun CreateDemandDialog(
                 minLines = 2
             )
         }
-        if (form.sourceType != DemandSourceType.PROJECT) {
+        val showManualLines = form.sourceType != DemandSourceType.PROJECT || !form.useBomForProject
+        if (showManualLines) {
             ManualLinesSection(
                 lines = form.lines,
                 nomenclature = nomenclature,
+                canCreateNomenclature = canCreateNomenclature,
                 onAddLine = onAddLine,
                 onUpdateLine = onUpdateLine,
                 onRemoveLine = onRemoveLine,
@@ -135,24 +176,15 @@ fun CreateDemandDialog(
 }
 
 @Composable
-private fun ProjectDemandFields(
+private fun ProjectBomFields(
     form: CreateDemandForm,
-    projects: List<ProjectDto>,
     models: List<ProductModelDto>,
     revisions: List<BomRevisionSummaryDto>,
-    onProjectSelected: (Long?) -> Unit,
     onModelSelected: (Long?) -> Unit,
     onRevisionSelected: (Long?) -> Unit,
     onReleaseQuantityChange: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ProjectDropdown(
-            projects = projects,
-            selected = projects.find { it.id == form.projectId },
-            onSelect = { onProjectSelected(it.id) },
-            label = "Проект *",
-            modifier = Modifier.fillMaxWidth()
-        )
         ProductModelDropdown(
             models = models,
             selected = models.find { it.id == form.modelId },
@@ -188,6 +220,7 @@ private fun ProjectDemandFields(
 private fun ManualLinesSection(
     lines: List<CreateDemandLineForm>,
     nomenclature: List<NomenclatureDto>,
+    canCreateNomenclature: Boolean,
     onAddLine: () -> Unit,
     onUpdateLine: (Int, CreateDemandLineForm) -> Unit,
     onRemoveLine: (Int) -> Unit,
@@ -195,7 +228,7 @@ private fun ManualLinesSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
-        Text("Позиции", style = MaterialTheme.typography.labelLarge)
+        Text("Что нужно купить", style = MaterialTheme.typography.labelLarge)
         if (lines.isEmpty()) {
             Text("Позиции не добавлены.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -203,12 +236,14 @@ private fun ManualLinesSection(
             DemandLineRow(
                 line = line,
                 nomenclature = nomenclature,
+                canCreateNomenclature = canCreateNomenclature,
+                canRemove = lines.size > 1,
                 onChange = { onUpdateLine(index, it) },
                 onRemove = { onRemoveLine(index) },
                 onNomenclatureCreated = onNomenclatureCreated
             )
         }
-        OutlinedButton(onClick = onAddLine) { Text("Добавить позицию") }
+        OutlinedButton(onClick = onAddLine) { Text("+ Добавить позицию") }
     }
 }
 
@@ -216,6 +251,8 @@ private fun ManualLinesSection(
 private fun DemandLineRow(
     line: CreateDemandLineForm,
     nomenclature: List<NomenclatureDto>,
+    canCreateNomenclature: Boolean,
+    canRemove: Boolean,
     onChange: (CreateDemandLineForm) -> Unit,
     onRemove: () -> Unit,
     onNomenclatureCreated: (NomenclatureDto) -> Unit
@@ -230,7 +267,7 @@ private fun DemandLineRow(
     var creating by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
@@ -238,8 +275,10 @@ private fun DemandLineRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Строка ${line.lineNo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = onRemove) { Text("Удалить строку") }
+            Text("Позиция ${line.lineNo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (canRemove) {
+                TextButton(onClick = onRemove) { Text("Удалить") }
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -253,13 +292,15 @@ private fun DemandLineRow(
                 label = "Номенклатура *",
                 modifier = Modifier.weight(1f)
             )
-            OutlinedButton(onClick = {
-                newCode = ""
-                newName = ""
-                newUnit = "шт"
-                createError = null
-                showQuickCreate = true
-            }) { Text("+ Новая") }
+            if (canCreateNomenclature) {
+                OutlinedButton(onClick = {
+                    newCode = ""
+                    newName = ""
+                    newUnit = "шт"
+                    createError = null
+                    showQuickCreate = true
+                }) { Text("+ Новая") }
+            }
         }
         OutlinedTextField(
             value = line.quantity,
@@ -271,7 +312,7 @@ private fun DemandLineRow(
         )
     }
 
-    if (showQuickCreate) {
+    if (canCreateNomenclature && showQuickCreate) {
         ErpDialog(
             title = "Новая номенклатура",
             glyph = ErpIconGlyph.Warehouse,
@@ -345,9 +386,7 @@ fun CancelDemandDialog(
         gradient = Gradients.Sunset,
         width = 520.dp,
         confirmText = "Отменить потребность",
-
-        confirmGradient = org.example.project.ui.theme.Gradients.Danger,
-
+        confirmGradient = Gradients.Danger,
         onConfirm = onCancel,
         dismissText = "Закрыть",
         onDismiss = onDismiss

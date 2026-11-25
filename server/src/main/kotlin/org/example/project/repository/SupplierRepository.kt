@@ -2,6 +2,7 @@ package org.example.project.repository
 
 import org.example.project.generated.jooq.tables.DemandLines.DEMAND_LINES
 import org.example.project.generated.jooq.tables.Demands.DEMANDS
+import org.example.project.generated.jooq.tables.DocumentVersions.DOCUMENT_VERSIONS
 import org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
 import org.example.project.generated.jooq.tables.SupplierAddresses.SUPPLIER_ADDRESSES
 import org.example.project.generated.jooq.tables.SupplierCategories.SUPPLIER_CATEGORIES
@@ -406,7 +407,10 @@ class SupplierRepository(private val dsl: DSLContext) {
         supplierContactChannel: String?,
         note: String?,
         requestedBy: Long,
-        createdBy: Long
+        createdBy: Long,
+        invoiceDocumentId: Long? = null,
+        invoiceNumber: String? = null,
+        invoiceDate: LocalDate? = null
     ): SupplierOffersRecord {
         val record = dsl.newRecord(SUPPLIER_OFFERS)
         record.number = number
@@ -428,6 +432,9 @@ class SupplierRepository(private val dsl: DSLContext) {
         record.note = note
         record.requestedBy = requestedBy
         record.createdBy = createdBy
+        record.invoiceDocumentId = invoiceDocumentId
+        record.invoiceNumber = invoiceNumber
+        record.invoiceDate = invoiceDate
         record.store()
         return findOfferById(record.id)!!
     }
@@ -536,9 +543,14 @@ class SupplierRepository(private val dsl: DSLContext) {
         warrantyMonths: Int?,
         validUntil: LocalDate?,
         note: String?,
-        updatedBy: Long
+        updatedBy: Long,
+        invoiceDocumentId: Long? = null,
+        invoiceNumber: String? = null,
+        invoiceDate: LocalDate? = null,
+        newStatus: String? = null
     ): SupplierOffersRecord? {
         val set = mutableMapOf<org.jooq.Field<*>, Any?>()
+        newStatus?.let { set[SUPPLIER_OFFERS.STATUS] = it }
         compliance?.let { set[SUPPLIER_OFFERS.COMPLIANCE] = it }
         complianceNote?.let { set[SUPPLIER_OFFERS.COMPLIANCE_NOTE] = it }
         documentsComplete?.let { set[SUPPLIER_OFFERS.DOCUMENTS_COMPLETE] = it }
@@ -549,6 +561,9 @@ class SupplierRepository(private val dsl: DSLContext) {
         warrantyMonths?.let { set[SUPPLIER_OFFERS.WARRANTY_MONTHS] = it }
         validUntil?.let { set[SUPPLIER_OFFERS.VALID_UNTIL] = it }
         note?.let { set[SUPPLIER_OFFERS.NOTE] = it }
+        invoiceDocumentId?.let { set[SUPPLIER_OFFERS.INVOICE_DOCUMENT_ID] = it }
+        invoiceNumber?.let { set[SUPPLIER_OFFERS.INVOICE_NUMBER] = it }
+        invoiceDate?.let { set[SUPPLIER_OFFERS.INVOICE_DATE] = it }
         set[SUPPLIER_OFFERS.UPDATED_AT] = OffsetDateTime.now()
         set[SUPPLIER_OFFERS.UPDATED_BY] = updatedBy
         set[SUPPLIER_OFFERS.VERSION] = SUPPLIER_OFFERS.VERSION.plus(1)
@@ -557,6 +572,20 @@ class SupplierRepository(private val dsl: DSLContext) {
             .execute()
         if (changed == 0) return null
         return dsl.selectFrom(SUPPLIER_OFFERS).where(SUPPLIER_OFFERS.ID.eq(id)).fetchOne()
+    }
+
+    fun findDocumentFileNames(documentIds: Collection<Long>): Map<Long, String> {
+        val ids = documentIds.distinct()
+        if (ids.isEmpty()) return emptyMap()
+        return dsl.select(DOCUMENT_VERSIONS.DOCUMENT_ID, DOCUMENT_VERSIONS.FILE_NAME, DOCUMENT_VERSIONS.VERSION_NUMBER)
+            .from(DOCUMENT_VERSIONS)
+            .where(DOCUMENT_VERSIONS.DOCUMENT_ID.`in`(ids))
+            .and(DOCUMENT_VERSIONS.FILE_ID.isNotNull)
+            .and(DOCUMENT_VERSIONS.STATUS.ne("CANCELLED"))
+            .orderBy(DOCUMENT_VERSIONS.DOCUMENT_ID.asc(), DOCUMENT_VERSIONS.VERSION_NUMBER.desc())
+            .fetch()
+            .groupBy { it.get(DOCUMENT_VERSIONS.DOCUMENT_ID)!! }
+            .mapValues { (_, rows) -> rows.first().get(DOCUMENT_VERSIONS.FILE_NAME)!! }
     }
 
     fun insertOfferHistory(

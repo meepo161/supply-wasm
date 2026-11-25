@@ -38,8 +38,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -1086,25 +1088,32 @@ fun ErpDialog(
     confirmEnabled: Boolean = true,
     confirmGradient: List<Color> = Gradients.Primary,
     dismissText: String = "Отмена",
+    scrollToTopKey: Any? = null,
     extraActions: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val palette = LocalBrandPalette.current
+    val bodyScrollState = rememberScrollState()
+    LaunchedEffect(scrollToTopKey) {
+        if (scrollToTopKey != null) {
+            bodyScrollState.animateScrollTo(0)
+        }
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        Surface(
             modifier = modifier
                 .padding(horizontal = 24.dp, vertical = 18.dp)
                 .widthIn(max = width)
-                .fillMaxWidth()
-                // Диалог единственный «парящий» слой, поэтому тень остаётся только здесь.
-                .shadow(16.dp, RoundedCornerShape(12.dp))
-                .clip(RoundedCornerShape(12.dp))
-                .background(palette.glassOverlay)
-                .border(1.dp, scheme.outlineVariant, RoundedCornerShape(12.dp))
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = palette.glassOverlay,
+            tonalElevation = 0.dp,
+            shadowElevation = 16.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant)
         ) {
             Column {
                 Row(
@@ -1145,7 +1154,7 @@ fun ErpDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = maxBodyHeight)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(bodyScrollState)
                         .padding(horizontal = 22.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     content = content

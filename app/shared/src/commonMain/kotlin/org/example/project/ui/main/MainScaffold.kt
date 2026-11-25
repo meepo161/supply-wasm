@@ -247,6 +247,7 @@ fun MainScaffold(
                 demandRepository,
                 wmsRepository,
                 userRepository,
+                documentRepository,
                 user
             )
         }
@@ -279,7 +280,17 @@ fun MainScaffold(
         null
     }
     val demandViewModel = if (NavigationDestination.DEMANDS in destinations) {
-        remember(user) { DemandViewModel(demandRepository, wmsRepository, projectRepository, bomRepository, user) }
+        remember(user) {
+            DemandViewModel(
+                demandRepository,
+                wmsRepository,
+                projectRepository,
+                bomRepository,
+                supplierRepository,
+                documentRepository,
+                user
+            )
+        }
     } else {
         null
     }
@@ -302,14 +313,19 @@ fun MainScaffold(
                     wmsViewModel?.loadNomenclature()
                     wmsViewModel?.loadStock()
                     wmsViewModel?.loadReservations()
+                    demandViewModel?.loadDemands()
+                    demandViewModel?.refreshSelectedDemandIfOpen()
                     homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.DEMAND -> {
                     demandViewModel?.loadDemands()
+                    demandViewModel?.refreshSelectedDemandIfOpen()
                     homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.SUPPLIER -> {
                     supplierViewModel?.loadSuppliers()
+                    demandViewModel?.loadDemands()
+                    demandViewModel?.refreshSelectedDemandIfOpen()
                 }
                 ErpEventDomain.PRODUCTION -> {
                     productionViewModel?.loadOrders()
@@ -363,6 +379,26 @@ fun MainScaffold(
     val onOpenDocument: (Long) -> Unit = { documentId ->
         documentViewModel.selectDocument(documentId)
         selected = NavigationDestination.DOCUMENTS
+    }
+    val onOpenDemand: (Long) -> Unit = { demandId ->
+        if (NavigationDestination.DEMANDS in destinations) {
+            demandViewModel?.selectDemand(demandId)
+            selected = NavigationDestination.DEMANDS
+        }
+    }
+    val onOpenPurchaseOrder: (Long, String) -> Unit = { orderId, notificationType ->
+        if (notificationType.equals("PURCHASE_ORDER_PAID", ignoreCase = true) && NavigationDestination.WMS in destinations) {
+            wmsViewModel?.selectTab(org.example.project.ui.wms.WmsTab.RECEIPTS)
+            wmsViewModel?.loadExpectedReceipts()
+            selected = NavigationDestination.WMS
+        } else if (NavigationDestination.PURCHASE_ORDERS in destinations) {
+            purchaseOrderViewModel?.selectOrder(orderId)
+            selected = NavigationDestination.PURCHASE_ORDERS
+        } else if (NavigationDestination.WMS in destinations) {
+            wmsViewModel?.selectTab(org.example.project.ui.wms.WmsTab.RECEIPTS)
+            wmsViewModel?.loadExpectedReceipts()
+            selected = NavigationDestination.WMS
+        }
     }
     val onOpenNomenclature: (Long) -> Unit = { nomenclatureId ->
         if (NavigationDestination.WMS in destinations) {
@@ -445,7 +481,6 @@ fun MainScaffold(
     val unreadNotifications = notificationUiState.notifications.count { !it.isRead }
     androidx.compose.runtime.LaunchedEffect(taskUiState.selectedTask, projectUiState.selectedProject) {
         // Созданная сущность открывается, диалог закрывается (как в разделах задач и проектов).
-        if (quickCreate == QuickCreate.TASK && taskUiState.selectedTask != null) quickCreate = null
         if (quickCreate == QuickCreate.PROJECT && projectUiState.selectedProject != null) quickCreate = null
     }
 
@@ -574,6 +609,8 @@ fun MainScaffold(
                         onOpenTask = onOpenTask,
                         onOpenConversation = onOpenConversation,
                         onOpenProjectChat = onOpenProjectChat,
+                        onOpenDemand = onOpenDemand,
+                        onOpenPurchaseOrder = onOpenPurchaseOrder,
                         onOpenNotifications = onOpenNotifications,
                         onBackFromNotifications = onBackFromNotifications,
                         onNavigateDestination = { target ->
@@ -682,6 +719,7 @@ private fun TopBar(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable { onSelect(NavigationDestination.HOME) }
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -732,7 +770,8 @@ private fun TopBar(
                     // Только действия, которые создают запись; переходы по разделам — в меню навигации.
                     DropdownMenu(
                         expanded = quickActionsExpanded,
-                        onDismissRequest = { quickActionsExpanded = false }
+                        onDismissRequest = { quickActionsExpanded = false },
+                        containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         if (NavigationDestination.TASKS in destinations) {
                             DropdownMenuItem(
@@ -966,57 +1005,72 @@ private fun Sidebar(
             )
         }
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp)
-        ) {
-            if (favorites.isNotEmpty()) {
-                if (!collapsed) {
-                    Text(
-                        text = "Избранное",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.62f),
-                        modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp)
-                    )
-                }
-                favorites.forEach { dest ->
-                    SidebarItem(
-                        destination = dest,
-                        selected = dest == selected,
-                        collapsed = collapsed,
-                        onClick = { onSelect(dest) }
-                    )
-                    Spacer(Modifier.height(4.dp))
-                }
-            }
-            NavGroup.entries.forEach { group ->
-                val items = destinations.filter { it.group == group && it !in favorites }
-                if (items.isNotEmpty()) {
+        val sidebarScroll = rememberScrollState()
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(sidebarScroll)
+                    .padding(horizontal = 12.dp)
+            ) {
+                if (favorites.isNotEmpty()) {
                     if (!collapsed) {
                         Text(
-                            text = group.label,
+                            text = "Избранное",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White.copy(alpha = 0.62f),
-                            modifier = Modifier.padding(start = 12.dp, top = 14.dp, bottom = 4.dp)
-                        )
-                    } else {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                            color = Color.White.copy(alpha = 0.10f)
+                            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
                         )
                     }
-                    items.forEach { dest ->
+                    favorites.forEach { dest ->
                         SidebarItem(
                             destination = dest,
                             selected = dest == selected,
                             collapsed = collapsed,
                             onClick = { onSelect(dest) }
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(2.dp))
                     }
                 }
+                NavGroup.entries.forEach { group ->
+                    val items = destinations.filter { it.group == group && it !in favorites }
+                    if (items.isNotEmpty()) {
+                        if (!collapsed) {
+                            Text(
+                                text = group.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = 0.62f),
+                                modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 3.dp)
+                            )
+                        } else {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                color = Color.White.copy(alpha = 0.10f)
+                            )
+                        }
+                        items.forEach { dest ->
+                            SidebarItem(
+                                destination = dest,
+                                selected = dest == selected,
+                                collapsed = collapsed,
+                                onClick = { onSelect(dest) }
+                            )
+                            Spacer(Modifier.height(2.dp))
+                        }
+                    }
+                }
+            }
+            if (sidebarScroll.canScrollForward && !collapsed) {
+                Text(
+                    text = "↓ Прокрутите меню",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.65f),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xFF151E2B).copy(alpha = 0.92f))
+                        .padding(vertical = 4.dp, horizontal = 16.dp)
+                )
             }
         }
 
@@ -1120,7 +1174,7 @@ private fun SidebarItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 38.dp)
+            .heightIn(min = 32.dp)
             .clip(shape)
             .background(background)
             .erpInteractive(interaction, shape, focusColor = Brand.Signal)
@@ -1325,6 +1379,8 @@ private fun MainContent(
     onOpenTask: (Long) -> Unit,
     onOpenConversation: (Long) -> Unit,
     onOpenProjectChat: (Long) -> Unit,
+    onOpenDemand: (Long) -> Unit,
+    onOpenPurchaseOrder: (Long, String) -> Unit,
     onOpenNotifications: () -> Unit,
     onBackFromNotifications: () -> Unit,
     onNavigateDestination: (String) -> Unit
@@ -1392,7 +1448,9 @@ private fun MainContent(
             onOpenTask = onOpenTask,
             onOpenConversation = onOpenConversation,
             onOpenProjectChat = onOpenProjectChat,
-            onBack = onBackFromNotifications
+            onBack = onBackFromNotifications,
+            onOpenDemand = onOpenDemand,
+            onOpenPurchaseOrder = onOpenPurchaseOrder
         )
 
         NavigationDestination.ADMIN -> adminViewModel?.let {

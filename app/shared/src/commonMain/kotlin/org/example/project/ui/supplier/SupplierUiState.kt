@@ -1,5 +1,6 @@
 package org.example.project.ui.supplier
 
+import org.example.project.data.AttachmentFileData
 import org.example.project.dto.ApiError
 import org.example.project.dto.DemandHeaderDto
 import org.example.project.dto.NomenclatureDto
@@ -150,7 +151,7 @@ data class CreateOfferForm(
     val currency: String = "RUB",
     val compliance: SupplierOfferCompliance = SupplierOfferCompliance.FULL,
     val complianceNote: String = "",
-    val documentsComplete: Boolean = false,
+    val documentsComplete: Boolean = true,
     val deliveryDays: String = "",
     val deliveryTerms: String = "",
     val deliveryCost: String = "",
@@ -160,8 +161,16 @@ data class CreateOfferForm(
     val supplierContactName: String = "",
     val supplierContactChannel: String = "",
     val note: String = "",
+    val pendingInvoiceFile: AttachmentFileData? = null,
+    val invoiceDocumentId: Long? = null,
+    val invoiceDocumentFileName: String? = null,
+    val invoiceNumber: String = "",
+    val invoiceDate: String = "",
     val lines: List<OfferLineForm> = listOf(OfferLineForm())
-)
+) {
+    val hasInvoiceFile: Boolean get() = pendingInvoiceFile != null || invoiceDocumentId != null
+    val invoiceFileLabel: String? get() = pendingInvoiceFile?.fileName ?: invoiceDocumentFileName
+}
 
 data class DemandLineOption(
     val demandLineId: Long,

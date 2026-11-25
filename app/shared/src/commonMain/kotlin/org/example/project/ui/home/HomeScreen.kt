@@ -310,7 +310,7 @@ fun HomeScreen(
 
             // Открытые задачи — компактным списком
             TaskSection(
-                title = "Мои открытые задачи",
+                title = if (companyScope) "Открытые задачи компании" else "Мои открытые задачи",
                 subtitle = "Все активные назначения",
                 tasks = openAssigned,
                 accent = Brand.Blue,

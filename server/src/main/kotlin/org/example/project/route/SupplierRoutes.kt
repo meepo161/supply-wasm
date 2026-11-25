@@ -2,6 +2,7 @@ package org.example.project.route
 
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.plugins.origin
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -128,6 +129,37 @@ fun Route.supplierRoutes(supplierService: SupplierService) {
             call.respond(
                 HttpStatusCode.OK,
                 ApiResponse.success(supplierService.setCategories(id, request, call.currentUser()))
+            )
+        }
+
+        get("/offers/{id}/invoice-file") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid offer id")
+            val file = supplierService.downloadOfferInvoiceFile(
+                offerId = id,
+                ipAddress = call.request.origin.remoteHost,
+                userAgent = call.request.headers[HttpHeaders.UserAgent],
+                currentUser = call.currentUser()
+            )
+            val contentType = file.mimeType
+                ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
+                ?: ContentType.Application.OctetStream
+            call.response.header(
+                HttpHeaders.ContentDisposition,
+                ContentDisposition.Attachment
+                    .withParameter(ContentDisposition.Parameters.FileNameAsterisk, file.fileName)
+                    .toString()
+            )
+            call.respondBytes(file.content, contentType)
+        }
+
+        post("/offers/{id}/return-for-revision") {
+            val id = call.parameters["id"]?.toLongOrNull()
+                ?: throw ValidationException("Invalid offer id")
+            val request = call.receive<ReturnOfferForRevisionRequest>()
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse.success(supplierService.returnOfferForRevision(id, request, call.currentUser()))
             )
         }
     }

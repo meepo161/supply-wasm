@@ -4,6 +4,7 @@ import com.typesafe.config.ConfigFactory
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.cookies.*
 import io.ktor.client.request.*
+import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.config.*
@@ -378,7 +379,7 @@ class SupplierRoutesTest {
     }
 
     @Test
-    fun `unverified supplier offer cannot be selected`() = testApp {
+    fun `rejected supplier offer cannot be selected while unverified supplier is allowed`() = testApp {
         val admin = jsonClient()
         createUserWithRole(admin, "admin", "admin123", "Admin User", emptyList())
         createUserWithRole(admin, "initiator", "password", "Init", initiatorPermissions())
@@ -387,13 +388,14 @@ class SupplierRoutesTest {
         val buyer = loginClient("buyer", "password")
 
         val material = createNomenclature(admin, "SUP-MAT-3", "1", "pcs")
-        val demand = createDemand(initiator, material.id, "1", "pcs")
-        val supplier = createSupplier(buyer, "ООО Без Проверки", "7703332210")
-        val offer = createOffer(
+        val demand1 = createDemand(initiator, material.id, "1", "pcs")
+        val demand2 = createDemand(initiator, material.id, "1", "pcs")
+        val unverifiedSupplier = createSupplier(buyer, "ООО Без Проверки", "7703332210")
+        val offerUnverified = createOffer(
             buyer,
-            demand.header.id,
-            supplier.supplier.id,
-            demand.lines.first().id,
+            demand1.header.id,
+            unverifiedSupplier.supplier.id,
+            demand1.lines.first().id,
             quantity = "1",
             unitPrice = "100.00",
             deliveryDays = 3,
@@ -402,20 +404,62 @@ class SupplierRoutesTest {
             validUntil = java.time.LocalDate.now().plusDays(10).toString(),
             key = "unverified-offer"
         )
-        val attempt = initiator.post("/api/supplier-offers/${offer.id}/select") {
+        val okUnverified = initiator.post("/api/supplier-offers/${offerUnverified.id}/select") {
             contentType(ContentType.Application.Json)
             setBody(
                 stringify(
                     SelectSupplierOfferRequest(
-                        reason = "Поставщик не проверен, но цена низкая",
-                        version = offer.version,
+                        version = offerUnverified.version,
                         idempotencyKey = "select-unverified"
                     )
                 )
             )
         }
+        assertEquals(HttpStatusCode.OK, okUnverified.status, okUnverified.bodyAsText())
+
+        val rejectedSupplier = createSupplier(buyer, "ООО Отклонён", "7704443322")
+        val rejectResp = admin.post("/api/suppliers/${rejectedSupplier.supplier.id}/verification") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                stringify(
+                    SupplierVerificationRequest(
+                        status = SupplierVerificationStatus.REJECTED,
+                        note = "Неблагонадёжный поставщик",
+                        version = rejectedSupplier.supplier.version,
+                        idempotencyKey = "reject-${rejectedSupplier.supplier.id}"
+                    )
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, rejectResp.status, rejectResp.bodyAsText())
+
+        val offerRejected = createOffer(
+            buyer,
+            demand2.header.id,
+            rejectedSupplier.supplier.id,
+            demand2.lines.first().id,
+            quantity = "1",
+            unitPrice = "90.00",
+            deliveryDays = 3,
+            compliance = SupplierOfferCompliance.FULL,
+            documentsComplete = true,
+            validUntil = java.time.LocalDate.now().plusDays(10).toString(),
+            key = "rejected-offer"
+        )
+        val attempt = initiator.post("/api/supplier-offers/${offerRejected.id}/select") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                stringify(
+                    SelectSupplierOfferRequest(
+                        reason = "Попытка выбрать отклонённого поставщика",
+                        version = offerRejected.version,
+                        idempotencyKey = "select-rejected"
+                    )
+                )
+            )
+        }
         assertEquals(HttpStatusCode.Conflict, attempt.status, attempt.bodyAsText())
-        assertTrue(attempt.bodyAsText().contains("not verified", ignoreCase = true), attempt.bodyAsText())
+        assertTrue(attempt.bodyAsText().contains("rejected", ignoreCase = true), attempt.bodyAsText())
     }
 
     @Test
@@ -521,6 +565,26 @@ class SupplierRoutesTest {
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
     }
 
+    private suspend fun uploadInvoiceDocument(client: HttpClient): Long {
+        val docResp = client.post("/api/documents") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(CreateDocumentRequest("Счёт поставщика", DocumentType.INVOICE)))
+        }
+        assertEquals(HttpStatusCode.Created, docResp.status, docResp.bodyAsText())
+        val doc = docResp.bodyAs<ApiResponse<DocumentDto>>().data!!
+        val verResp = client.submitFormWithBinaryData(
+            url = "/api/documents/${doc.id}/versions",
+            formData = formData {
+                append("file", "%PDF-1.4 test invoice".toByteArray(Charsets.UTF_8), Headers.build {
+                    append(HttpHeaders.ContentType, "application/pdf")
+                    append(HttpHeaders.ContentDisposition, "filename=\"invoice.pdf\"")
+                })
+            }
+        )
+        assertEquals(HttpStatusCode.Created, verResp.status, verResp.bodyAsText())
+        return doc.id
+    }
+
     private suspend fun createOffer(
         client: HttpClient,
         demandId: Long,
@@ -534,6 +598,7 @@ class SupplierRoutesTest {
         validUntil: String,
         key: String
     ): SupplierOfferDto {
+        val invoiceDocId = uploadInvoiceDocument(client)
         val response = client.post("/api/supplier-offers") {
             contentType(ContentType.Application.Json)
             setBody(
@@ -553,7 +618,9 @@ class SupplierRoutesTest {
                                 vatRate = "20"
                             )
                         ),
-                        idempotencyKey = "$key-${UUID.randomUUID()}"
+                        idempotencyKey = "$key-${UUID.randomUUID()}",
+                        invoiceDocumentId = invoiceDocId,
+                        invoiceNumber = "INV-$key"
                     )
                 )
             )

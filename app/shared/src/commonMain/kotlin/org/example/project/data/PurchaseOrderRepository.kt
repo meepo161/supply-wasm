@@ -27,6 +27,7 @@ interface PurchaseOrderRepository {
     suspend fun sendOrder(id: Long, request: PurchaseOrderActionRequest): ApiResult<PurchaseOrderDto>
     suspend fun closeOrder(id: Long, request: PurchaseOrderActionRequest): ApiResult<PurchaseOrderDto>
     suspend fun cancelOrder(id: Long, request: CancelPurchaseOrderRequest): ApiResult<PurchaseOrderDto>
+    suspend fun markOrderPaid(id: Long): ApiResult<PurchaseOrderDto>
 
     suspend fun orderHistory(id: Long): ApiResult<List<PurchaseOrderHistoryDto>>
     /** Все поставки — сервер фильтрует по заказу, если он передан. */

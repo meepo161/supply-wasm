@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import org.example.project.ui.theme.Tab
@@ -23,16 +25,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import org.example.project.data.ApiResult
+import org.example.project.data.PurchaseOrderRepository
 import org.example.project.dto.PurchaseOrderDto
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.theme.Brand
 import org.example.project.ui.theme.DetailRow
 import org.example.project.ui.theme.EmptyState
+import org.example.project.ui.theme.ErpFormat
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.GlassCard
 import org.example.project.ui.theme.GradientButton
@@ -42,6 +52,7 @@ import org.example.project.ui.theme.PageHeader
 import org.example.project.ui.theme.PillBadge
 import org.example.project.ui.theme.SectionHeader
 import org.example.project.ui.theme.SoftButton
+import org.koin.compose.koinInject
 
 @Composable
 fun PurchaseOrderScreen(
@@ -177,21 +188,71 @@ private fun OrderCardPane(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { GradientSpinner() }
             return@GlassCard
         }
+        val purchaseOrderRepository: PurchaseOrderRepository = koinInject()
+        val payScope = rememberCoroutineScope()
+        var markingPaid by remember(order.id) { mutableStateOf(false) }
+        var paidError by remember(order.id) { mutableStateOf<org.example.project.dto.ApiError?>(null) }
+        var paidMessage by remember(order.id) { mutableStateOf<String?>(null) }
+
         OrderHeader(order)
         Spacer(Modifier.height(8.dp))
-        OrderActions(order, state, viewModel)
+        OrderActions(
+            order = order,
+            state = state,
+            viewModel = viewModel,
+            markingPaid = markingPaid,
+            onMarkPaid = {
+                markingPaid = true
+                paidError = null
+                paidMessage = null
+                payScope.launch {
+                    when (val res = purchaseOrderRepository.markOrderPaid(order.id)) {
+                        is ApiResult.Success -> {
+                            markingPaid = false
+                            paidMessage = "Заказ ${res.data.number} отмечен как оплаченный"
+                            viewModel.selectOrder(res.data.id)
+                            viewModel.loadOrders()
+                        }
+                        is ApiResult.Error -> {
+                            markingPaid = false
+                            paidError = res.error
+                        }
+                    }
+                }
+            }
+        )
+        paidMessage?.let { msg ->
+            Spacer(Modifier.height(6.dp))
+            PurchaseOrderSuccessNote(msg) { paidMessage = null }
+        }
+        paidError?.let { err ->
+            Spacer(Modifier.height(6.dp))
+            ErrorMessageCard(error = err)
+        }
         Spacer(Modifier.height(10.dp))
         Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
             SectionHeader(title = "Условия", accent = Brand.Violet)
             DetailRow("Поставщик", order.supplierName ?: order.supplierId.toString())
             DetailRow("Предложение", order.offerNumber ?: order.offerId.toString())
             DetailRow("Ответственный", viewModel.userName(order.responsibleId))
+            DetailRow(
+                "Оплата",
+                if (order.paidAt != null) {
+                    "Оплачено ${ErpFormat.dateTimeRu(order.paidAt)}" +
+                        (order.paidByName?.let { " ($it)" } ?: "")
+                } else {
+                    "Не оплачен"
+                },
+                valueColor = if (order.paidAt != null) Brand.Teal else Brand.Amber
+            )
             DetailRow("Дата заказа", order.orderedAt.asDate())
             DetailRow("Ожидаемая поставка", order.expectedAt.asDate())
             DetailRow("Адрес доставки", order.deliveryAddress ?: "—")
             DetailRow("Условия оплаты", order.paymentTerms ?: "—")
             DetailRow("Договор", order.contractNo ?: "—")
-            DetailRow("Счёт", order.invoiceNo ?: "—")
+            val linkedInvoiceNo = invoiceViewModel?.uiState?.value?.invoices
+                ?.firstOrNull { it.purchaseOrderId == order.id }?.number
+            DetailRow("Счёт", order.invoiceNo ?: linkedInvoiceNo ?: "—")
             DetailRow("Согласовал", order.approvedBy?.let(viewModel::userName) ?: "—")
             DetailRow("Согласовано", order.approvedAt.asDate())
             if (order.reapprovalRequired) {
@@ -322,10 +383,27 @@ private fun OrderHeader(order: PurchaseOrderDto) {
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "${order.supplierName ?: "поставщик #${order.supplierId}"} · ${org.example.project.ui.theme.ErpFormat.currencySymbol(order.currency)}",
+                text = listOfNotNull(
+                    order.supplierName ?: "поставщик #${order.supplierId}",
+                    order.totals?.grossTotal?.asMoney(order.currency) ?: org.example.project.ui.theme.ErpFormat.currencySymbol(order.currency)
+                ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+        if (order.paidAt != null) {
+            PillBadge(
+                text = "Оплачено ${ErpFormat.dateRu(order.paidAt)}",
+                accent = Brand.Mint,
+                filled = true
+            )
+            Spacer(Modifier.width(6.dp))
+        } else if (order.status != org.example.project.dto.PurchaseOrderStatus.CANCELLED) {
+            PillBadge(
+                text = "Не оплачен",
+                accent = Brand.Amber
+            )
+            Spacer(Modifier.width(6.dp))
         }
         PillBadge(
             text = order.status.localizedName(),
@@ -339,11 +417,14 @@ private fun OrderHeader(order: PurchaseOrderDto) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OrderActions(
     order: PurchaseOrderDto,
     state: PurchaseOrderUiState,
-    viewModel: PurchaseOrderViewModel
+    viewModel: PurchaseOrderViewModel,
+    markingPaid: Boolean = false,
+    onMarkPaid: () -> Unit = {}
 ) {
     val editable = order.status in setOf(
         org.example.project.dto.PurchaseOrderStatus.DRAFT,
@@ -351,7 +432,22 @@ private fun OrderActions(
         org.example.project.dto.PurchaseOrderStatus.APPROVED,
         org.example.project.dto.PurchaseOrderStatus.SENT
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (viewModel.canOrder() &&
+            order.paidAt == null &&
+            order.status != org.example.project.dto.PurchaseOrderStatus.CANCELLED
+        ) {
+            GradientButton(
+                text = if (markingPaid) "Сохранение…" else "✓ Отметить «Оплачено»",
+                onClick = onMarkPaid,
+                gradient = Gradients.Emerald,
+                compact = true,
+                enabled = !markingPaid && !state.isActionRunning
+            )
+        }
         if (viewModel.canOrder() && editable) {
             SoftButton(text = "Править", onClick = viewModel::openEdit)
         }
@@ -482,7 +578,10 @@ private fun DeliveriesPane(state: PurchaseOrderUiState, viewModel: PurchaseOrder
                     deliveries = state.deliveries,
                     orders = state.orders,
                     statuses = state.orders.associate { it.id to it.status },
-                    onClick = { delivery -> viewModel.selectOrder(delivery.orderId) },
+                    onClick = { delivery ->
+                        viewModel.selectTab(PurchaseOrderTab.ORDERS)
+                        viewModel.selectOrder(delivery.orderId)
+                    },
                     modifier = Modifier.fillMaxWidth().weight(1f)
                 )
                 Spacer(Modifier.height(8.dp))

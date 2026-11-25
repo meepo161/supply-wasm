@@ -17,14 +17,17 @@ import org.example.project.dto.ProjectStageStatus
 import org.example.project.dto.UpdateProjectMilestoneRequest
 import org.example.project.dto.UpdateProjectRiskRequest
 import org.example.project.dto.UpdateProjectStageRequest
+import org.example.project.dto.DemandDetailDto
 import org.example.project.dto.DemandHeaderDto
 import org.example.project.dto.CloseProjectRequest
 import org.example.project.dto.CreateProjectRequest
+import org.example.project.dto.HandoffProjectSpecRequest
 import org.example.project.dto.OpenProjectRequest
 import org.example.project.dto.DocumentDto
 import org.example.project.dto.ProjectDto
 import org.example.project.dto.ProjectHistoryEntryDto
 import org.example.project.dto.ProjectSummaryDto
+import org.example.project.dto.ProjectSupplyOverviewDto
 import org.example.project.dto.TaskDto
 import org.example.project.dto.TaskStatus
 
@@ -42,6 +45,8 @@ interface ProjectRepository {
     suspend fun history(id: Long, limit: Int? = null): ApiResult<List<ProjectHistoryEntryDto>>
     suspend fun tasks(id: Long, status: TaskStatus? = null): ApiResult<List<TaskDto>>
     suspend fun demands(id: Long): ApiResult<List<DemandHeaderDto>>
+    suspend fun getSupplyOverview(projectId: Long): ApiResult<ProjectSupplyOverviewDto>
+    suspend fun handoffSpecification(projectId: Long, request: HandoffProjectSpecRequest): ApiResult<DemandDetailDto>
     suspend fun documents(id: Long): ApiResult<List<DocumentDto>>
 
     // План проекта: этапы, контрольные точки и риски (PRJ-08/09/10).

@@ -8,15 +8,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.project.data.ApiResult
 import org.example.project.data.DemandRepository
+import org.example.project.data.DocumentRepository
 import org.example.project.data.SupplierRepository
 import org.example.project.data.UserRepository
 import org.example.project.data.WmsRepository
+import org.example.project.data.pickAttachmentFile
+import org.example.project.data.previewAttachmentFile
+import org.example.project.data.safeAttachmentFileName
+import org.example.project.data.saveAttachmentFile
 import org.example.project.dto.AddSupplierAddressRequest
 import org.example.project.dto.AddSupplierContactRequest
 import org.example.project.dto.AddSupplierDocumentRequest
 import org.example.project.dto.ApiError
+import org.example.project.dto.CreateDocumentRequest
 import org.example.project.dto.CreateSupplierOfferRequest
 import org.example.project.dto.CreateSupplierRequest
+import org.example.project.dto.DocumentConfidentiality
+import org.example.project.dto.DocumentType
 import org.example.project.dto.SelectSupplierOfferRequest
 import org.example.project.dto.SetSupplierCategoriesRequest
 import org.example.project.dto.SupplierAddressInput
@@ -33,12 +41,15 @@ import org.example.project.dto.UpdateSupplierRequest
 import org.example.project.dto.isValidInn
 import org.example.project.dto.UserDto
 import org.example.project.dto.hasPermission
+import org.example.project.ui.demand.isoDatePlusDays
+import org.example.project.ui.home.currentIsoDate
 
 class SupplierViewModel(
     private val supplierRepository: SupplierRepository,
     private val demandRepository: DemandRepository,
     private val wmsRepository: WmsRepository,
     private val userRepository: UserRepository,
+    private val documentRepository: DocumentRepository,
     private val currentUser: UserDto
 ) : ViewModel() {
 
@@ -602,7 +613,10 @@ class SupplierViewModel(
 
     fun addOfferLine() {
         val form = _uiState.value.offerForm
-        update { it.copy(offerForm = form.copy(lines = form.lines + OfferLineForm())) }
+        val usedIds = form.lines.mapNotNull { it.demandLineId }.toSet()
+        val next = form.demandLines.firstOrNull { it.demandLineId !in usedIds } ?: return
+        val newLine = OfferLineForm(demandLineId = next.demandLineId, quantity = next.deficit)
+        update { it.copy(offerForm = form.copy(lines = form.lines + newLine)) }
     }
 
     fun removeOfferLine(index: Int) {
@@ -619,10 +633,12 @@ class SupplierViewModel(
      */
     fun onOfferDemandChanged(demandId: Long?) {
         val form = _uiState.value.offerForm
+        val defaultValid = form.validUntil.ifBlank { isoDatePlusDays(currentIsoDate(), 30) }
         update {
             it.copy(
                 offerForm = form.copy(
                     demandId = demandId,
+                    validUntil = defaultValid,
                     demandLines = emptyList(),
                     lines = listOf(OfferLineForm())
                 )
@@ -661,16 +677,61 @@ class SupplierViewModel(
         }
     }
 
+    fun pickOfferInvoiceFile() {
+        pickAttachmentFile(
+            onPicked = { file ->
+                update {
+                    it.copy(
+                        operationError = null,
+                        offerForm = it.offerForm.copy(
+                            pendingInvoiceFile = file,
+                            invoiceDocumentId = null,
+                            invoiceDocumentFileName = null
+                        )
+                    )
+                }
+            },
+            onError = { message -> fail(message) }
+        )
+    }
+
+    fun openOfferInvoice(offerId: Long, fileName: String?, preview: Boolean = true) {
+        update { it.copy(isActionRunning = true, operationError = null) }
+        viewModelScope.launch {
+            when (val result = supplierRepository.downloadOfferInvoiceFile(offerId)) {
+                is ApiResult.Success -> {
+                    update { it.copy(isActionRunning = false) }
+                    val safeName = safeAttachmentFileName(fileName ?: "invoice-$offerId.pdf", offerId)
+                    if (preview) {
+                        previewAttachmentFile(safeName, result.data.mimeType, result.data.bytes)
+                    } else {
+                        saveAttachmentFile(safeName, result.data.mimeType, result.data.bytes)
+                    }
+                }
+                is ApiResult.Error -> failWith(result.error)
+            }
+        }
+    }
 
     fun createOffer() {
         if (!canOffer()) return fail("Нет права вносить предложения поставщиков")
         val form = _uiState.value.offerForm
         if (form.demandId == null) return fail("Выберите потребность")
         if (form.supplierId == null) return fail("Выберите поставщика")
-        if (!form.validUntil.isIsoDate()) return fail("Срок действия в формате ГГГГ-ММ-ДД")
-        val lines = form.lines.mapNotNull { line ->
-            val demandLineId = line.demandLineId ?: return@mapNotNull null
-            if (line.quantity.isBlank() || line.unitPrice.isBlank()) return@mapNotNull null
+        if (!form.hasInvoiceFile) return fail("Сначала прикрепите файл счёта от поставщика")
+        if (form.validUntil.isNotBlank() && !form.validUntil.isIsoDate()) return fail("Срок действия в формате ГГГГ-ММ-ДД")
+        if (form.invoiceDate.isNotBlank() && !form.invoiceDate.isIsoDate()) return fail("Дата счёта в формате ГГГГ-ММ-ДД")
+        val lines = form.lines.mapIndexedNotNull { idx, line ->
+            val demandLineId = line.demandLineId ?: return@mapIndexedNotNull null
+            if (line.quantity.isBlank() || line.unitPrice.isBlank()) return@mapIndexedNotNull null
+            val qtyNum = line.quantity.trim().replace(',', '.').toDoubleOrNull()
+                ?: return fail("Позиция ${idx + 1}: введите корректное количество")
+            if (qtyNum <= 0.0) return fail("Позиция ${idx + 1}: количество должно быть больше нуля")
+            val deficitNum = form.demandLines.firstOrNull { it.demandLineId == demandLineId }
+                ?.deficit?.replace(',', '.')?.toDoubleOrNull()
+            if (deficitNum != null && qtyNum > deficitNum + 1e-6) {
+                return fail("Позиция ${idx + 1}: количество ($qtyNum) превышает открытый дефицит ($deficitNum)")
+            }
             SupplierOfferLineInput(
                 demandLineId = demandLineId,
                 quantity = line.quantity.trim(),
@@ -681,6 +742,35 @@ class SupplierViewModel(
         if (lines.isEmpty()) return fail("Заполните хотя бы одну позицию: количество и цену")
         update { it.copy(isActionRunning = true, operationError = null) }
         viewModelScope.launch {
+            val demandNumber = _uiState.value.demands.firstOrNull { it.id == form.demandId }?.number ?: "#${form.demandId}"
+            val invoiceDocumentId = form.invoiceDocumentId ?: run {
+                val file = form.pendingInvoiceFile!!
+                val createdDoc = when (val docRes = documentRepository.create(
+                    CreateDocumentRequest(
+                        name = "Счёт к предложению $demandNumber",
+                        docType = DocumentType.INVOICE,
+                        confidentiality = DocumentConfidentiality.INTERNAL
+                    )
+                )) {
+                    is ApiResult.Success -> docRes.data
+                    is ApiResult.Error -> return@launch failWith(docRes.error)
+                }
+                when (val uploadRes = documentRepository.uploadVersion(createdDoc.id, file, null)) {
+                    is ApiResult.Success -> {
+                        update {
+                            it.copy(
+                                offerForm = it.offerForm.copy(
+                                    invoiceDocumentId = createdDoc.id,
+                                    invoiceDocumentFileName = file.fileName,
+                                    pendingInvoiceFile = null
+                                )
+                            )
+                        }
+                        createdDoc.id
+                    }
+                    is ApiResult.Error -> return@launch failWith(uploadRes.error)
+                }
+            }
             val request = CreateSupplierOfferRequest(
                 demandId = form.demandId,
                 supplierId = form.supplierId,
@@ -698,7 +788,10 @@ class SupplierViewModel(
                 supplierContactChannel = form.supplierContactChannel.trim().ifEmpty { null },
                 note = form.note.trim().ifEmpty { null },
                 lines = lines,
-                idempotencyKey = newKey("offer-create")
+                idempotencyKey = newKey("offer-create"),
+                invoiceDocumentId = invoiceDocumentId,
+                invoiceNumber = form.invoiceNumber.trim().ifEmpty { null },
+                invoiceDate = form.invoiceDate.trim().ifEmpty { null }
             )
             when (val result = supplierRepository.createOffer(request)) {
                 is ApiResult.Success -> {
@@ -724,8 +817,7 @@ class SupplierViewModel(
     fun submitSelection() {
         if (!canSelect()) return fail("Нет права выбирать предложение")
         val offerId = _uiState.value.pendingSelectionOfferId ?: return
-        val reason = _uiState.value.selectionReason.trim()
-        if (reason.length < 10) return fail("Обоснование выбора: не короче 10 символов")
+        val reason = _uiState.value.selectionReason.trim().ifEmpty { "Выбрано инициатором потребности" }
         update { it.copy(isActionRunning = true, operationError = null) }
         viewModelScope.launch {
             val offer = _uiState.value.comparison?.columns?.firstOrNull { it.offerId == offerId }

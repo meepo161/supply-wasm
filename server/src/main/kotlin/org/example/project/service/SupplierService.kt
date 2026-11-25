@@ -4,17 +4,23 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json
 import org.example.project.dto.*
 import org.example.project.exception.ConflictException
+import org.example.project.exception.ForbiddenException
 import org.example.project.exception.NotFoundException
 import org.example.project.exception.ValidationException
+import org.example.project.generated.jooq.tables.DocumentVersions.DOCUMENT_VERSIONS
+import org.example.project.generated.jooq.tables.PurchaseOrders.PURCHASE_ORDERS
 import org.example.project.generated.jooq.tables.records.SupplierOffersRecord
 import org.example.project.generated.jooq.tables.records.SuppliersRecord
 import org.example.project.model.CurrentUser
+import org.example.project.realtime.NotificationEventBus
 import org.example.project.repository.DemandRepository
+import org.example.project.repository.DocumentRepository
 import org.example.project.repository.SupplierRepository
 import org.jooq.DSLContext
 import org.jooq.TransactionalCallable
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.nio.file.NoSuchFileException
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -37,11 +43,15 @@ import java.time.format.DateTimeParseException
 class SupplierService(
     private val supplierRepository: SupplierRepository,
     private val demandRepository: DemandRepository,
+    private val documentRepository: DocumentRepository,
+    private val fileStorage: FileStorage,
+    private val notificationService: NotificationService,
     private val auditService: AuditService,
     private val dsl: DSLContext
 ) {
 
     data class CommandResponse(val status: HttpStatusCode, val body: String)
+    data class OfferInvoiceFile(val fileName: String, val mimeType: String?, val content: ByteArray)
 
     private val json = Json { encodeDefaults = true }
 
@@ -392,9 +402,41 @@ class SupplierService(
         val offers = supplierRepository.listOffers(demandId, supplierId, status?.name)
         if (offers.isEmpty()) return emptyList()
         val totals = supplierRepository.offerTotalsBatch(offers.map { it.id })
+        val fileNames = supplierRepository.findDocumentFileNames(offers.mapNotNull { it.invoiceDocumentId })
         return offers.map { offer ->
             val supplierName = supplierRepository.findSupplierById(offer.supplierId)?.name
-            offer.toDto(totals[offer.id], supplierName)
+            offer.toDto(
+                totals = totals[offer.id],
+                supplierName = supplierName,
+                invoiceFileName = offer.invoiceDocumentId?.let { fileNames[it] }
+            )
+        }
+    }
+
+    internal fun listOffersForDemandInternal(demandId: Long): List<SupplierOfferDto> {
+        val offers = supplierRepository.listOffersForDemand(demandId)
+        if (offers.isEmpty()) return emptyList()
+        val offerIds = offers.map { it.id }
+        val totals = supplierRepository.offerTotalsBatch(offerIds)
+        val linesByOffer = supplierRepository.listOfferLinesForOffers(offerIds).groupBy { it.offerId }
+        val fileNames = supplierRepository.findDocumentFileNames(offers.mapNotNull { it.invoiceDocumentId })
+        val nomenclatureCache = linesByOffer.values.flatten()
+            .map { it.nomenclatureId }
+            .distinct()
+            .associateWith { id ->
+                supplierRepository.findNomenclatureById(id)?.let { it.code to it.name } ?: (null to null)
+            }
+        val supplierCache = offers.map { it.supplierId }.distinct().associateWith { id ->
+            supplierRepository.findSupplierById(id)?.name
+        }
+        return offers.map { offer ->
+            offer.toDto(
+                totals = totals[offer.id],
+                supplierName = supplierCache[offer.supplierId],
+                lines = linesByOffer[offer.id].orEmpty(),
+                nomenclature = nomenclatureCache,
+                invoiceFileName = offer.invoiceDocumentId?.let { fileNames[it] }
+            )
         }
     }
 
@@ -402,6 +444,44 @@ class SupplierService(
         currentUser.requirePermission("suppliers", "read")
         val offer = supplierRepository.findOfferById(id) ?: throw NotFoundException("supplier_offer", id)
         return buildOffer(offer)
+    }
+
+    fun downloadOfferInvoiceFile(
+        offerId: Long,
+        ipAddress: String?,
+        userAgent: String?,
+        currentUser: CurrentUser
+    ): OfferInvoiceFile {
+        val offer = supplierRepository.findOfferById(offerId) ?: throw NotFoundException("supplier_offer", offerId)
+        val demand = supplierRepository.findDemandById(offer.demandId)
+            ?: throw NotFoundException("demand", offer.demandId)
+        val allowed = currentUser.hasPermission("suppliers", "read") ||
+            currentUser.hasPermission("suppliers", "offer") ||
+            currentUser.hasPermission("suppliers", "select") ||
+            currentUser.hasPermission("demands", "read_any") ||
+            currentUser.hasPermission("wms", "read") ||
+            demand.initiatorId == currentUser.userId
+        if (!allowed) {
+            throw ForbiddenException("Access to offer invoice file denied")
+        }
+        val docId = offer.invoiceDocumentId ?: throw NotFoundException("offer_invoice_document", offerId)
+        val version = latestInvoiceFileVersion(docId)
+            ?: throw NotFoundException("offer_invoice_file", offerId)
+        val storageKey = documentRepository.findFileStorageKey(version.fileId)
+            ?: throw NotFoundException("offer_invoice_file", offerId)
+        val content = try {
+            fileStorage.read(storageKey)
+        } catch (_: NoSuchFileException) {
+            throw NotFoundException("offer_invoice_file", offerId)
+        }
+        dsl.transaction { _ ->
+            documentRepository.logDownload(version.versionId, currentUser.userId, ipAddress, userAgent)
+            auditService.log(
+                currentUser.userId, "OFFER_INVOICE_FILE_DOWNLOAD", "SUPPLIER_OFFER", offerId,
+                mapOf("documentId" to docId, "documentVersionId" to version.versionId)
+            )
+        }
+        return OfferInvoiceFile(version.fileName, version.mimeType, content)
     }
 
     fun listOfferHistory(id: Long, currentUser: CurrentUser): List<SupplierOfferHistoryDto> {
@@ -425,18 +505,31 @@ class SupplierService(
         if (request.lines.isEmpty()) {
             throw ValidationException("Offer must contain at least one line", mapOf("lines" to "required"))
         }
+        val invoiceDocumentId = request.invoiceDocumentId
+        if (invoiceDocumentId != null) {
+            requireInvoiceDocument(invoiceDocumentId, currentUser)
+        }
+        val invoiceDate = request.invoiceDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            parseDate(it, "invoiceDate")
+        }
+        val invoiceNumber = request.invoiceNumber?.trim()?.takeIf { it.isNotEmpty() }
         validateCurrency(request.currency)
         validateDelivery(request.deliveryDays, request.deliveryCost)
-        val validUntil = parseDate(request.validUntil, "validUntil")
-            ?: throw ValidationException("Offer validity date is required", mapOf("validUntil" to "required"))
+        val validUntil = if (request.validUntil.isBlank()) {
+            LocalDate.now().plusDays(30)
+        } else {
+            parseDate(request.validUntil, "validUntil")
+                ?: throw ValidationException("Offer validity date is required", mapOf("validUntil" to "required"))
+        }
         if (validUntil.isBefore(LocalDate.now())) {
             throw ValidationException(
                 "Offer validity date is already in the past",
                 mapOf("validUntil" to "in_past")
             )
         }
+        var pendingNotifications: List<NotificationEventBus.Event> = emptyList()
         val payload = json.encodeToString(CreateSupplierOfferRequest.serializer(), request)
-        return executeIdempotent(
+        val result = executeIdempotent(
             "SUPPLIER_OFFER_CREATE", request.idempotencyKey, payload, HttpStatusCode.Created, currentUser
         ) {
                 val demand = supplierRepository.findDemandById(request.demandId)
@@ -517,7 +610,10 @@ class SupplierService(
                     supplierContactChannel = request.supplierContactChannel?.trim(),
                     note = request.note?.trim(),
                     requestedBy = currentUser.userId,
-                    createdBy = currentUser.userId
+                    createdBy = currentUser.userId,
+                    invoiceDocumentId = invoiceDocumentId,
+                    invoiceNumber = invoiceNumber,
+                    invoiceDate = invoiceDate
                 )
                 supplierRepository.replaceOfferLines(offer.id, normalized, currentUser.userId)
                 supplierRepository.insertOfferHistory(
@@ -549,11 +645,23 @@ class SupplierService(
                     mapOf(
                         "number" to number,
                         "demandId" to request.demandId,
-                        "supplierId" to request.supplierId
+                        "supplierId" to request.supplierId,
+                        "invoiceDocumentId" to invoiceDocumentId
                     )
                 )
+                if (demand.initiatorId != currentUser.userId) {
+                    pendingNotifications = notificationService.createSystemNotifications(
+                        recipientIds = listOf(demand.initiatorId),
+                        type = "DEMAND_OFFER_CREATED",
+                        entityType = "DEMAND",
+                        entityId = demand.id,
+                        title = "Новое предложение ${offer.number} по заявке ${demand.number}"
+                    )
+                }
                 offer.id to json.encodeToString(SupplierOfferDto.serializer(), buildOffer(offer))
         }
+        notificationService.publishEvents(pendingNotifications)
+        return result
     }
 
     fun updateOffer(id: Long, request: UpdateSupplierOfferRequest, currentUser: CurrentUser): SupplierOfferDto {
@@ -562,11 +670,17 @@ class SupplierService(
         if (offer.status == "SELECTED") {
             throw ConflictException("Selected offer is locked; withdraw the selection first")
         }
-        if (offer.status == "WITHDRAWN" || offer.status == "EXPIRED") {
+        if (offer.status !in setOf("RECEIVED", "SHORTLISTED", "NEEDS_REVISION")) {
             throw ConflictException("Offer cannot be changed in status ${offer.status}")
         }
         validateDelivery(request.deliveryDays, request.deliveryCost)
-        return dsl.transactionResult(TransactionalCallable {
+        request.invoiceDocumentId?.let { requireInvoiceDocument(it, currentUser) }
+        val invoiceDate = request.invoiceDate?.trim()?.takeIf { it.isNotEmpty() }?.let { parseDate(it, "invoiceDate") }
+        val invoiceNumber = request.invoiceNumber?.trim()?.takeIf { it.isNotEmpty() }
+        var pendingNotifications: List<NotificationEventBus.Event> = emptyList()
+        val updatedDto = dsl.transactionResult(TransactionalCallable {
+            val demand = supplierRepository.findDemandById(offer.demandId)
+                ?: throw NotFoundException("demand", offer.demandId)
             val demandLines = supplierRepository.listDemandLines(offer.demandId).associateBy { it.id!! }
             request.lines?.let { lines ->
                 if (lines.isEmpty()) {
@@ -622,6 +736,7 @@ class SupplierService(
                 }
                 supplierRepository.replaceOfferLines(id, normalized, currentUser.userId)
             }
+            val wasNeedsRevision = offer.status == "NEEDS_REVISION"
             val updated = supplierRepository.updateOfferDetails(
                 id = id,
                 expectedVersion = request.version,
@@ -635,17 +750,110 @@ class SupplierService(
                 warrantyMonths = request.warrantyMonths,
                 validUntil = request.validUntil?.let { parseDate(it, "validUntil") },
                 note = request.note?.trim(),
-                updatedBy = currentUser.userId
+                updatedBy = currentUser.userId,
+                invoiceDocumentId = request.invoiceDocumentId,
+                invoiceNumber = invoiceNumber,
+                invoiceDate = invoiceDate,
+                newStatus = if (wasNeedsRevision) "RECEIVED" else null
             ) ?: throw ConflictException("Offer was modified concurrently, reload it")
             supplierRepository.insertOfferHistory(
-                id, "UPDATED", offer.status, updated.status, null, currentUser.userId
+                offerId = id,
+                action = if (wasNeedsRevision) "RESUBMITTED" else "UPDATED",
+                fromStatus = offer.status,
+                toStatus = updated.status,
+                reason = if (wasNeedsRevision) "Повторно передано на согласование ведущему" else null,
+                changedBy = currentUser.userId
             )
             auditService.log(
-                currentUser.userId, "UPDATE", "SUPPLIER_OFFER", id,
-                mapOf("number" to offer.number)
+                currentUser.userId, if (wasNeedsRevision) "RESUBMIT" else "UPDATE", "SUPPLIER_OFFER", id,
+                mapOf("number" to offer.number, "resubmitted" to wasNeedsRevision)
             )
+            if (wasNeedsRevision && demand.initiatorId != currentUser.userId) {
+                pendingNotifications = notificationService.createSystemNotifications(
+                    recipientIds = listOf(demand.initiatorId),
+                    type = "DEMAND_OFFER_RESUBMITTED",
+                    entityType = "DEMAND",
+                    entityId = demand.id,
+                    title = "Снабженец обновил предложение ${offer.number} по замечаниям (заявка ${demand.number})"
+                )
+            }
             buildOffer(updated)
         })
+        notificationService.publishEvents(pendingNotifications)
+        return updatedDto
+    }
+
+    fun returnOfferForRevision(
+        id: Long,
+        request: ReturnOfferForRevisionRequest,
+        currentUser: CurrentUser
+    ): SupplierOfferDto {
+        currentUser.requirePermission("suppliers", "select")
+        val reason = request.reason.trim()
+        if (reason.isEmpty()) {
+            throw ValidationException("Укажите причину возврата на доработку", mapOf("reason" to "required"))
+        }
+        var pendingNotifications: List<NotificationEventBus.Event> = emptyList()
+        val updatedDto = dsl.transactionResult(TransactionalCallable {
+            val offer = supplierRepository.lockOfferById(id) ?: throw NotFoundException("supplier_offer", id)
+            if (offer.version != request.version) {
+                throw ConflictException("Offer was modified concurrently, reload it")
+            }
+            if (offer.status !in setOf("RECEIVED", "SHORTLISTED", "SELECTED")) {
+                throw ConflictException("Offer cannot be returned for revision in status ${offer.status}")
+            }
+            val demand = supplierRepository.findDemandById(offer.demandId)
+                ?: throw NotFoundException("demand", offer.demandId)
+            val isInitiator = demand.initiatorId == currentUser.userId
+            if (!isInitiator && !currentUser.hasPermission("suppliers", "select_any")) {
+                throw ForbiddenException("Only the demand initiator can return an offer for revision")
+            }
+            if (offer.status == "SELECTED") {
+                val activeOrder = dsl.select(PURCHASE_ORDERS.ID)
+                    .from(PURCHASE_ORDERS)
+                    .where(PURCHASE_ORDERS.OFFER_ID.eq(offer.id))
+                    .and(PURCHASE_ORDERS.STATUS.ne("CANCELLED"))
+                    .limit(1)
+                    .fetchOne()
+                if (activeOrder != null) {
+                    throw ConflictException("Нельзя вернуть предложение на доработку: по нему уже оформлен заказ поставщику")
+                }
+            }
+            val offersTable = org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS
+            val changed = dsl.update(offersTable)
+                .set(offersTable.STATUS, "NEEDS_REVISION")
+                .set(offersTable.REVISION_NOTE, reason)
+                .set(offersTable.SELECTED_BY, null as Long?)
+                .set(offersTable.SELECTED_AT, null as OffsetDateTime?)
+                .set(offersTable.SELECTION_REASON, null as String?)
+                .set(offersTable.UPDATED_AT, OffsetDateTime.now())
+                .set(offersTable.UPDATED_BY, currentUser.userId)
+                .set(offersTable.VERSION, offersTable.VERSION.plus(1))
+                .where(offersTable.ID.eq(id).and(offersTable.VERSION.eq(request.version)))
+                .execute()
+            if (changed == 0) {
+                throw ConflictException("Offer was modified concurrently, reload it")
+            }
+            supplierRepository.insertOfferHistory(
+                id, "RETURNED_FOR_REVISION", offer.status, "NEEDS_REVISION", reason, currentUser.userId
+            )
+            auditService.log(
+                currentUser.userId, "RETURN_FOR_REVISION", "SUPPLIER_OFFER", id,
+                mapOf("number" to offer.number, "demandId" to demand.id, "reason" to reason)
+            )
+            if (offer.requestedBy != currentUser.userId) {
+                pendingNotifications = notificationService.createSystemNotifications(
+                    recipientIds = listOf(offer.requestedBy),
+                    type = "DEMAND_OFFER_RETURNED",
+                    entityType = "DEMAND",
+                    entityId = demand.id,
+                    title = "Предложение ${offer.number} по заявке ${demand.number} возвращено на доработку: $reason"
+                )
+            }
+            buildOffer(supplierRepository.findOfferById(id)!!)
+        })
+        notificationService.publishEvents(pendingNotifications)
+        return updatedDto
     }
 
     fun changeOfferStatus(
@@ -704,14 +912,10 @@ class SupplierService(
      */
     fun selectOffer(id: Long, request: SelectSupplierOfferRequest, currentUser: CurrentUser): CommandResponse {
         currentUser.requirePermission("suppliers", "select")
-        if (request.reason.trim().length < 10) {
-            throw ValidationException(
-                "Selection reason must be at least 10 characters",
-                mapOf("reason" to "too_short")
-            )
-        }
+        val reason = request.reason.trim().ifEmpty { "Выбрано инициатором потребности" }
+        var pendingNotifications: List<NotificationEventBus.Event> = emptyList()
         val payload = json.encodeToString(SelectSupplierOfferRequest.serializer(), request)
-        return executeIdempotent(
+        val result = executeIdempotent(
             "SUPPLIER_OFFER_SELECT", request.idempotencyKey, payload, HttpStatusCode.OK, currentUser
         ) {
                 val offer = supplierRepository.lockOfferById(id)
@@ -731,7 +935,7 @@ class SupplierService(
                 // полномочием может сделать это за него, и это видно в аудите.
                 val isInitiator = demand.initiatorId == currentUser.userId
                 if (!isInitiator && !currentUser.hasPermission("suppliers", "select_any")) {
-                    throw org.example.project.exception.ForbiddenException(
+                    throw ForbiddenException(
                         "Only the demand initiator can select the preferred offer"
                     )
                 }
@@ -740,7 +944,7 @@ class SupplierService(
                 }
                 val supplier = supplierRepository.findSupplierById(offer.supplierId)
                     ?: throw NotFoundException("supplier", offer.supplierId)
-                validateOfferEligibility(offer, supplier, demand.requiredDate)
+                validateOfferEligibility(offer, supplier)
 
                 val alreadySelected = supplierRepository.listOffersForDemand(offer.demandId)
                     .firstOrNull { it.status == "SELECTED" }
@@ -757,11 +961,11 @@ class SupplierService(
                     newStatus = "SELECTED",
                     selectedBy = currentUser.userId,
                     selectedAt = OffsetDateTime.now(),
-                    selectionReason = request.reason.trim(),
+                    selectionReason = reason,
                     updatedBy = currentUser.userId
                 ) ?: throw ConflictException("Offer was modified concurrently, reload it")
                 supplierRepository.insertOfferHistory(
-                    id, "SELECTED", offer.status, "SELECTED", request.reason.trim(), currentUser.userId
+                    id, "SELECTED", offer.status, "SELECTED", reason, currentUser.userId
                 )
                 auditService.log(
                     currentUser.userId, "SELECT", "SUPPLIER_OFFER", id,
@@ -769,12 +973,23 @@ class SupplierService(
                         "number" to offer.number,
                         "demandId" to offer.demandId,
                         "supplierId" to offer.supplierId,
-                        "reason" to request.reason.trim(),
+                        "reason" to reason,
                         "onBehalfOfInitiator" to !isInitiator
                     )
                 )
+                if (offer.requestedBy != currentUser.userId) {
+                    pendingNotifications = notificationService.createSystemNotifications(
+                        recipientIds = listOf(offer.requestedBy),
+                        type = "DEMAND_OFFER_SELECTED",
+                        entityType = "DEMAND",
+                        entityId = demand.id,
+                        title = "Ведущий выбрал предложение ${offer.number} по заявке ${demand.number}"
+                    )
+                }
                 id to json.encodeToString(SupplierOfferDto.serializer(), buildOffer(selected))
         }
+        notificationService.publishEvents(pendingNotifications)
+        return result
     }
 
     fun clearSelection(id: Long, version: Long, currentUser: CurrentUser): SupplierOfferDto {
@@ -792,6 +1007,20 @@ class SupplierService(
                 throw org.example.project.exception.ForbiddenException(
                     "Only the demand initiator can withdraw the preferred offer"
                 )
+            }
+            val activeOrder = dsl.select(PURCHASE_ORDERS.ID, PURCHASE_ORDERS.PAID_AT)
+                .from(PURCHASE_ORDERS)
+                .where(PURCHASE_ORDERS.OFFER_ID.eq(offer.id))
+                .and(PURCHASE_ORDERS.STATUS.ne("CANCELLED"))
+                .limit(1)
+                .fetchOne()
+            if (activeOrder != null) {
+                val msg = if (activeOrder.get(PURCHASE_ORDERS.PAID_AT) != null) {
+                    "Нельзя снять выбор: по предложению уже оформлен заказ поставщику (оплачен)"
+                } else {
+                    "Нельзя снять выбор: по предложению уже оформлен заказ поставщику"
+                }
+                throw ConflictException(msg)
             }
             val updated = dsl.update(
                 org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS
@@ -843,6 +1072,7 @@ class SupplierService(
         val offerLines = supplierRepository.listOfferLinesForOffers(offers.map { it.id })
             .groupBy { it.offerId }
         val totals = supplierRepository.offerTotalsBatch(offers.map { it.id })
+        val fileNames = supplierRepository.findDocumentFileNames(offers.mapNotNull { it.invoiceDocumentId })
         val requiredDate = demand.requiredDate
         val today = LocalDate.now()
 
@@ -881,7 +1111,11 @@ class SupplierService(
                 netTotal = totalsEntry?.first?.toPlainString() ?: "0",
                 grossTotal = totalsEntry?.third?.toPlainString() ?: "0",
                 supplierVerified = supplier?.verificationStatus == "VERIFIED",
-                lines = lineDtos
+                lines = lineDtos,
+                invoiceDocumentId = offer.invoiceDocumentId,
+                invoiceNumber = offer.invoiceNumber,
+                invoiceFileName = offer.invoiceDocumentId?.let { fileNames[it] },
+                revisionNote = offer.revisionNote
             )
         }
 
@@ -1000,8 +1234,7 @@ class SupplierService(
      */
     private fun validateOfferEligibility(
         offer: SupplierOffersRecord,
-        supplier: SuppliersRecord,
-        requiredDate: LocalDate?
+        supplier: SuppliersRecord
     ) {
         if (offer.validUntil.isBefore(LocalDate.now())) {
             throw ConflictException(
@@ -1021,24 +1254,48 @@ class SupplierService(
         if (!offer.documentsComplete) {
             throw ConflictException("Offer documents are not confirmed as complete")
         }
-        if (offer.deliveryDays == null) {
-            throw ConflictException("Delivery time is unknown; cannot verify the required date")
-        }
-        if (requiredDate != null &&
-            LocalDate.now().plusDays(offer.deliveryDays.toLong()).isAfter(requiredDate)
-        ) {
+        if (supplier.verificationStatus == "REJECTED") {
             throw ConflictException(
-                "Delivery takes ${offer.deliveryDays} days and misses the required date $requiredDate"
-            )
-        }
-        if (supplier.verificationStatus != "VERIFIED") {
-            throw ConflictException(
-                "Supplier ${supplier.number} is not verified (${supplier.verificationStatus})"
+                "Supplier ${supplier.number} is rejected (${supplier.verificationStatus})"
             )
         }
         if (supplier.archived) {
             throw ConflictException("Supplier is archived")
         }
+    }
+
+    private data class InvoiceFileVersion(
+        val versionId: Long,
+        val fileId: Long,
+        val fileName: String,
+        val mimeType: String?
+    )
+
+    private fun latestInvoiceFileVersion(documentId: Long): InvoiceFileVersion? =
+        dsl.selectFrom(DOCUMENT_VERSIONS)
+            .where(DOCUMENT_VERSIONS.DOCUMENT_ID.eq(documentId))
+            .and(DOCUMENT_VERSIONS.FILE_ID.isNotNull)
+            .and(DOCUMENT_VERSIONS.STATUS.ne("CANCELLED"))
+            .orderBy(DOCUMENT_VERSIONS.VERSION_NUMBER.desc())
+            .limit(1)
+            .fetchOne()
+            ?.let { InvoiceFileVersion(it.id!!, it.fileId!!, it.fileName, it.mimeType) }
+
+    private fun requireInvoiceDocument(documentId: Long, currentUser: CurrentUser) {
+        val document = documentRepository.findDocumentById(documentId)
+            ?: throw ValidationException("Загрузите файл счёта поставщика", mapOf("invoiceDocumentId" to "not_found"))
+        val readable = document.confidentiality == "PUBLIC" ||
+            document.confidentiality == "INTERNAL" ||
+            document.ownerId == currentUser.userId ||
+            currentUser.hasPermission("documents", "read_any")
+        if (!readable) {
+            throw ValidationException("Нет доступа к файлу счёта", mapOf("invoiceDocumentId" to "not_found"))
+        }
+        if (document.docType != DocumentType.INVOICE.name) {
+            throw ValidationException("Документ счёта должен иметь тип «Счёт»", mapOf("invoiceDocumentId" to "not_invoice"))
+        }
+        latestInvoiceFileVersion(documentId)
+            ?: throw ValidationException("К документу не загружен файл счёта", mapOf("invoiceDocumentId" to "no_file"))
     }
 
     private fun buildCard(supplier: SuppliersRecord): SupplierCardDto = SupplierCardDto(
@@ -1056,7 +1313,10 @@ class SupplierService(
         val nomenclature = lines.map { it.nomenclatureId }.distinct().associateWith { id ->
             supplierRepository.findNomenclatureById(id)?.let { it.code to it.name } ?: (null to null)
         }
-        return offer.toDto(totals, supplier?.name, lines, nomenclature)
+        val invoiceFileName = offer.invoiceDocumentId?.let {
+            supplierRepository.findDocumentFileNames(listOf(it))[it]
+        }
+        return offer.toDto(totals, supplier?.name, lines, nomenclature, invoiceFileName)
     }
 
     private fun requireSupplier(id: Long): SuppliersRecord =

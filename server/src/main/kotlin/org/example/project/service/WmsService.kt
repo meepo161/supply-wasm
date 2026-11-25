@@ -2,6 +2,7 @@ package org.example.project.service
 
 import org.example.project.dto.*
 import org.example.project.exception.ConflictException
+import org.example.project.exception.ForbiddenException
 import org.example.project.exception.NotFoundException
 import org.example.project.exception.ValidationException
 import org.example.project.generated.jooq.tables.records.NomenclatureBarcodesRecord
@@ -166,7 +167,15 @@ class WmsService(
     }
 
     fun listNomenclature(currentUser: CurrentUser): List<NomenclatureDto> {
-        currentUser.requirePermission("wms", "read")
+        val canReadNomenclature = currentUser.hasPermission("wms", "read") ||
+            currentUser.hasPermission("demands", "create") ||
+            currentUser.hasPermission("demands", "read_any") ||
+            currentUser.hasPermission("suppliers", "read") ||
+            currentUser.hasPermission("suppliers", "offer") ||
+            currentUser.hasPermission("bom", "read_any")
+        if (!canReadNomenclature) {
+            throw ForbiddenException("Missing permission wms:read")
+        }
         val records = wmsRepository.listNomenclature()
         val barcodes = loadBarcodes(records.map { it.id })
         return records.map { it.toDto(barcodes) }

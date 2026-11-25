@@ -404,13 +404,17 @@ fun OrderInvoicesSection(
         title = "Счета по заказу",
         count = invoices.size,
         accent = Brand.Violet,
-        subtitle = "Файл счёта обязателен; поступление на склад оформляется из счёта",
-        action = {
-            if (viewModel.canManage() && order.status in invoiceAllowedOrderStatuses) {
-                SoftButton(text = "Загрузить счёт", onClick = { viewModel.openCreateFromOrder(order) }, tint = Brand.Violet, leadingIcon = ErpIconGlyph.Plus)
-            }
-        }
+        subtitle = "Файл счёта обязателен; поступление на склад оформляется из счёта"
     )
+    if (viewModel.canManage() && order.status in invoiceAllowedOrderStatuses) {
+        Spacer(Modifier.height(6.dp))
+        SoftButton(
+            text = "Загрузить счёт",
+            onClick = { viewModel.openCreateFromOrder(order) },
+            tint = Brand.Violet,
+            leadingIcon = ErpIconGlyph.Plus
+        )
+    }
     if (invoices.isEmpty()) {
         Text(
             if (order.status in invoiceAllowedOrderStatuses) "Счёт ещё не загружен" else "Счёт принимается по согласованному заказу",

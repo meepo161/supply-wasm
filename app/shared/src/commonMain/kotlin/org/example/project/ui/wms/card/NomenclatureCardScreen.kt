@@ -121,7 +121,7 @@ fun NomenclatureCardScreen(
         when {
             card == null && state.loading -> CardSkeleton(onBack)
             card == null -> {
-                TextButton(onClick = onBack) { Text("← К номенклатуре") }
+                TextButton(onClick = onBack) { Text("← Назад") }
                 state.loadError?.let { ErrorMessageCard(error = it) }
                 SoftButton(text = "Повторить", onClick = viewModel::reload, leadingIcon = ErpIconGlyph.Refresh)
             }
@@ -217,7 +217,7 @@ private fun CardHeader(
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
-                    Text("← К номенклатуре")
+                    Text("← Назад")
                 }
                 ErpIconButton(glyph = ErpIconGlyph.Refresh, contentDescription = "Обновить карточку", onClick = onRefresh, enabled = !busy)
             }
@@ -406,7 +406,7 @@ private fun NoticeBanner(text: String, onClose: () -> Unit) {
 
 @Composable
 private fun CardSkeleton(onBack: () -> Unit) {
-    TextButton(onClick = onBack) { Text("← К номенклатуре") }
+    TextButton(onClick = onBack) { Text("← Назад") }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SkeletonLine(widthFraction = 0.3f)
         SkeletonLine(widthFraction = 0.6f, height = 22.dp)

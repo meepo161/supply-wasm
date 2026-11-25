@@ -7,6 +7,7 @@ import org.example.project.dto.CreateSupplierCategoryRequest
 import org.example.project.dto.CreateSupplierClaimRequest
 import org.example.project.dto.CreateSupplierOfferRequest
 import org.example.project.dto.CreateSupplierRequest
+import org.example.project.dto.ReturnOfferForRevisionRequest
 import org.example.project.dto.SelectSupplierOfferRequest
 import org.example.project.dto.SetSupplierCategoriesRequest
 import org.example.project.dto.SupplierCardDto
@@ -56,9 +57,11 @@ interface SupplierRepository {
     suspend fun updateOffer(id: Long, request: UpdateSupplierOfferRequest): ApiResult<SupplierOfferDto>
     suspend fun changeOfferStatus(id: Long, request: SupplierOfferStatusRequest): ApiResult<SupplierOfferDto>
     suspend fun selectOffer(id: Long, request: SelectSupplierOfferRequest): ApiResult<SupplierOfferDto>
+    suspend fun returnOfferForRevision(offerId: Long, request: ReturnOfferForRevisionRequest): ApiResult<SupplierOfferDto>
     suspend fun clearSelection(id: Long, version: Long): ApiResult<SupplierOfferDto>
     suspend fun offerHistory(id: Long): ApiResult<List<SupplierOfferHistoryDto>>
     suspend fun compareOffers(demandId: Long): ApiResult<SupplierOfferComparisonDto>
+    suspend fun downloadOfferInvoiceFile(offerId: Long): ApiResult<DownloadedAttachment>
 
     suspend fun listClaims(
         supplierId: Long? = null,

@@ -7,9 +7,13 @@ import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.config.HoconApplicationConfig
@@ -612,6 +616,26 @@ class PurchaseOrderRoutesTest {
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
     }
 
+    private suspend fun uploadInvoiceDocument(client: HttpClient): Long {
+        val docResp = client.post("/api/documents") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(CreateDocumentRequest("Счёт поставщика", DocumentType.INVOICE)))
+        }
+        assertEquals(HttpStatusCode.Created, docResp.status, docResp.bodyAsText())
+        val doc = docResp.bodyAs<ApiResponse<DocumentDto>>().data!!
+        val verResp = client.submitFormWithBinaryData(
+            url = "/api/documents/${doc.id}/versions",
+            formData = formData {
+                append("file", "%PDF-1.4 test invoice".toByteArray(Charsets.UTF_8), Headers.build {
+                    append(HttpHeaders.ContentType, "application/pdf")
+                    append(HttpHeaders.ContentDisposition, "filename=\"invoice.pdf\"")
+                })
+            }
+        )
+        assertEquals(HttpStatusCode.Created, verResp.status, verResp.bodyAsText())
+        return doc.id
+    }
+
     private suspend fun createOffer(
         client: HttpClient,
         demandId: Long,
@@ -620,6 +644,7 @@ class PurchaseOrderRoutesTest {
         quantity: String = "10",
         unitPrice: String = "500.00"
     ): SupplierOfferDto {
+        val invoiceDocId = uploadInvoiceDocument(client)
         val response = client.post("/api/supplier-offers") {
             contentType(ContentType.Application.Json)
             setBody(
@@ -640,7 +665,8 @@ class PurchaseOrderRoutesTest {
                                 vatRate = "20"
                             )
                         ),
-                        idempotencyKey = "offer-${UUID.randomUUID()}"
+                        idempotencyKey = "offer-${UUID.randomUUID()}",
+                        invoiceDocumentId = invoiceDocId
                     )
                 )
             )

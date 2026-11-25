@@ -137,7 +137,8 @@ internal fun SupplierOffersRecord.toDto(
     totals: Triple<BigDecimal, BigDecimal, BigDecimal>?,
     supplierName: String?,
     lines: List<SupplierOfferLinesRecord> = emptyList(),
-    nomenclature: Map<Long, Pair<String?, String?>> = emptyMap()
+    nomenclature: Map<Long, Pair<String?, String?>> = emptyMap(),
+    invoiceFileName: String? = null
 ): SupplierOfferDto = SupplierOfferDto(
     id = this.id,
     number = this.number,
@@ -171,5 +172,10 @@ internal fun SupplierOffersRecord.toDto(
         val item = nomenclature[line.nomenclatureId]
         line.toDto(item?.first, item?.second)
     },
-    totals = totals?.let { SupplierOfferTotalsDto(it.first.toPlainString(), it.second.toPlainString(), it.third.toPlainString()) }
+    totals = totals?.let { SupplierOfferTotalsDto(it.first.toPlainString(), it.second.toPlainString(), it.third.toPlainString()) },
+    invoiceDocumentId = this.invoiceDocumentId,
+    invoiceNumber = this.invoiceNumber,
+    invoiceDate = this.invoiceDate?.toString(),
+    invoiceFileName = invoiceFileName,
+    revisionNote = this.revisionNote
 )

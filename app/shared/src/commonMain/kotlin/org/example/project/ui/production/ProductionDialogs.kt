@@ -72,12 +72,17 @@ private fun CreateOrderDialog(state: ProductionUiState, viewModel: ProductionVie
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             state.operationError?.let { ErrorMessageCard(error = it) }
-            if (state.modelsAccessDenied || state.models.isEmpty()) {
+            if (state.modelsAccessDenied) {
                 Text(
-                    text = "Справочник изделий недоступен (нужно право bom:read_any). " +
-                        "Создать заказ нельзя, обратитесь к администратору.",
+                    text = "Справочник изделий недоступен (нужно право bom:read_any). Обратитесь к администратору.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Brand.Rose
+                )
+            } else if (state.models.isEmpty()) {
+                Text(
+                    text = "В справочнике BOM пока нет ни одного изделия. Сначала создайте модель в разделе «Спецификации (BOM)».",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Brand.Amber
                 )
             }
             ProjectDropdown(

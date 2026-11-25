@@ -13,18 +13,22 @@ import org.example.project.dto.ApiError
 import org.example.project.dto.CreateNomenclatureBarcodeRequest
 import org.example.project.dto.CreateNomenclatureRequest
 import org.example.project.dto.CreateReceiptRequest
+import org.example.project.dto.ExpectedReceiptLineDto
 import org.example.project.dto.LinkReceiptRequest
 import org.example.project.dto.CreateReservationRequest
 import org.example.project.dto.CreateStorageLocationRequest
 import org.example.project.dto.CreateWarehouseRequest
 import org.example.project.dto.NomenclatureDto
 import org.example.project.dto.PostReceiptRequest
+import org.example.project.dto.QuickReceiveOrderRequest
 import org.example.project.dto.ReceiptDto
 import org.example.project.dto.ReceiptLineInput
+import org.example.project.dto.ReceiptSourceType
 import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
+import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.StorageLocationKind
 import org.example.project.dto.StorageLocationPurpose
 import org.example.project.dto.CancelTransferRequest
@@ -105,7 +109,10 @@ class WmsViewModel(
                 loadStock()
             }
             WmsTab.STOCK -> loadStock()
-            WmsTab.RECEIPTS -> loadReceipts()
+            WmsTab.RECEIPTS -> {
+                loadReceipts()
+                loadExpectedReceipts()
+            }
             WmsTab.RESERVATIONS -> loadReservations()
             WmsTab.TRANSFERS -> loadTransfers()
             WmsTab.ISSUES -> loadIssues()
@@ -203,16 +210,43 @@ class WmsViewModel(
         _uiState.value = _uiState.value.copy(isLoading = true, operationError = null)
         viewModelScope.launch {
             when (val result = repository.listLocations(warehouseId)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
-                    locations = result.data,
-                    locationFilterWarehouseId = warehouseId,
-                    isLoading = false,
-                    operationError = null
-                )
+                is ApiResult.Success -> {
+                    val updatedMap = _uiState.value.locationsByWarehouse.toMutableMap()
+                    updatedMap[warehouseId] = result.data
+                    _uiState.value = _uiState.value.copy(
+                        locations = result.data,
+                        locationsByWarehouse = updatedMap,
+                        locationFilterWarehouseId = warehouseId,
+                        isLoading = false,
+                        operationError = null
+                    )
+                }
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     operationError = result.error
                 )
+            }
+        }
+    }
+
+    private val loadingWarehouseLocationIds = mutableSetOf<Long>()
+
+    /** Подгружает ячейки склада в кэш (для карточек быстрой приёмки заказов). */
+    fun ensureWarehouseLocationsLoaded(warehouseId: Long) {
+        if (_uiState.value.locationsByWarehouse.containsKey(warehouseId)) return
+        if (!loadingWarehouseLocationIds.add(warehouseId)) return
+        viewModelScope.launch {
+            try {
+                when (val result = repository.listLocations(warehouseId)) {
+                    is ApiResult.Success -> {
+                        val updatedMap = _uiState.value.locationsByWarehouse.toMutableMap()
+                        updatedMap[warehouseId] = result.data
+                        _uiState.value = _uiState.value.copy(locationsByWarehouse = updatedMap)
+                    }
+                    is ApiResult.Error -> Unit
+                }
+            } finally {
+                loadingWarehouseLocationIds.remove(warehouseId)
             }
         }
     }
@@ -641,14 +675,16 @@ class WmsViewModel(
 
     /** Ожидаемые к приёмке позиции: «заказано / поставлено / принято / осталось». */
     fun loadExpectedReceipts(purchaseOrderId: Long? = null) {
-        _uiState.value = _uiState.value.copy(operationError = null)
+        _uiState.value = _uiState.value.copy(expectedReceiptsLoading = true, operationError = null)
         viewModelScope.launch {
             when (val result = repository.listExpectedReceipts(purchaseOrderId)) {
                 is ApiResult.Success -> _uiState.value = _uiState.value.copy(
                     expectedReceipts = result.data,
-                    expectedReceiptsLoaded = true
+                    expectedReceiptsLoaded = true,
+                    expectedReceiptsLoading = false
                 )
                 is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    expectedReceiptsLoading = false,
                     operationError = result.error
                 )
             }
@@ -657,6 +693,82 @@ class WmsViewModel(
 
     fun hideExpectedReceipts() {
         _uiState.value = _uiState.value.copy(expectedReceipts = emptyList(), expectedReceiptsLoaded = false)
+    }
+
+    /** Приёмка оплаченного/отправленного заказа на склад в 1 клик (D-64). */
+    fun quickReceiveOrder(orderId: Long, warehouseId: Long, locationId: Long) {
+        if (documentCommandInFlight) return
+        documentCommandInFlight = true
+        _uiState.value = _uiState.value.copy(
+            quickReceivingOrderId = orderId,
+            operationError = null,
+            successMessage = null
+        )
+        viewModelScope.launch {
+            try {
+                when (val result = repository.quickReceiveOrder(
+                    QuickReceiveOrderRequest(
+                        orderId = orderId,
+                        warehouseId = warehouseId,
+                        locationId = locationId
+                    )
+                )) {
+                    is ApiResult.Success -> {
+                        _uiState.value = _uiState.value.copy(
+                            quickReceivingOrderId = null,
+                            operationError = null,
+                            successMessage = "Приёмка проведена, остатки обновлены, снабжение и ведущий уведомлены"
+                        )
+                        loadExpectedReceipts()
+                        loadReceipts()
+                        loadStock()
+                    }
+                    is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                        quickReceivingOrderId = null,
+                        operationError = result.error
+                    )
+                }
+            } finally {
+                documentCommandInFlight = false
+            }
+        }
+    }
+
+    /** Открывает стандартный диалог приёмки с предзаполненным заказом (частичная приёмка / с расхождением). */
+    fun openCreateReceiptForOrder(
+        orderId: Long,
+        orderNumber: String,
+        lines: List<ExpectedReceiptLineDto>,
+        warehouseId: Long?,
+        locationId: Long?
+    ) {
+        val cachedLocations = warehouseId?.let { _uiState.value.locationsByWarehouse[it] }.orEmpty()
+        val effectiveLocationId = locationId ?: defaultQuickReceiveLocationId(cachedLocations)
+        val lineForms = lines
+            .filter { (it.notAcceptedQuantity.replace(',', '.').toDoubleOrNull() ?: 0.0) > 0.0 }
+            .mapIndexed { index, line ->
+                CreateReceiptLineForm(
+                    lineNo = index + 1,
+                    nomenclatureId = line.nomenclatureId,
+                    expectedQuantity = plainQuantity(line.notAcceptedQuantity),
+                    receivedQuantity = "",
+                    locationId = effectiveLocationId,
+                    purchaseOrderLineId = line.orderLineId
+                )
+            }
+        _uiState.value = _uiState.value.copy(
+            createReceiptForm = CreateReceiptForm(
+                sourceType = ReceiptSourceType.PURCHASE_ORDER,
+                sourceDocumentNo = orderNumber,
+                purchaseOrderId = orderId,
+                warehouseId = warehouseId,
+                lines = lineForms
+            ),
+            receiptLocations = cachedLocations,
+            activeDialog = WmsDialog.CreateReceipt,
+            operationError = null
+        )
+        warehouseId?.let { loadReceiptLocations(it) }
     }
 
     fun updateReceiptLinkOrderId(value: String) {
@@ -2251,7 +2363,22 @@ class WmsViewModel(
     private fun loadReceiptLocations(warehouseId: Long) {
         viewModelScope.launch {
             when (val result = repository.listLocations(warehouseId)) {
-                is ApiResult.Success -> _uiState.value = _uiState.value.copy(receiptLocations = result.data)
+                is ApiResult.Success -> {
+                    val updatedMap = _uiState.value.locationsByWarehouse.toMutableMap()
+                    updatedMap[warehouseId] = result.data
+                    val form = _uiState.value.createReceiptForm
+                    val defaultLocId = defaultQuickReceiveLocationId(result.data)
+                    val updatedForm = if (form.warehouseId == warehouseId && defaultLocId != null && form.lines.any { it.locationId == null }) {
+                        form.copy(lines = form.lines.map { if (it.locationId == null) it.copy(locationId = defaultLocId) else it })
+                    } else {
+                        form
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        receiptLocations = result.data,
+                        locationsByWarehouse = updatedMap,
+                        createReceiptForm = updatedForm
+                    )
+                }
                 is ApiResult.Error -> { }
             }
         }
@@ -2372,12 +2499,26 @@ class WmsViewModel(
         val code = _uiState.value.barcodeQuery.trim()
         if (code.isEmpty()) return
         _uiState.value = _uiState.value.copy(operationError = null, barcodeResult = null)
+        val localMatch = _uiState.value.nomenclature.firstOrNull { item ->
+            item.code.equals(code, ignoreCase = true) ||
+                item.barcodes.any { it.barcode.equals(code, ignoreCase = true) }
+        }
+        if (localMatch != null) {
+            _uiState.value = _uiState.value.copy(barcodeResult = localMatch)
+            return
+        }
         viewModelScope.launch {
             when (val res = repository.findByBarcode(code)) {
                 is ApiResult.Success<*> -> _uiState.value = _uiState.value.copy(
                     barcodeResult = (res as ApiResult.Success<org.example.project.dto.NomenclatureDto>).data
                 )
-                is ApiResult.Error -> _uiState.value = _uiState.value.copy(operationError = res.error)
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    operationError = if (res.error.code == "NOT_FOUND") {
+                        ApiError("NOT_FOUND", "Номенклатура со штрихкодом или артикулом «$code» не найдена.")
+                    } else {
+                        res.error
+                    }
+                )
             }
         }
     }
@@ -2395,6 +2536,9 @@ data class WmsUiState(
     val receiptFilters: ReceiptFilters = ReceiptFilters(),
     val expectedReceipts: List<org.example.project.dto.ExpectedReceiptLineDto> = emptyList(),
     val expectedReceiptsLoaded: Boolean = false,
+    val expectedReceiptsLoading: Boolean = false,
+    val quickReceivingOrderId: Long? = null,
+    val locationsByWarehouse: Map<Long, List<StorageLocationDto>> = emptyMap(),
     val receiptLinkOrderId: String = "",
     val receiptLinkDocumentNo: String = "",
     val receiptLinkReason: String = "",
@@ -2685,3 +2829,16 @@ data class CreateInventoryForm(
 /** «6.0000» → «6»: количество для поля ввода без лишних нулей. */
 private fun plainQuantity(raw: String): String =
     if (raw.contains('.')) raw.trimEnd('0').trimEnd('.') else raw
+
+/** Первая обычная активная ячейка склада для быстрой приёмки без лишних кликов. */
+internal fun defaultQuickReceiveLocationId(locations: List<StorageLocationDto>): Long? {
+    val active = locations.filter { it.active && it.code != TRANSIT_LOCATION_CODE }
+    val nonQuarantine = active.filter {
+        it.purpose !in setOf(StorageLocationPurpose.QUARANTINE, StorageLocationPurpose.DEFECT)
+    }
+    return nonQuarantine.firstOrNull {
+        it.kind == StorageLocationKind.CELL && it.purpose == StorageLocationPurpose.STORAGE
+    }?.id
+        ?: nonQuarantine.firstOrNull { it.kind == StorageLocationKind.CELL }?.id
+        ?: nonQuarantine.firstOrNull()?.id
+}

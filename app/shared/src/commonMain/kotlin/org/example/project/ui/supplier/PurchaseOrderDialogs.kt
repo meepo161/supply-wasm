@@ -46,15 +46,21 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
         onConfirm = viewModel::createOrder,
         confirmEnabled = !state.isActionRunning && form.offerId != null,
         confirmGradient = Gradients.Berry,
-        width = 680.dp
+        width = 680.dp,
+        scrollToTopKey = state.operationError
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             state.operationError?.let { ErrorMessageCard(error = it) }
+            val availableOffers = state.selectedOffers.filter { offer ->
+                state.orders.none {
+                    it.offerId == offer.id && it.status != org.example.project.dto.PurchaseOrderStatus.CANCELLED
+                }
+            }
             SelectedOfferDropdown(
-                offers = state.selectedOffers,
+                offers = availableOffers,
                 selectedId = form.offerId,
                 onSelect = viewModel::selectOfferForOrder,
                 modifier = Modifier.fillMaxWidth(),

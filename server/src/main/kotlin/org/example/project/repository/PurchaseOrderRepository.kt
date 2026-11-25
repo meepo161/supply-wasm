@@ -12,6 +12,7 @@ import org.example.project.generated.jooq.tables.PurchaseOrders.PURCHASE_ORDERS
 import org.example.project.generated.jooq.tables.SupplierOfferLines.SUPPLIER_OFFER_LINES
 import org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS
 import org.example.project.generated.jooq.tables.Suppliers.SUPPLIERS
+import org.example.project.generated.jooq.tables.Users.USERS
 import org.example.project.generated.jooq.tables.records.PurchaseDeliveriesRecord
 import org.example.project.generated.jooq.tables.records.PurchaseDeliveryLinesRecord
 import org.example.project.generated.jooq.tables.records.PurchaseIdempotencyKeysRecord
@@ -97,13 +98,19 @@ class PurchaseOrderRepository(private val dsl: DSLContext) {
         note: String?,
         responsibleId: Long,
         expectedAt: LocalDate?,
-        createdBy: Long
+        createdBy: Long,
+        status: String = "DRAFT",
+        approvedBy: Long? = null,
+        approvedAt: OffsetDateTime? = null,
+        orderedAt: OffsetDateTime? = null,
+        paidAt: OffsetDateTime? = null,
+        paidBy: Long? = null
     ): PurchaseOrdersRecord {
         val record = dsl.newRecord(PURCHASE_ORDERS)
         record.number = number
         record.supplierId = supplierId
         record.offerId = offerId
-        record.status = "DRAFT"
+        record.status = status
         record.currency = currency
         record.deliveryAddress = deliveryAddress
         record.paymentTerms = paymentTerms
@@ -112,9 +119,77 @@ class PurchaseOrderRepository(private val dsl: DSLContext) {
         record.note = note
         record.responsibleId = responsibleId
         record.expectedAt = expectedAt
+        record.approvedBy = approvedBy
+        record.approvedAt = approvedAt
+        record.orderedAt = orderedAt
+        record.paidAt = paidAt
+        record.paidBy = paidBy
         record.createdBy = createdBy
         record.store()
         return findOrderById(record.id)!!
+    }
+
+    fun markOrderPaid(orderId: Long, paidBy: Long, now: OffsetDateTime): PurchaseOrdersRecord? {
+        val order = lockOrderById(orderId) ?: return null
+        val set = mutableMapOf<org.jooq.Field<*>, Any?>()
+        if (order.status in listOf("DRAFT", "PENDING_APPROVAL", "APPROVED")) {
+            set[PURCHASE_ORDERS.STATUS] = "SENT"
+            if (order.approvedBy == null) set[PURCHASE_ORDERS.APPROVED_BY] = paidBy
+            if (order.approvedAt == null) set[PURCHASE_ORDERS.APPROVED_AT] = now
+            if (order.orderedAt == null) set[PURCHASE_ORDERS.ORDERED_AT] = now
+            set[PURCHASE_ORDERS.REAPPROVAL_REQUIRED] = false
+            set[PURCHASE_ORDERS.REAPPROVAL_REASON] = null
+        }
+        if (order.paidAt == null) {
+            set[PURCHASE_ORDERS.PAID_AT] = now
+            set[PURCHASE_ORDERS.PAID_BY] = paidBy
+        }
+        set[PURCHASE_ORDERS.UPDATED_AT] = now
+        set[PURCHASE_ORDERS.UPDATED_BY] = paidBy
+        set[PURCHASE_ORDERS.VERSION] = PURCHASE_ORDERS.VERSION.plus(1)
+        dsl.update(PURCHASE_ORDERS).set(set)
+            .where(PURCHASE_ORDERS.ID.eq(orderId))
+            .execute()
+        return findOrderById(orderId)
+    }
+
+    fun placeOrderSent(
+        orderId: Long,
+        actorId: Long,
+        now: OffsetDateTime,
+        expectedAt: LocalDate? = null,
+        invoiceNo: String? = null,
+        paymentTerms: String? = null,
+        deliveryAddress: String? = null,
+        note: String? = null,
+        markPaid: Boolean = false
+    ): PurchaseOrdersRecord? {
+        val order = lockOrderById(orderId) ?: return null
+        val set = mutableMapOf<org.jooq.Field<*>, Any?>()
+        if (order.status in listOf("DRAFT", "PENDING_APPROVAL", "APPROVED")) {
+            set[PURCHASE_ORDERS.STATUS] = "SENT"
+            if (order.approvedBy == null) set[PURCHASE_ORDERS.APPROVED_BY] = actorId
+            if (order.approvedAt == null) set[PURCHASE_ORDERS.APPROVED_AT] = now
+            if (order.orderedAt == null) set[PURCHASE_ORDERS.ORDERED_AT] = now
+            set[PURCHASE_ORDERS.REAPPROVAL_REQUIRED] = false
+            set[PURCHASE_ORDERS.REAPPROVAL_REASON] = null
+        }
+        expectedAt?.let { set[PURCHASE_ORDERS.EXPECTED_AT] = it }
+        invoiceNo?.let { set[PURCHASE_ORDERS.INVOICE_NO] = it }
+        paymentTerms?.let { set[PURCHASE_ORDERS.PAYMENT_TERMS] = it }
+        deliveryAddress?.let { set[PURCHASE_ORDERS.DELIVERY_ADDRESS] = it }
+        note?.let { set[PURCHASE_ORDERS.NOTE] = it }
+        if (markPaid && order.paidAt == null) {
+            set[PURCHASE_ORDERS.PAID_AT] = now
+            set[PURCHASE_ORDERS.PAID_BY] = actorId
+        }
+        set[PURCHASE_ORDERS.UPDATED_AT] = now
+        set[PURCHASE_ORDERS.UPDATED_BY] = actorId
+        set[PURCHASE_ORDERS.VERSION] = PURCHASE_ORDERS.VERSION.plus(1)
+        dsl.update(PURCHASE_ORDERS).set(set)
+            .where(PURCHASE_ORDERS.ID.eq(orderId))
+            .execute()
+        return findOrderById(orderId)
     }
 
     fun insertOrderLines(orderId: Long, lines: List<NewOrderLine>, createdBy: Long) {
@@ -316,6 +391,35 @@ class PurchaseOrderRepository(private val dsl: DSLContext) {
             .from(PURCHASE_ORDER_DEMANDS)
             .where(PURCHASE_ORDER_DEMANDS.DEMAND_ID.eq(demandId))
             .fetch(PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID)
+
+    fun listOrdersForDemand(demandId: Long): List<PurchaseOrdersRecord> {
+        val orderIds = listOrderIdsForDemand(demandId)
+        if (orderIds.isEmpty()) return emptyList()
+        return dsl.selectFrom(PURCHASE_ORDERS)
+            .where(PURCHASE_ORDERS.ID.`in`(orderIds))
+            .orderBy(PURCHASE_ORDERS.ID.desc())
+            .fetch()
+    }
+
+    fun findUserNames(userIds: Collection<Long>): Map<Long, String> {
+        val ids = userIds.distinct()
+        if (ids.isEmpty()) return emptyMap()
+        return dsl.select(USERS.ID, USERS.FULL_NAME)
+            .from(USERS)
+            .where(USERS.ID.`in`(ids))
+            .fetch()
+            .associate { it.get(USERS.ID)!! to it.get(USERS.FULL_NAME)!! }
+    }
+
+    fun findOfferInvoiceDocumentIds(offerIds: Collection<Long>): Map<Long, Long?> {
+        val ids = offerIds.distinct()
+        if (ids.isEmpty()) return emptyMap()
+        return dsl.select(SUPPLIER_OFFERS.ID, SUPPLIER_OFFERS.INVOICE_DOCUMENT_ID)
+            .from(SUPPLIER_OFFERS)
+            .where(SUPPLIER_OFFERS.ID.`in`(ids))
+            .fetch()
+            .associate { it.get(SUPPLIER_OFFERS.ID)!! to it.get(SUPPLIER_OFFERS.INVOICE_DOCUMENT_ID) }
+    }
 
     fun findDemandById(id: Long) = dsl.selectFrom(DEMANDS).where(DEMANDS.ID.eq(id)).fetchOne()
 

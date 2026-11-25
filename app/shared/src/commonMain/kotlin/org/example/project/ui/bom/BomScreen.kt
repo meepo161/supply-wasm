@@ -178,7 +178,9 @@ private fun ModelsPage(
                 }
             }
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.activeDialog == null) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+        }
         if (state.isLoading && state.models.isEmpty()) {
             LoadingOverlay()
         } else if (state.models.isEmpty()) {
@@ -215,7 +217,9 @@ private fun ModelDetailPage(
             createLabel = "Новая ревизия",
             canCreate = viewModel.hasPermission("bom", "create")
         )
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.activeDialog == null) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+        }
         if (state.isLoading && state.revisions.isEmpty()) {
             LoadingOverlay()
         } else if (state.revisions.isEmpty()) {
@@ -271,7 +275,9 @@ private fun RevisionDetailPage(
             return@Column
         }
         RevisionInfoCard(revision, state.revisionLines, viewModel)
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.activeDialog == null) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+        }
         if (state.isLoading && state.revisionLines.isEmpty()) {
             LoadingOverlay()
         } else if (state.revisionLines.isEmpty()) {
@@ -430,7 +436,9 @@ private fun ExplodePage(
             text = "Ревизия: ${report.revisionNumber}, выпуск: ${report.releaseQuantity}",
             style = MaterialTheme.typography.bodyMedium
         )
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.activeDialog == null) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+        }
         Text(text = "Дерево", style = MaterialTheme.typography.titleMedium)
         if (report.lines.isEmpty()) {
             Text("Нет строк.", style = MaterialTheme.typography.bodyMedium)
@@ -538,7 +546,9 @@ private fun BomRevisionDiffDialog(
                     }
                 }
             }
+            if (state.activeDialog == null) {
             state.operationError?.let { ErrorMessageCard(error = it) }
+        }
             val diff = state.revisionDiff
             if (diff != null) {
                 if (diff.items.isEmpty()) {
@@ -604,7 +614,9 @@ private fun BomWhereUsedDialog(
                     }
                 }
             }
+            if (state.activeDialog == null) {
             state.operationError?.let { ErrorMessageCard(error = it) }
+        }
             if (state.whereUsedItems.isEmpty()) {
                 Text("Компонент не используется ни в одной ревизии BOM.")
             } else {

@@ -471,6 +471,15 @@ class ApprovalRoutesTest {
         }
         assertEquals(HttpStatusCode.Created, createResponse.status, createResponse.bodyAsText())
         val demand = createResponse.bodyAs<ApiResponse<DemandDetailDto>>().data!!
+        PGSimpleDataSource().apply {
+            setUrl(TEST_URL)
+            user = USER
+            password = PASSWORD
+        }.connection.use { conn ->
+            conn.createStatement().execute(
+                "UPDATE demands SET status = 'DRAFT', approved_by = NULL, approved_at = NULL WHERE id = ${demand.header.id}"
+            )
+        }
         val submitResponse = client.post("/api/demands/${demand.header.id}/submit") {
             contentType(ContentType.Application.Json)
             setBody(stringify(SubmitDemandRequest(demand.header.version)))

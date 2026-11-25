@@ -210,7 +210,9 @@ private fun DocumentListPage(
                 }
             }
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.activeDialog == null) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+        }
         if (state.isLoading && state.documents.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 GradientSpinner()
@@ -252,7 +254,9 @@ private fun DocumentDetailPage(
             }
             return@Column
         }
-        state.operationError?.let { ErrorMessageCard(error = it) }
+        if (state.activeDialog == null) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+        }
         DocumentHeaderCard(document, state, viewModel)
         VersionsSection(document, state, viewModel)
         LinksSection(document, state, viewModel)

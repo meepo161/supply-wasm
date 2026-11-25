@@ -254,6 +254,53 @@ class BomService(
         })
     }
 
+    internal fun ensureRevisionReadyForHandoff(
+        revisionId: Long,
+        currentUser: CurrentUser
+    ): org.example.project.generated.jooq.tables.records.ProductRevisionsRecord {
+        return dsl.transactionResult(TransactionalCallable {
+            val revision = bomRepository.findRevisionById(revisionId)
+                ?: throw NotFoundException("bom_revision", revisionId)
+            when (revision.status) {
+                "APPROVED", "ACTIVE" -> revision
+                "DRAFT" -> {
+                    currentUser.requirePermission("bom", "approve")
+                    validateRevisionLinesForApproval(revisionId)
+                    val approved = bomRepository.updateRevisionStatus(
+                        id = revisionId,
+                        expectedVersion = revision.version,
+                        fromStatus = "DRAFT",
+                        newStatus = "APPROVED",
+                        approvedBy = currentUser.userId,
+                        approvedAt = OffsetDateTime.now()
+                    ) ?: throw ConflictException("BOM revision was modified concurrently")
+                    auditService.log(
+                        currentUser.userId, "APPROVE", "BOM_REVISION", revisionId,
+                        mapOf("revisionNumber" to approved.revisionNumber, "status" to "APPROVED")
+                    )
+                    bomRepository.setActiveRevisionReplacing(
+                        modelId = approved.productModelId,
+                        activeRevisionId = revisionId
+                    )
+                    val activated = bomRepository.updateRevisionStatus(
+                        id = revisionId,
+                        expectedVersion = approved.version,
+                        fromStatus = "APPROVED",
+                        newStatus = "ACTIVE"
+                    ) ?: throw ConflictException("BOM revision was modified concurrently")
+                    auditService.log(
+                        currentUser.userId, "ACTIVATE", "BOM_REVISION", revisionId,
+                        mapOf("revisionNumber" to activated.revisionNumber, "status" to "ACTIVE")
+                    )
+                    activated
+                }
+                else -> throw ConflictException(
+                    "Demand can only be created from DRAFT (with bom:approve), APPROVED or ACTIVE BOM revision"
+                )
+            }
+        })
+    }
+
     fun replaceRevision(
         id: Long,
         request: TransitionBomRevisionRequest,

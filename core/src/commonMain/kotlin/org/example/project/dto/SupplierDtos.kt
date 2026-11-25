@@ -237,6 +237,7 @@ data class SetSupplierCategoriesRequest(
 enum class SupplierOfferStatus {
     RECEIVED,
     SHORTLISTED,
+    NEEDS_REVISION,
     SELECTED,
     REJECTED,
     WITHDRAWN,
@@ -308,7 +309,12 @@ data class SupplierOfferDto(
     val createdBy: Long,
     val version: Long = 0,
     val lines: List<SupplierOfferLineDto> = emptyList(),
-    val totals: SupplierOfferTotalsDto? = null
+    val totals: SupplierOfferTotalsDto? = null,
+    val invoiceDocumentId: Long? = null,
+    val invoiceNumber: String? = null,
+    val invoiceDate: String? = null,
+    val invoiceFileName: String? = null,
+    val revisionNote: String? = null
 )
 
 @Serializable
@@ -325,20 +331,23 @@ data class CreateSupplierOfferRequest(
     val demandId: Long,
     val supplierId: Long,
     val currency: String = "RUB",
-    val compliance: SupplierOfferCompliance = SupplierOfferCompliance.UNKNOWN,
+    val compliance: SupplierOfferCompliance = SupplierOfferCompliance.FULL,
     val complianceNote: String? = null,
-    val documentsComplete: Boolean = false,
+    val documentsComplete: Boolean = true,
     val deliveryDays: Int? = null,
     val deliveryTerms: String? = null,
     val deliveryCost: String? = null,
     val paymentTerms: String? = null,
     val warrantyMonths: Int? = null,
-    val validUntil: String,
+    val validUntil: String = "",
     val supplierContactName: String? = null,
     val supplierContactChannel: String? = null,
     val note: String? = null,
     val lines: List<SupplierOfferLineInput>,
-    val idempotencyKey: String? = null
+    val idempotencyKey: String? = null,
+    val invoiceDocumentId: Long? = null,
+    val invoiceNumber: String? = null,
+    val invoiceDate: String? = null
 )
 
 @Serializable
@@ -354,18 +363,26 @@ data class UpdateSupplierOfferRequest(
     val validUntil: String? = null,
     val note: String? = null,
     val lines: List<SupplierOfferLineInput>? = null,
-    val version: Long
+    val version: Long,
+    val invoiceDocumentId: Long? = null,
+    val invoiceNumber: String? = null,
+    val invoiceDate: String? = null
 )
 
 /**
- * Выбор предпочтительного предложения инициатором (D-28).
- * Обоснование обязательно: выбор не может быть «просто минимальная цена».
+ * Выбор предпочтительного предложения инициатором (D-28, D-64).
  */
 @Serializable
 data class SelectSupplierOfferRequest(
-    val reason: String,
+    val reason: String = "Выбрано инициатором потребности",
     val version: Long,
     val idempotencyKey: String? = null
+)
+
+@Serializable
+data class ReturnOfferForRevisionRequest(
+    val reason: String,
+    val version: Long
 )
 
 @Serializable
@@ -410,7 +427,11 @@ data class SupplierOfferComparisonColumnDto(
     val netTotal: String,
     val grossTotal: String,
     val supplierVerified: Boolean,
-    val lines: List<SupplierOfferComparisonLineDto> = emptyList()
+    val lines: List<SupplierOfferComparisonLineDto> = emptyList(),
+    val invoiceDocumentId: Long? = null,
+    val invoiceNumber: String? = null,
+    val invoiceFileName: String? = null,
+    val revisionNote: String? = null
 )
 
 /** Предупреждения сравнения: то, что нельзя игнорировать при выборе. */

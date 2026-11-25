@@ -320,6 +320,7 @@ class SupplierInvoiceRoutesTest {
             encode(SupplierVerificationRequest(SupplierVerificationStatus.VERIFIED, "Проверен", supplier.supplier.version, newKey("ver")))
         )
         assertEquals(HttpStatusCode.OK, verified.status, verified.bodyAsText())
+        val offerInvoiceDocId = uploadInvoiceFile(buyer.client)
         val offer = buyer.client.postOk<CreateSupplierOfferRequest, SupplierOfferDto>(
             "/api/supplier-offers",
             CreateSupplierOfferRequest(
@@ -327,7 +328,8 @@ class SupplierInvoiceRoutesTest {
                 documentsComplete = true, deliveryDays = 25, paymentTerms = "100% предоплата",
                 validUntil = LocalDate.now().plusDays(30).toString(),
                 lines = listOf(SupplierOfferLineInput(demand.lines.first().id, "3", "2220.00", "20")),
-                idempotencyKey = newKey("offer")
+                idempotencyKey = newKey("offer"),
+                invoiceDocumentId = offerInvoiceDocId
             ),
             HttpStatusCode.Created
         )

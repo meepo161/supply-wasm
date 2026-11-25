@@ -47,6 +47,7 @@ fun String.historyActionTitle(): String = when (this) {
     "SEND" -> "Отправлен поставщику"
     "DELIVERY_REGISTERED" -> "Зарегистрирована поставка"
     "DELIVERY_CANCELLED" -> "Поставка отменена"
+    "RECEIPT_POSTED" -> "Проведена приёмка на склад"
     "CLOSE" -> "Закрыт"
     "CANCELLED" -> "Отменён"
     else -> this

@@ -31,5 +31,6 @@ fun Application.configureHTTP(config: AppConfig) {
         allowHeader(HttpHeaders.ContentType)
         allowCredentials = true
         exposeHeader(HttpHeaders.ContentType)
+        exposeHeader(HttpHeaders.ContentDisposition)
     }
 }

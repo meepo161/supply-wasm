@@ -91,7 +91,7 @@ fun ProjectListScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Всего ${projects.size} · в работе ${projects.count { it.status == ProjectStatus.IN_PROGRESS }}",
+                        text = "Всего ${projects.size} · в работе ${projects.count { it.status == ProjectStatus.IN_PROGRESS || it.status == ProjectStatus.PLANNED || it.status == ProjectStatus.ON_HOLD }}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

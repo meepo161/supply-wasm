@@ -136,7 +136,10 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 SupplierStatusDropdown(
                     selected = state.statusFilter,
                     onSelect = viewModel::updateStatusFilter,
@@ -219,7 +222,10 @@ private fun SupplierCardPane(
                 }
             }
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 if (viewModel.canManage()) {
                     SoftButton(text = "Править карточку", onClick = { viewModel.showDialog(SupplierDialog.EditSupplier) })
                 }
@@ -525,6 +531,9 @@ private fun ComparisonPane(
                             canSelect = viewModel.canSelect(),
                             onEdit = if (viewModel.canEditOffer(column.status)) {
                                 { viewModel.openEditOffer(column.offerId) }
+                            } else null,
+                            onOpenInvoice = if (column.invoiceDocumentId != null || !column.invoiceFileName.isNullOrBlank()) {
+                                { viewModel.openOfferInvoice(column.offerId, column.invoiceFileName, preview = true) }
                             } else null
                         )
                         Spacer(Modifier.height(10.dp))
@@ -570,7 +579,8 @@ private fun ComparisonCard(
     onSelect: () -> Unit,
     onClearSelection: () -> Unit,
     canSelect: Boolean,
-    onEdit: (() -> Unit)? = null
+    onEdit: (() -> Unit)? = null,
+    onOpenInvoice: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -623,6 +633,12 @@ private fun ComparisonCard(
                     onClick = onSelect,
                     tint = Brand.Mint
                 )
+            }
+            onOpenInvoice?.let {
+                val invoiceTitle = column.invoiceNumber?.takeIf { n -> n.isNotBlank() }
+                    ?: column.invoiceFileName?.takeIf { f -> f.isNotBlank() }
+                    ?: "PDF"
+                SoftButton(text = "📄 Открыть счёт ($invoiceTitle)", onClick = it, tint = Brand.Blue)
             }
             onEdit?.let { SoftButton(text = "Править предложение", onClick = it, tint = Brand.Blue) }
         }
@@ -700,7 +716,10 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                             )
                             Text(text = claim.description, style = MaterialTheme.typography.bodyMedium)
                             if (viewModel.canManage()) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                                     when (claim.status) {
                                         org.example.project.dto.SupplierClaimStatus.OPEN ->
                                             SoftButton(text = "Отправить", onClick = {

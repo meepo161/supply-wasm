@@ -138,7 +138,7 @@ class HomeViewModel(
                     if (pendingReceipts > 0) {
                         items.add(
                             HomeActionQueueItem(
-                                title = "Приёмки на складе",
+                                title = if (pendingReceipts == 1) "Приёмка на складе" else "Приёмки на складе",
                                 subtitle = "Укажите ячейки, количество и нажмите «Принять на склад»",
                                 count = pendingReceipts,
                                 destination = "WMS"

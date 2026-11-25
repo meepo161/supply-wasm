@@ -23,6 +23,7 @@ import org.example.project.generated.jooq.tables.ProductionOrders.PRODUCTION_ORD
 import org.example.project.generated.jooq.tables.ProjectChangeRequests.PROJECT_CHANGE_REQUESTS
 import org.example.project.generated.jooq.tables.ProjectMembers.PROJECT_MEMBERS
 import org.example.project.generated.jooq.tables.Projects.PROJECTS
+import org.example.project.generated.jooq.tables.PurchaseOrderDemands.PURCHASE_ORDER_DEMANDS
 import org.example.project.generated.jooq.tables.PurchaseOrderLines.PURCHASE_ORDER_LINES
 import org.example.project.generated.jooq.tables.PurchaseOrders.PURCHASE_ORDERS
 import org.example.project.generated.jooq.tables.StockBalance.STOCK_BALANCE
@@ -334,9 +335,22 @@ class ErpExtrasService(
         return dsl.transactionResult(TransactionalCallable {
             val sources = dsl.selectFrom(DEMANDS).where(DEMANDS.ID.`in`(ids)).forUpdate().fetch()
             if (sources.size != ids.size) throw NotFoundException("demand", ids.first())
-            val invalid = sources.firstOrNull { it.status !in listOf("DRAFT", "PENDING_APPROVAL") }
+            val invalid = sources.firstOrNull { it.status !in listOf("DRAFT", "PENDING_APPROVAL", "APPROVED") }
             if (invalid != null) {
                 throw ConflictException("Demand ${invalid.number} in status ${invalid.status} cannot be merged")
+            }
+            val orderedDemandNumber = dsl.select(DEMANDS.NUMBER)
+                .from(PURCHASE_ORDER_DEMANDS)
+                .join(PURCHASE_ORDERS).on(PURCHASE_ORDERS.ID.eq(PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID))
+                .join(DEMANDS).on(DEMANDS.ID.eq(PURCHASE_ORDER_DEMANDS.DEMAND_ID))
+                .where(PURCHASE_ORDER_DEMANDS.DEMAND_ID.`in`(ids))
+                .and(PURCHASE_ORDERS.STATUS.ne("CANCELLED"))
+                .limit(1)
+                .fetchOne(DEMANDS.NUMBER)
+            if (orderedDemandNumber != null) {
+                throw ConflictException(
+                    "Нельзя объединить потребность $orderedDemandNumber: по ней уже оформлен заказ поставщику"
+                )
             }
             val distinctProjects = sources.map { it.projectId }.distinct()
             if (distinctProjects.size > 1) {
@@ -344,12 +358,15 @@ class ErpExtrasService(
             }
             val first = sources.first()
             val number = "DMD-${Year.now().value}-${UUID.randomUUID().toString().take(8).uppercase()}"
+            val now = OffsetDateTime.now()
             val mergedId = dsl.insertInto(DEMANDS)
                 .set(DEMANDS.NUMBER, number)
                 .set(DEMANDS.SOURCE_TYPE, first.sourceType)
                 .set(DEMANDS.PROJECT_ID, first.projectId)
                 .set(DEMANDS.PRIORITY, first.priority)
-                .set(DEMANDS.STATUS, "DRAFT")
+                .set(DEMANDS.STATUS, "APPROVED")
+                .set(DEMANDS.APPROVED_BY, currentUser.userId)
+                .set(DEMANDS.APPROVED_AT, now)
                 .set(DEMANDS.STOCKPILE_NOTE, request.targetTitle?.trim()?.takeIf { it.isNotEmpty() } ?: request.reason?.trim() ?: "Объединённая потребность (${sources.joinToString(", ") { it.number }})")
                 .set(DEMANDS.INITIATOR_ID, currentUser.userId)
                 .set(DEMANDS.CREATED_BY, currentUser.userId)
@@ -377,7 +394,7 @@ class ErpExtrasService(
             dsl.insertInto(DEMAND_HISTORY)
                 .set(DEMAND_HISTORY.DEMAND_ID, mergedId)
                 .set(DEMAND_HISTORY.ACTION, "MERGED_CREATED")
-                .set(DEMAND_HISTORY.TO_STATUS, "DRAFT")
+                .set(DEMAND_HISTORY.TO_STATUS, "APPROVED")
                 .set(DEMAND_HISTORY.REASON, "Объединение: ${sources.joinToString(", ") { it.number }}")
                 .set(DEMAND_HISTORY.CHANGED_BY, currentUser.userId)
                 .execute()

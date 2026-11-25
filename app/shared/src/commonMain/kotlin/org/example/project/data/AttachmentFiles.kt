@@ -1,5 +1,7 @@
 package org.example.project.data
 
+import io.ktor.http.decodeURLPart
+
 /**
  * Открывает системный диалог выбора файла. Колбэк вызывается только
  * для реально выбранного пользователем файла; при отмене диалога
@@ -46,4 +48,24 @@ fun safeAttachmentFileName(fileName: String, id: Long): String {
         .trim()
         .trimEnd('.')
     return cleaned.ifBlank { "attachment-$id" }
+}
+
+internal fun extractContentDispositionFileName(header: String?): String? {
+    if (header.isNullOrBlank()) return null
+    val parts = header.split(';').map { it.trim() }
+    val starParam = parts.firstOrNull { it.startsWith("filename*=", ignoreCase = true) }
+    if (starParam != null) {
+        val rawValue = starParam.substringAfter('=').trim().removeSurrounding("\"")
+        val firstQuote = rawValue.indexOf('\'')
+        val secondQuote = if (firstQuote >= 0) rawValue.indexOf('\'', firstQuote + 1) else -1
+        val encoded = if (secondQuote >= 0) rawValue.substring(secondQuote + 1) else rawValue
+        val decoded = runCatching { encoded.decodeURLPart() }.getOrNull()
+        if (!decoded.isNullOrBlank()) return decoded
+    }
+    val plainParam = parts.firstOrNull { it.startsWith("filename=", ignoreCase = true) }
+    if (plainParam != null) {
+        val value = plainParam.substringAfter('=').trim().removeSurrounding("\"")
+        if (value.isNotBlank()) return value
+    }
+    return null
 }

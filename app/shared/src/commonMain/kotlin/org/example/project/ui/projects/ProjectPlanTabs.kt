@@ -568,8 +568,8 @@ private fun RiskCard(
             Text(
                 text = listOf(
                     risk.category.localizedName(),
-                    "вероятность ${risk.probability.localizedName()}",
-                    "влияние ${risk.impact.localizedName()}",
+                    "вероятность — ${risk.probability.localizedName()}",
+                    "влияние — ${risk.impact.localizedName()}",
                     risk.dueDate?.let { "срок ${it.toShortDate()}" }
                 ).filterNotNull().joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,

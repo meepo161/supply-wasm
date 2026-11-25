@@ -1,6 +1,8 @@
 package org.example.project.repository
 
 import org.example.project.generated.jooq.tables.BomLines.BOM_LINES
+import org.example.project.generated.jooq.tables.DemandHistory.DEMAND_HISTORY
+import org.example.project.generated.jooq.tables.DemandLineHistory.DEMAND_LINE_HISTORY
 import org.example.project.generated.jooq.tables.DemandLines.DEMAND_LINES
 import org.example.project.generated.jooq.tables.Demands.DEMANDS
 import org.example.project.generated.jooq.tables.Lots.LOTS
@@ -11,6 +13,7 @@ import org.example.project.generated.jooq.tables.NomenclatureUnitConversions.NOM
 import org.example.project.generated.jooq.tables.ProductRevisions.PRODUCT_REVISIONS
 import org.example.project.generated.jooq.tables.Projects.PROJECTS
 import org.example.project.generated.jooq.tables.PurchaseDeliveries.PURCHASE_DELIVERIES
+import org.example.project.generated.jooq.tables.PurchaseOrderDemands.PURCHASE_ORDER_DEMANDS
 import org.example.project.generated.jooq.tables.PurchaseOrderLines.PURCHASE_ORDER_LINES
 import org.example.project.generated.jooq.tables.PurchaseOrders.PURCHASE_ORDERS
 import org.example.project.generated.jooq.tables.ReceiptLinks.RECEIPT_LINKS
@@ -22,9 +25,14 @@ import org.example.project.generated.jooq.tables.SerialItems.SERIAL_ITEMS
 import org.example.project.generated.jooq.tables.StockBalance.STOCK_BALANCE
 import org.example.project.generated.jooq.tables.StockMovement.STOCK_MOVEMENT
 import org.example.project.generated.jooq.tables.StorageLocations.STORAGE_LOCATIONS
+import org.example.project.generated.jooq.tables.SupplierOfferLines.SUPPLIER_OFFER_LINES
+import org.example.project.generated.jooq.tables.SupplierOffers.SUPPLIER_OFFERS
+import org.example.project.generated.jooq.tables.Suppliers.SUPPLIERS
 import org.example.project.generated.jooq.tables.Tasks.TASKS
 import org.example.project.generated.jooq.tables.Users.USERS
 import org.example.project.generated.jooq.tables.Warehouses.WAREHOUSES
+import org.example.project.generated.jooq.tables.records.DemandLinesRecord
+import org.example.project.generated.jooq.tables.records.DemandsRecord
 import org.example.project.generated.jooq.tables.records.LotsRecord
 import org.example.project.generated.jooq.tables.records.NomenclatureBarcodesRecord
 import org.example.project.generated.jooq.tables.records.NomenclatureRecord
@@ -747,6 +755,358 @@ class WmsRepository(private val dsl: DSLContext) {
 
     fun findPurchaseDeliveryById(id: Long): PurchaseDeliveriesRecord? =
         dsl.selectFrom(PURCHASE_DELIVERIES).where(PURCHASE_DELIVERIES.ID.eq(id)).fetchOne()
+
+    data class ExpectedOrderEnrichment(
+        val supplierName: String?,
+        val isPaid: Boolean,
+        val paidAt: String?,
+        val offerId: Long?,
+        val invoiceDocumentId: Long?,
+        val demandNumbers: List<String>,
+        val invoiceNo: String? = null,
+        val projectId: Long? = null,
+        val projectNumber: String? = null,
+        val projectName: String? = null
+    )
+
+    data class ExpectedReceiptEnrichments(
+        val orders: Map<Long, ExpectedOrderEnrichment>,
+        val unitsByOrderLine: Map<Long, String>,
+        val nomenclature: Map<Long, Pair<String, String>>
+    )
+
+    fun expectedReceiptEnrichments(
+        orderIds: Collection<Long>,
+        orderLineIds: Collection<Long>,
+        nomenclatureIds: Collection<Long>
+    ): ExpectedReceiptEnrichments {
+        val distinctOrderIds = orderIds.distinct()
+        val distinctOrderLineIds = orderLineIds.distinct()
+        val distinctNomIds = nomenclatureIds.distinct()
+
+        val demandRowsByOrder = if (distinctOrderIds.isEmpty()) {
+            emptyMap()
+        } else {
+            dsl.select(
+                PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID,
+                DEMANDS.NUMBER,
+                DEMANDS.PROJECT_ID,
+                PROJECTS.NUMBER,
+                PROJECTS.NAME
+            )
+                .from(PURCHASE_ORDER_DEMANDS)
+                .join(DEMANDS).on(DEMANDS.ID.eq(PURCHASE_ORDER_DEMANDS.DEMAND_ID))
+                .leftJoin(PROJECTS).on(PROJECTS.ID.eq(DEMANDS.PROJECT_ID))
+                .where(PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID.`in`(distinctOrderIds))
+                .orderBy(DEMANDS.ID.asc())
+                .fetch()
+                .groupBy { it.get(PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID)!! }
+        }
+
+        val orders = if (distinctOrderIds.isEmpty()) {
+            emptyMap()
+        } else {
+            dsl.select(
+                PURCHASE_ORDERS.ID,
+                SUPPLIERS.NAME,
+                PURCHASE_ORDERS.PAID_AT,
+                PURCHASE_ORDERS.OFFER_ID,
+                PURCHASE_ORDERS.INVOICE_NO,
+                SUPPLIER_OFFERS.INVOICE_DOCUMENT_ID,
+                SUPPLIER_OFFERS.INVOICE_NUMBER
+            )
+                .from(PURCHASE_ORDERS)
+                .join(SUPPLIERS).on(SUPPLIERS.ID.eq(PURCHASE_ORDERS.SUPPLIER_ID))
+                .leftJoin(SUPPLIER_OFFERS).on(SUPPLIER_OFFERS.ID.eq(PURCHASE_ORDERS.OFFER_ID))
+                .where(PURCHASE_ORDERS.ID.`in`(distinctOrderIds))
+                .fetch()
+                .associate { r ->
+                    val id = r.get(PURCHASE_ORDERS.ID)!!
+                    val paidAt = r.get(PURCHASE_ORDERS.PAID_AT)
+                    val demandRows = demandRowsByOrder[id].orEmpty()
+                    val projectRow = demandRows.firstOrNull { it.get(DEMANDS.PROJECT_ID) != null }
+                    val invoiceNo = r.get(PURCHASE_ORDERS.INVOICE_NO)?.takeIf { it.isNotBlank() }
+                        ?: r.get(SUPPLIER_OFFERS.INVOICE_NUMBER)?.takeIf { it.isNotBlank() }
+                    id to ExpectedOrderEnrichment(
+                        supplierName = r.get(SUPPLIERS.NAME),
+                        isPaid = paidAt != null,
+                        paidAt = paidAt?.toString(),
+                        offerId = r.get(PURCHASE_ORDERS.OFFER_ID),
+                        invoiceDocumentId = r.get(SUPPLIER_OFFERS.INVOICE_DOCUMENT_ID),
+                        demandNumbers = demandRows.map { it.get(DEMANDS.NUMBER)!! },
+                        invoiceNo = invoiceNo,
+                        projectId = projectRow?.get(DEMANDS.PROJECT_ID),
+                        projectNumber = projectRow?.get(PROJECTS.NUMBER),
+                        projectName = projectRow?.get(PROJECTS.NAME)
+                    )
+                }
+        }
+
+        val unitsByOrderLine = if (distinctOrderLineIds.isEmpty()) {
+            emptyMap()
+        } else {
+            dsl.select(PURCHASE_ORDER_LINES.ID, PURCHASE_ORDER_LINES.UNIT)
+                .from(PURCHASE_ORDER_LINES)
+                .where(PURCHASE_ORDER_LINES.ID.`in`(distinctOrderLineIds))
+                .fetch()
+                .associate { it.get(PURCHASE_ORDER_LINES.ID)!! to it.get(PURCHASE_ORDER_LINES.UNIT)!! }
+        }
+
+        val nomenclature = if (distinctNomIds.isEmpty()) {
+            emptyMap()
+        } else {
+            dsl.select(NOMENCLATURE.ID, NOMENCLATURE.CODE, NOMENCLATURE.NAME)
+                .from(NOMENCLATURE)
+                .where(NOMENCLATURE.ID.`in`(distinctNomIds))
+                .fetch()
+                .associate { it.get(NOMENCLATURE.ID)!! to (it.get(NOMENCLATURE.CODE)!! to it.get(NOMENCLATURE.NAME)!!) }
+        }
+
+        return ExpectedReceiptEnrichments(orders, unitsByOrderLine, nomenclature)
+    }
+
+    fun findDraftReceiptForOrder(orderId: Long, warehouseId: Long): ReceiptsRecord? =
+        dsl.selectFrom(RECEIPTS)
+            .where(RECEIPTS.PURCHASE_ORDER_ID.eq(orderId))
+            .and(RECEIPTS.WAREHOUSE_ID.eq(warehouseId))
+            .and(RECEIPTS.STATUS.eq("DRAFT"))
+            .orderBy(RECEIPTS.ID.asc())
+            .limit(1)
+            .forUpdate()
+            .fetchOne()
+
+    fun prepareDraftLinesForQuickReceive(receiptId: Long, locationId: Long) {
+        dsl.update(RECEIPT_LINES)
+            .set(RECEIPT_LINES.RECEIVED_QUANTITY, RECEIPT_LINES.EXPECTED_QUANTITY)
+            .set(RECEIPT_LINES.LOCATION_ID, locationId)
+            .setNull(RECEIPT_LINES.DISCREPANCY_KIND)
+            .setNull(RECEIPT_LINES.DISCREPANCY_QUANTITY)
+            .setNull(RECEIPT_LINES.DISCREPANCY_REASON)
+            .where(RECEIPT_LINES.RECEIPT_ID.eq(receiptId))
+            .execute()
+    }
+
+    fun findDemandLineIdsForOrderLines(orderLineIds: Collection<Long>): List<Long> {
+        val ids = orderLineIds.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return dsl.selectDistinct(SUPPLIER_OFFER_LINES.DEMAND_LINE_ID)
+            .from(PURCHASE_ORDER_LINES)
+            .join(SUPPLIER_OFFER_LINES).on(SUPPLIER_OFFER_LINES.ID.eq(PURCHASE_ORDER_LINES.OFFER_LINE_ID))
+            .where(PURCHASE_ORDER_LINES.ID.`in`(ids))
+            .fetch(SUPPLIER_OFFER_LINES.DEMAND_LINE_ID)
+    }
+
+    fun findDemandIdsForOrders(orderIds: Collection<Long>): List<Long> {
+        val ids = orderIds.distinct()
+        if (ids.isEmpty()) return emptyList()
+        return dsl.selectDistinct(PURCHASE_ORDER_DEMANDS.DEMAND_ID)
+            .from(PURCHASE_ORDER_DEMANDS)
+            .where(PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID.`in`(ids))
+            .fetch(PURCHASE_ORDER_DEMANDS.DEMAND_ID)
+    }
+
+    fun lockDemandLineById(id: Long): DemandLinesRecord? =
+        dsl.selectFrom(DEMAND_LINES).where(DEMAND_LINES.ID.eq(id)).forUpdate().fetchOne()
+
+    fun lockDemandById(id: Long): DemandsRecord? =
+        dsl.selectFrom(DEMANDS).where(DEMANDS.ID.eq(id)).forUpdate().fetchOne()
+
+    fun listDemandLinesByDemand(demandId: Long): List<DemandLinesRecord> =
+        dsl.selectFrom(DEMAND_LINES)
+            .where(DEMAND_LINES.DEMAND_ID.eq(demandId))
+            .orderBy(DEMAND_LINES.LINE_NO.asc())
+            .fetch()
+
+    fun acceptedQuantityForDemandLine(demandLineId: Long): BigDecimal =
+        dsl.fetchOne(
+            """
+            SELECT COALESCE(SUM(rl.received_quantity), 0) AS total
+            FROM receipt_lines rl
+                     JOIN receipts r ON r.id = rl.receipt_id
+                     JOIN purchase_order_lines pol ON pol.id = rl.purchase_order_line_id
+                     JOIN supplier_offer_lines sol ON sol.id = pol.offer_line_id
+            WHERE r.status = 'POSTED'
+              AND sol.demand_line_id = ?
+            """.trimIndent(),
+            demandLineId
+        )?.get("total", BigDecimal::class.java) ?: BigDecimal.ZERO
+
+    fun updateReceiptLineAutoReserved(receiptLineId: Long, quantity: BigDecimal): Int =
+        dsl.update(RECEIPT_LINES)
+            .set(RECEIPT_LINES.AUTO_RESERVED_QUANTITY, quantity)
+            .where(RECEIPT_LINES.ID.eq(receiptLineId))
+            .execute()
+
+    data class OrderLineProjectContext(
+        val projectId: Long,
+        val projectNumber: String,
+        val projectName: String,
+        val initiatorId: Long
+    )
+
+    fun findOrderLineProjectContext(orderLineIds: Collection<Long>): Map<Long, OrderLineProjectContext> {
+        val ids = orderLineIds.distinct()
+        if (ids.isEmpty()) return emptyMap()
+        return dsl.select(
+            PURCHASE_ORDER_LINES.ID,
+            DEMANDS.PROJECT_ID,
+            DEMANDS.INITIATOR_ID,
+            PROJECTS.NUMBER,
+            PROJECTS.NAME
+        )
+            .from(PURCHASE_ORDER_LINES)
+            .join(SUPPLIER_OFFER_LINES).on(SUPPLIER_OFFER_LINES.ID.eq(PURCHASE_ORDER_LINES.OFFER_LINE_ID))
+            .join(DEMAND_LINES).on(DEMAND_LINES.ID.eq(SUPPLIER_OFFER_LINES.DEMAND_LINE_ID))
+            .join(DEMANDS).on(DEMANDS.ID.eq(DEMAND_LINES.DEMAND_ID))
+            .join(PROJECTS).on(PROJECTS.ID.eq(DEMANDS.PROJECT_ID))
+            .where(PURCHASE_ORDER_LINES.ID.`in`(ids))
+            .and(DEMANDS.PROJECT_ID.isNotNull)
+            .and(DEMANDS.STATUS.ne("CANCELLED"))
+            .fetch()
+            .associate { r ->
+                r.get(PURCHASE_ORDER_LINES.ID)!! to OrderLineProjectContext(
+                    projectId = r.get(DEMANDS.PROJECT_ID)!!,
+                    projectNumber = r.get(PROJECTS.NUMBER)!!,
+                    projectName = r.get(PROJECTS.NAME)!!,
+                    initiatorId = r.get(DEMANDS.INITIATOR_ID)!!
+                )
+            }
+    }
+
+    fun findOrderProjectContext(orderId: Long): OrderLineProjectContext? =
+        dsl.select(
+            DEMANDS.PROJECT_ID,
+            DEMANDS.INITIATOR_ID,
+            PROJECTS.NUMBER,
+            PROJECTS.NAME
+        )
+            .from(PURCHASE_ORDER_DEMANDS)
+            .join(DEMANDS).on(DEMANDS.ID.eq(PURCHASE_ORDER_DEMANDS.DEMAND_ID))
+            .join(PROJECTS).on(PROJECTS.ID.eq(DEMANDS.PROJECT_ID))
+            .where(PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID.eq(orderId))
+            .and(DEMANDS.PROJECT_ID.isNotNull)
+            .and(DEMANDS.STATUS.ne("CANCELLED"))
+            .orderBy(DEMANDS.ID.asc())
+            .limit(1)
+            .fetchOne { r ->
+                OrderLineProjectContext(
+                    projectId = r.get(DEMANDS.PROJECT_ID)!!,
+                    projectNumber = r.get(PROJECTS.NUMBER)!!,
+                    projectName = r.get(PROJECTS.NAME)!!,
+                    initiatorId = r.get(DEMANDS.INITIATOR_ID)!!
+                )
+            }
+
+    fun projectRequiredTotal(projectId: Long, nomenclatureId: Long): BigDecimal =
+        dsl.fetchOne(
+            """
+            SELECT COALESCE(SUM(dl.quantity), 0) AS total
+            FROM demand_lines dl
+                     JOIN demands d ON d.id = dl.demand_id
+            WHERE d.project_id = ?
+              AND d.status <> 'CANCELLED'
+              AND dl.status <> 'CANCELLED'
+              AND dl.nomenclature_id = ?
+            """.trimIndent(),
+            projectId, nomenclatureId
+        )?.get("total", BigDecimal::class.java) ?: BigDecimal.ZERO
+
+    fun projectReservedTotal(projectId: Long, nomenclatureId: Long): BigDecimal =
+        dsl.fetchOne(
+            """
+            SELECT COALESCE(SUM(r.quantity), 0) AS total
+            FROM reservations r
+            WHERE r.project_id = ?
+              AND r.nomenclature_id = ?
+              AND r.status IN ('ACTIVE', 'FULFILLED')
+            """.trimIndent(),
+            projectId, nomenclatureId
+        )?.get("total", BigDecimal::class.java) ?: BigDecimal.ZERO
+
+    fun updateDemandLineCoverage(
+        lineId: Long,
+        coveredQuantity: BigDecimal,
+        status: String
+    ): Int =
+        dsl.update(DEMAND_LINES)
+            .set(DEMAND_LINES.COVERED_QUANTITY, coveredQuantity)
+            .set(DEMAND_LINES.STATUS, status)
+            .set(DEMAND_LINES.VERSION, DEMAND_LINES.VERSION.plus(1))
+            .where(DEMAND_LINES.ID.eq(lineId))
+            .execute()
+
+    fun insertDemandLineHistory(
+        demandLineId: Long,
+        action: String,
+        quantityBefore: BigDecimal?,
+        quantityAfter: BigDecimal?,
+        fromStatus: String?,
+        toStatus: String?,
+        reason: String?,
+        changedBy: Long
+    ) {
+        dsl.insertInto(DEMAND_LINE_HISTORY)
+            .set(DEMAND_LINE_HISTORY.DEMAND_LINE_ID, demandLineId)
+            .set(DEMAND_LINE_HISTORY.ACTION, action)
+            .set(DEMAND_LINE_HISTORY.QUANTITY_BEFORE, quantityBefore)
+            .set(DEMAND_LINE_HISTORY.QUANTITY_AFTER, quantityAfter)
+            .set(DEMAND_LINE_HISTORY.FROM_STATUS, fromStatus)
+            .set(DEMAND_LINE_HISTORY.TO_STATUS, toStatus)
+            .set(DEMAND_LINE_HISTORY.REASON, reason)
+            .set(DEMAND_LINE_HISTORY.CHANGED_BY, changedBy)
+            .execute()
+    }
+
+    fun updateDemandStatusAfterReceipt(
+        demandId: Long,
+        newStatus: String,
+        fallbackApprovedBy: Long
+    ): Int =
+        dsl.update(DEMANDS)
+            .set(DEMANDS.STATUS, newStatus)
+            .set(DEMANDS.APPROVED_BY, org.jooq.impl.DSL.coalesce(DEMANDS.APPROVED_BY, fallbackApprovedBy))
+            .set(DEMANDS.APPROVED_AT, org.jooq.impl.DSL.coalesce(DEMANDS.APPROVED_AT, OffsetDateTime.now()))
+            .set(DEMANDS.VERSION, DEMANDS.VERSION.plus(1))
+            .where(DEMANDS.ID.eq(demandId))
+            .execute()
+
+    fun insertDemandHistory(
+        demandId: Long,
+        action: String,
+        fromStatus: String?,
+        toStatus: String?,
+        reason: String?,
+        changedBy: Long
+    ) {
+        dsl.insertInto(DEMAND_HISTORY)
+            .set(DEMAND_HISTORY.DEMAND_ID, demandId)
+            .set(DEMAND_HISTORY.ACTION, action)
+            .set(DEMAND_HISTORY.FROM_STATUS, fromStatus)
+            .set(DEMAND_HISTORY.TO_STATUS, toStatus)
+            .set(DEMAND_HISTORY.REASON, reason)
+            .set(DEMAND_HISTORY.CHANGED_BY, changedBy)
+            .execute()
+    }
+
+    fun findOrderProcurementRecipients(demandId: Long, orderIds: Collection<Long>): List<Long> {
+        val ids = orderIds.distinct()
+        val orderResponsibles = if (ids.isEmpty()) {
+            emptyList()
+        } else {
+            dsl.select(PURCHASE_ORDERS.RESPONSIBLE_ID, SUPPLIER_OFFERS.REQUESTED_BY)
+                .from(PURCHASE_ORDERS)
+                .leftJoin(SUPPLIER_OFFERS).on(SUPPLIER_OFFERS.ID.eq(PURCHASE_ORDERS.OFFER_ID))
+                .where(PURCHASE_ORDERS.ID.`in`(ids))
+                .fetch()
+                .flatMap { r -> listOfNotNull(r.get(PURCHASE_ORDERS.RESPONSIBLE_ID), r.get(SUPPLIER_OFFERS.REQUESTED_BY)) }
+        }
+        val selectedOfferAuthor = dsl.select(SUPPLIER_OFFERS.REQUESTED_BY)
+            .from(SUPPLIER_OFFERS)
+            .where(SUPPLIER_OFFERS.DEMAND_ID.eq(demandId))
+            .and(SUPPLIER_OFFERS.STATUS.eq("SELECTED"))
+            .fetch(SUPPLIER_OFFERS.REQUESTED_BY)
+        return (orderResponsibles + selectedOfferAuthor).distinct()
+    }
 
     /** Ожидаемые к приёмке позиции по заказу (view `purchase_order_receipt_status`). */
     fun expectedReceiptLines(orderId: Long?): List<org.jooq.Record> {

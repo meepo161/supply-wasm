@@ -234,7 +234,7 @@ fun AssistantHomeCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 160.dp, max = if (expanded) 560.dp else 300.dp)
+                        .heightIn(min = 140.dp, max = if (expanded) 400.dp else 240.dp)
                         .verticalScroll(scroll)
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
