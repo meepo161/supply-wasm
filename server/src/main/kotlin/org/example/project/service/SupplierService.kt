@@ -1052,7 +1052,11 @@ class SupplierService(
     private fun buildOffer(offer: SupplierOffersRecord): SupplierOfferDto {
         val totals = supplierRepository.offerTotals(offer.id)
         val supplier = supplierRepository.findSupplierById(offer.supplierId)
-        return offer.toDto(totals, supplier?.name, supplierRepository.listOfferLines(offer.id))
+        val lines = supplierRepository.listOfferLines(offer.id)
+        val nomenclature = lines.map { it.nomenclatureId }.distinct().associateWith { id ->
+            supplierRepository.findNomenclatureById(id)?.let { it.code to it.name } ?: (null to null)
+        }
+        return offer.toDto(totals, supplier?.name, lines, nomenclature)
     }
 
     private fun requireSupplier(id: Long): SuppliersRecord =
@@ -1075,9 +1079,9 @@ class SupplierService(
             throw ValidationException("Supplier name is required", mapOf("name" to "required"))
         }
         inn?.takeIf { it.isNotBlank() }?.let {
-            if (!it.matches(Regex("^([0-9]{10}|[0-9]{12})$"))) {
+            if (!it.matches(Regex("^([0-9]{10}|[0-9]{12})$")) || !isValidInn(it)) {
                 throw ValidationException(
-                    "INN must contain 10 or 12 digits",
+                    "INN must contain 10 or 12 digits with a valid checksum",
                     mapOf("inn" to "format")
                 )
             }

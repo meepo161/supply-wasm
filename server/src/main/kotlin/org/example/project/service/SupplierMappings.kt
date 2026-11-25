@@ -115,7 +115,10 @@ private fun parseSupplierDate(value: String, field: String): LocalDate? {
     }
 }
 
-internal fun SupplierOfferLinesRecord.toDto(): SupplierOfferLineDto = SupplierOfferLineDto(
+internal fun SupplierOfferLinesRecord.toDto(
+    nomenclatureCode: String? = null,
+    nomenclatureName: String? = null
+): SupplierOfferLineDto = SupplierOfferLineDto(
     id = this.id,
     lineNo = this.lineNo,
     demandLineId = this.demandLineId,
@@ -125,13 +128,16 @@ internal fun SupplierOfferLinesRecord.toDto(): SupplierOfferLineDto = SupplierOf
     unitPrice = this.unitPrice.toPlainString(),
     vatRate = this.vatRate.toPlainString(),
     lineTotal = this.quantity.multiply(this.unitPrice).toPlainString(),
-    note = this.note
+    note = this.note,
+    nomenclatureCode = nomenclatureCode,
+    nomenclatureName = nomenclatureName
 )
 
 internal fun SupplierOffersRecord.toDto(
     totals: Triple<BigDecimal, BigDecimal, BigDecimal>?,
     supplierName: String?,
-    lines: List<SupplierOfferLinesRecord> = emptyList()
+    lines: List<SupplierOfferLinesRecord> = emptyList(),
+    nomenclature: Map<Long, Pair<String?, String?>> = emptyMap()
 ): SupplierOfferDto = SupplierOfferDto(
     id = this.id,
     number = this.number,
@@ -161,6 +167,9 @@ internal fun SupplierOffersRecord.toDto(
     createdAt = this.createdAt?.toString(),
     createdBy = this.createdBy,
     version = this.version,
-    lines = lines.map { it.toDto() },
+    lines = lines.map { line ->
+        val item = nomenclature[line.nomenclatureId]
+        line.toDto(item?.first, item?.second)
+    },
     totals = totals?.let { SupplierOfferTotalsDto(it.first.toPlainString(), it.second.toPlainString(), it.third.toPlainString()) }
 )

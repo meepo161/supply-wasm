@@ -68,6 +68,8 @@ data class PurchaseOrderDto(
     val reapprovalRequired: Boolean = false,
     val reapprovalReason: String? = null,
     val demandIds: List<Long> = emptyList(),
+    /** Номера потребностей в том же порядке, что и [demandIds]. */
+    val demandNumbers: List<String> = emptyList(),
     val createdAt: String? = null,
     val createdBy: Long,
     val updatedAt: String? = null,

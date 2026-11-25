@@ -290,6 +290,15 @@ class PurchaseOrderRepository(private val dsl: DSLContext) {
             .where(PURCHASE_ORDER_DEMANDS.PURCHASE_ORDER_ID.eq(orderId))
             .fetch(PURCHASE_ORDER_DEMANDS.DEMAND_ID)
 
+    fun demandNumbers(demandIds: Collection<Long>): Map<Long, String> {
+        if (demandIds.isEmpty()) return emptyMap()
+        return dsl.select(DEMANDS.ID, DEMANDS.NUMBER)
+            .from(DEMANDS)
+            .where(DEMANDS.ID.`in`(demandIds))
+            .fetch()
+            .associate { it.get(DEMANDS.ID)!! to it.get(DEMANDS.NUMBER)!! }
+    }
+
     fun listDemandIdsForOrders(orderIds: List<Long>): Map<Long, List<Long>> {
         if (orderIds.isEmpty()) return emptyMap()
         return dsl.select(

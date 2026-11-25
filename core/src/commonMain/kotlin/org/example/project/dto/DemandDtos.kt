@@ -50,7 +50,11 @@ data class DemandHeaderDto(
     val sourceBomRevisionId: Long? = null,
     val bomReleaseQuantity: String? = null,
     val bomRevisionVersion: Long? = null,
-    val idempotencyKey: String? = null
+    val idempotencyKey: String? = null,
+    /** Только в списке: число позиций, состав и количество для колонок реестра. */
+    val lineCount: Int = 0,
+    val itemsSummary: String? = null,
+    val quantitySummary: String? = null
 )
 
 @Serializable
@@ -81,7 +85,10 @@ enum class DemandLineStatus {
 @Serializable
 data class DemandDetailDto(
     val header: DemandHeaderDto,
-    val lines: List<DemandLineDto> = emptyList()
+    val lines: List<DemandLineDto> = emptyList(),
+    /** Только в карточке: сколько предложений и заказов связано с потребностью. */
+    val offersCount: Int = 0,
+    val ordersCount: Int = 0
 )
 
 @Serializable

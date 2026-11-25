@@ -263,7 +263,10 @@ data class SupplierOfferLineDto(
     val unitPrice: String,
     val vatRate: String,
     val lineTotal: String,
-    val note: String? = null
+    val note: String? = null,
+    /** Только в карточке предложения: код и название номенклатуры для подписи позиции. */
+    val nomenclatureCode: String? = null,
+    val nomenclatureName: String? = null
 )
 
 /** Итоги считает сервер (view supplier_offer_totals), клиент их не пересчитывает. */
@@ -460,3 +463,19 @@ data class SupplierOfferHistoryDto(
     val changedBy: Long,
     val changedAt: String? = null
 )
+
+/**
+ * Проверка ИНН по контрольной сумме ФНС: 10 знаков (организация) или 12 (ИП/физлицо).
+ * Принимает только цифры; неверная длина или контрольная цифра — false.
+ */
+fun isValidInn(inn: String): Boolean {
+    if (!inn.all { it in '0'..'9' }) return false
+    fun check(digits: String, weights: IntArray): Int =
+        digits.indices.sumOf { (digits[it] - '0') * weights[it] } % 11 % 10
+    return when (inn.length) {
+        10 -> check(inn.substring(0, 9), intArrayOf(2, 4, 10, 3, 5, 9, 4, 6, 8)) == inn[9] - '0'
+        12 -> check(inn.substring(0, 10), intArrayOf(7, 2, 4, 10, 3, 5, 9, 4, 6, 8)) == inn[10] - '0' &&
+            check(inn.substring(0, 11), intArrayOf(3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8)) == inn[11] - '0'
+        else -> false
+    }
+}

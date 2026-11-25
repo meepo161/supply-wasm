@@ -255,11 +255,11 @@ class SupplierInvoiceRoutesTest {
 
         // У другого поставщика свой счёт с тем же номером допустим
         val other = ctx.buyer.client.postOk<CreateSupplierRequest, SupplierCardDto>(
-            "/api/suppliers", CreateSupplierRequest(name = "ООО «Другой завод»", inn = "7702000001", idempotencyKey = newKey("sup")), HttpStatusCode.Created
+            "/api/suppliers", CreateSupplierRequest(name = "ООО «Другой завод»", inn = "7702000004", idempotencyKey = newKey("sup")), HttpStatusCode.Created
         )
         val otherInvoice = SupplierInvoiceInput(
             number = "219658", invoiceDate = LocalDate.now().toString(), supplierId = other.supplier.id, documentId = documentId,
-            supplierInn = "7702000001", netTotal = "100.00", vatTotal = "20.00", grossTotal = "120.00",
+            supplierInn = "7702000004", netTotal = "100.00", vatTotal = "20.00", grossTotal = "120.00",
             lines = listOf(SupplierInvoiceLineInput(1, null, "Шина 30х4", ctx.nomenclatureId, null, "1", "шт", "100.00", "20", "20.00", "100.00"))
         )
         val created = ctx.buyer.client.postJson("/api/supplier-invoices", encode(otherInvoice))

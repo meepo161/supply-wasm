@@ -585,7 +585,7 @@ class PurchaseOrderRoutesTest {
                 stringify(
                     CreateSupplierRequest(
                         name = "ООО Заказ",
-                        inn = "77${UUID.randomUUID().toString().take(8).hashCode().toString().takeLast(8)}",
+                        inn = randomValidInn(),
                         idempotencyKey = "sup-${UUID.randomUUID()}"
                     )
                 )

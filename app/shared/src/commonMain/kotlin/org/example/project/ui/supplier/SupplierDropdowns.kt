@@ -95,20 +95,30 @@ fun SupplierDropdown(
     }
 }
 
+/** Подпись потребности в списках выбора: номер, статус и что именно нужно (номенклатура). */
+private fun DemandHeaderDto.pickerLabel(): String = buildString {
+    append(number)
+    append(" · ")
+    append(status.localizedName())
+    itemsSummary?.let { append(" · ").append(it) }
+    quantitySummary?.let { append(" · ").append(it) }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DemandFilterDropdown(
     demands: List<DemandHeaderDto>,
     selectedId: Long?,
-    onSelect: (Long) -> Unit,
+    onSelect: (Long?) -> Unit,
     modifier: Modifier = Modifier,
-    label: String = "Потребность"
+    label: String = "Потребность",
+    allowAll: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selected = demands.firstOrNull { it.id == selectedId }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = modifier) {
         OutlinedTextField(
-            value = selected?.number ?: "Не выбрана",
+            value = selected?.pickerLabel() ?: if (allowAll) "Все потребности" else "Не выбрана",
             onValueChange = { },
             readOnly = true,
             label = { Text(label) },
@@ -116,9 +126,15 @@ fun DemandFilterDropdown(
             modifier = Modifier.menuAnchor()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (allowAll) {
+                DropdownMenuItem(
+                    text = { Text("Все потребности") },
+                    onClick = { onSelect(null); expanded = false }
+                )
+            }
             demands.forEach { demand ->
                 DropdownMenuItem(
-                    text = { Text("${demand.number} · ${demand.status.localizedName()}") },
+                    text = { Text(demand.pickerLabel()) },
                     onClick = { onSelect(demand.id); expanded = false }
                 )
             }

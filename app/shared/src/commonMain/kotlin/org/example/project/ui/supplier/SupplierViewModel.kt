@@ -28,7 +28,9 @@ import org.example.project.dto.SupplierOfferLineInput
 import org.example.project.dto.SupplierOfferStatusRequest
 import org.example.project.dto.SupplierVerificationRequest
 import org.example.project.dto.SupplierVerificationStatus
+import org.example.project.dto.UpdateSupplierOfferRequest
 import org.example.project.dto.UpdateSupplierRequest
+import org.example.project.dto.isValidInn
 import org.example.project.dto.UserDto
 import org.example.project.dto.hasPermission
 
@@ -62,7 +64,7 @@ class SupplierViewModel(
     fun dismissSuccess() = update { it.copy(successMessage = null) }
 
     fun selectTab(tab: SupplierTab) {
-        update { it.copy(selectedTab = tab, operationError = null) }
+        update { it.copy(selectedTab = tab, operationError = null, successMessage = null) }
         if (tab == SupplierTab.OFFERS && _uiState.value.offers.isEmpty()) loadOffers()
         if (tab == SupplierTab.CLAIMS && _uiState.value.claims.isEmpty()) loadClaims()
     }
@@ -91,7 +93,17 @@ class SupplierViewModel(
         }
     }
 
-    fun updateSearch(value: String) = update { it.copy(search = value) }
+    private var searchJob: kotlinx.coroutines.Job? = null
+
+    /** Поиск применяется сразу после паузы в наборе, отдельная кнопка «Найти» не нужна. */
+    fun updateSearch(value: String) {
+        update { it.copy(search = value) }
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(350)
+            loadSuppliers()
+        }
+    }
 
     fun updateStatusFilter(status: SupplierVerificationStatus?) {
         update { it.copy(statusFilter = status) }
@@ -177,6 +189,12 @@ class SupplierViewModel(
         }
     }
 
+    /** Фильтр списка предложений по потребности; заодно показывает её сравнение. */
+    fun filterOffersByDemand(demandId: Long?) {
+        update { it.copy(offersDemandFilter = demandId) }
+        loadComparison(demandId)
+    }
+
     fun loadComparison(demandId: Long?) {
         if (demandId == null) {
             update { it.copy(comparison = null, comparisonDemandId = null) }
@@ -205,7 +223,10 @@ class SupplierViewModel(
 
     fun showDialog(dialog: SupplierDialog) {
         // Потребности могли согласовать после входа — в форме предложения нужен свежий список.
-        if (dialog == SupplierDialog.CreateOffer) loadDemands()
+        if (dialog == SupplierDialog.CreateOffer) {
+            loadDemands()
+            loadOffers()
+        }
         val card = _uiState.value.selectedCard
         update {
             when (dialog) {
@@ -260,9 +281,7 @@ class SupplierViewModel(
         if (!canManage()) return fail("Нет права создавать поставщиков")
         val form = _uiState.value.createForm
         if (form.name.isBlank()) return fail("Укажите наименование поставщика")
-        if (form.inn.isNotBlank() && !form.inn.matches(Regex("^([0-9]{10}|[0-9]{12})$"))) {
-            return fail("ИНН должен содержать 10 или 12 цифр")
-        }
+        innProblem(form.inn)?.let { return fail(it) }
         update { it.copy(isActionRunning = true, operationError = null) }
         viewModelScope.launch {
             val request = CreateSupplierRequest(
@@ -313,6 +332,7 @@ class SupplierViewModel(
     fun saveSupplier() {
         val form = _uiState.value.editForm ?: return
         if (form.name.isBlank()) return fail("Наименование обязательно")
+        innProblem(form.inn)?.let { return fail(it) }
         update { it.copy(isActionRunning = true, operationError = null) }
         viewModelScope.launch {
             val request = UpdateSupplierRequest(
@@ -722,6 +742,138 @@ class SupplierViewModel(
                 is ApiResult.Error -> failWith(result.error)
             }
         }
+    }
+
+    // --- Правка предложения (S-04) ---
+
+    /** Предложение можно править, пока оно не выбрано, не отозвано и не истекло. */
+    fun canEditOffer(status: org.example.project.dto.SupplierOfferStatus): Boolean =
+        canOffer() && status !in setOf(
+            org.example.project.dto.SupplierOfferStatus.SELECTED,
+            org.example.project.dto.SupplierOfferStatus.WITHDRAWN,
+            org.example.project.dto.SupplierOfferStatus.EXPIRED
+        )
+
+    fun openEditOffer(offerId: Long) {
+        update { it.copy(isActionRunning = true, operationError = null) }
+        viewModelScope.launch {
+            when (val result = supplierRepository.getOffer(offerId)) {
+                is ApiResult.Success -> {
+                    val offer = result.data
+                    val nomenclature = _uiState.value.nomenclature
+                    update {
+                        it.copy(
+                            isActionRunning = false,
+                            activeDialog = SupplierDialog.EditOffer,
+                            editOfferForm = EditOfferForm(
+                                offerId = offer.id,
+                                version = offer.version,
+                                number = offer.number,
+                                supplierName = offer.supplierName ?: "Поставщик №${offer.supplierId}",
+                                compliance = offer.compliance,
+                                documentsComplete = offer.documentsComplete,
+                                deliveryDays = offer.deliveryDays?.toString() ?: "",
+                                deliveryTerms = offer.deliveryTerms ?: "",
+                                paymentTerms = offer.paymentTerms ?: "",
+                                warrantyMonths = offer.warrantyMonths?.toString() ?: "",
+                                validUntil = offer.validUntil,
+                                note = offer.note ?: "",
+                                lines = offer.lines.map { line ->
+                                    val item = nomenclature.firstOrNull { n -> n.id == line.nomenclatureId }
+                                    EditOfferLineForm(
+                                        demandLineId = line.demandLineId,
+                                        label = item?.let { n -> "${n.code} — ${n.name}" } ?: "Позиция ${line.lineNo}",
+                                        unit = line.unit,
+                                        quantity = line.quantity,
+                                        unitPrice = line.unitPrice,
+                                        vatRate = line.vatRate
+                                    )
+                                }
+                            )
+                        )
+                    }
+                }
+                is ApiResult.Error -> failWith(result.error)
+            }
+        }
+    }
+
+    fun updateEditOfferForm(form: EditOfferForm) = update { it.copy(editOfferForm = form) }
+
+    fun updateEditOfferLine(index: Int, line: EditOfferLineForm) {
+        val form = _uiState.value.editOfferForm ?: return
+        update {
+            it.copy(editOfferForm = form.copy(lines = form.lines.mapIndexed { i, current -> if (i == index) line else current }))
+        }
+    }
+
+    fun saveOffer() {
+        if (!canOffer()) return fail("Нет права вносить предложения поставщиков")
+        val form = _uiState.value.editOfferForm ?: return
+        if (!form.validUntil.isIsoDate()) return fail("Укажите, до какого числа действует предложение")
+        if (form.lines.any { it.quantity.isBlank() || it.unitPrice.isBlank() }) {
+            return fail("Заполните количество и цену во всех позициях")
+        }
+        update { it.copy(isActionRunning = true, operationError = null) }
+        viewModelScope.launch {
+            val request = UpdateSupplierOfferRequest(
+                compliance = form.compliance,
+                documentsComplete = form.documentsComplete,
+                deliveryDays = form.deliveryDays.trim().toIntOrNull(),
+                deliveryTerms = form.deliveryTerms.trim(),
+                paymentTerms = form.paymentTerms.trim(),
+                warrantyMonths = form.warrantyMonths.trim().toIntOrNull(),
+                validUntil = form.validUntil.trim(),
+                note = form.note.trim(),
+                lines = form.lines.map { line ->
+                    SupplierOfferLineInput(
+                        demandLineId = line.demandLineId,
+                        quantity = line.quantity.trim(),
+                        unitPrice = line.unitPrice.trim(),
+                        vatRate = line.vatRate.trim().ifEmpty { "20" }
+                    )
+                },
+                version = form.version
+            )
+            when (val result = supplierRepository.updateOffer(form.offerId, request)) {
+                is ApiResult.Success -> {
+                    update {
+                        it.copy(
+                            isActionRunning = false,
+                            activeDialog = null,
+                            editOfferForm = null,
+                            successMessage = "Предложение ${result.data.number} обновлено"
+                        )
+                    }
+                    loadOffers()
+                    refreshComparison()
+                }
+                is ApiResult.Error -> failWith(result.error)
+            }
+        }
+    }
+
+    /** Предложение того же поставщика по той же потребности, которое ещё в работе. */
+    fun existingOfferFor(demandId: Long?, supplierId: Long?): org.example.project.dto.SupplierOfferDto? {
+        if (demandId == null || supplierId == null) return null
+        return _uiState.value.offers.firstOrNull {
+            it.demandId == demandId && it.supplierId == supplierId && it.status !in inactiveOfferStatuses
+        }
+    }
+
+    private val inactiveOfferStatuses = setOf(
+        org.example.project.dto.SupplierOfferStatus.WITHDRAWN,
+        org.example.project.dto.SupplierOfferStatus.REJECTED,
+        org.example.project.dto.SupplierOfferStatus.EXPIRED
+    )
+
+    /** Проверка ИНН на клиенте: те же правила, что на сервере; пустой ИНН допустим. */
+    private fun innProblem(inn: String): String? {
+        val value = inn.trim()
+        if (value.isEmpty()) return null
+        if (!value.matches(Regex("^([0-9]{10}|[0-9]{12})$"))) return "ИНН должен содержать 10 цифр (организация) или 12 (ИП)"
+        if (!isValidInn(value)) return "ИНН указан неверно: не сходится контрольная цифра, проверьте номер"
+        return null
     }
 
     // --- Служебное ---

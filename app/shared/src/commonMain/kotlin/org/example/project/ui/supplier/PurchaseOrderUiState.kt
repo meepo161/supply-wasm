@@ -46,6 +46,7 @@ sealed class PurchaseOrderDialog {
     data object Edit : PurchaseOrderDialog()
     data object RegisterDelivery : PurchaseOrderDialog()
     data class CancelOrder(val number: String) : PurchaseOrderDialog()
+    data class CloseOrder(val number: String) : PurchaseOrderDialog()
     data class CancelDelivery(val id: Long, val number: String) : PurchaseOrderDialog()
 }
 

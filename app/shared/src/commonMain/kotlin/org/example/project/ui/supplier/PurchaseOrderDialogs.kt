@@ -28,6 +28,7 @@ fun PurchaseOrderDialogs(state: PurchaseOrderUiState, viewModel: PurchaseOrderVi
         PurchaseOrderDialog.Edit -> EditOrderDialog(state, viewModel)
         PurchaseOrderDialog.RegisterDelivery -> RegisterDeliveryDialog(state, viewModel)
         is PurchaseOrderDialog.CancelOrder -> CancelOrderDialog(dialog, state, viewModel)
+        is PurchaseOrderDialog.CloseOrder -> CloseOrderDialog(dialog, state, viewModel)
         is PurchaseOrderDialog.CancelDelivery -> CancelDeliveryDialog(dialog, state, viewModel)
     }
 }
@@ -37,7 +38,7 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
     val form = state.createForm
     ErpDialog(
         title = "Заказ поставщику",
-        subtitle = "Основание: предложение, выбранное инициатором",
+        subtitle = "Основание: предложение, выбранное инициатором. Заказ создаётся черновиком",
         glyph = ErpIconGlyph.Documents,
         gradient = Gradients.Berry,
         onDismiss = viewModel::dismissDialog,
@@ -56,7 +57,14 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
                 offers = state.selectedOffers,
                 selectedId = form.offerId,
                 onSelect = viewModel::selectOfferForOrder,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                label = "Предложение *"
+            )
+            Text(
+                text = "На согласование заказ автоматически не уходит: после создания откройте его " +
+                    "карточку и нажмите «На согласование». Позиции и цены берутся из предложения.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (state.selectedOffers.isEmpty()) {
                 Text(
@@ -114,9 +122,8 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
-                text = "Позиции предложения: количество можно только уменьшить",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "Позиции заказа (${form.lines.size}): количество можно только уменьшить",
+                style = MaterialTheme.typography.titleSmall
             )
             form.lines.forEachIndexed { index, line ->
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -124,7 +131,7 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
                         Text(line.label, style = MaterialTheme.typography.bodyMedium)
                         Text(
                             text = "В предложении: ${line.offeredQuantity} ${line.unit} · " +
-                                line.unitPrice.asMoney(form.currency),
+                                "цена ${line.unitPrice.asMoney(form.currency)} за ${line.unit}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -132,17 +139,21 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
                     ErpTextField(
                         value = line.quantity,
                         onValueChange = { viewModel.updateCreateLine(index, it) },
-                        label = "Количество",
+                        label = "Количество, ${line.unit} *",
                         modifier = Modifier.weight(0.5f)
                     )
                 }
             }
-            if (form.demandIds.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    form.demandIds.forEach { demandId ->
-                        PillBadge(text = "Потребность #$demandId", accent = Brand.Indigo)
-                    }
+            state.selectedOffers.firstOrNull { it.id == form.offerId }?.totals?.let { totals ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PillBadge(text = "Без НДС: ${totals.netTotal.asMoney(form.currency)}", accent = Brand.Blue)
+                    PillBadge(text = "С НДС: ${totals.grossTotal.asMoney(form.currency)}", accent = Brand.Mint, filled = true)
                 }
+                Text(
+                    text = "Итог по предложению целиком; если уменьшите количество, сумму заказа пересчитает сервер.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -211,8 +222,7 @@ private fun EditOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOrde
             )
             Text(
                 text = "Позиции: количество не может быть меньше уже поставленного",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.titleSmall
             )
             form.lines.forEachIndexed { index, line ->
                 Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -228,7 +238,7 @@ private fun EditOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOrde
                     ErpTextField(
                         value = line.quantity,
                         onValueChange = { viewModel.updateEditLine(index, it) },
-                        label = "Количество",
+                        label = "Количество, ${line.unit}",
                         modifier = Modifier.weight(0.5f)
                     )
                 }
@@ -297,7 +307,7 @@ private fun RegisterDeliveryDialog(state: PurchaseOrderUiState, viewModel: Purch
             )
             Text(
                 text = "Количество не может превышать остаток по позиции; одна поставка может быть частичной",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             form.lines.forEachIndexed { index, line ->
@@ -313,7 +323,7 @@ private fun RegisterDeliveryDialog(state: PurchaseOrderUiState, viewModel: Purch
                     ErpTextField(
                         value = line.quantity,
                         onValueChange = { viewModel.updateDeliveryLine(index, it) },
-                        label = "Принято",
+                        label = "Принято, ${line.unit}",
                         modifier = Modifier.weight(0.5f)
                     )
                 }
@@ -383,6 +393,40 @@ private fun CancelDeliveryDialog(
                 singleLine = false,
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun CloseOrderDialog(
+    dialog: PurchaseOrderDialog.CloseOrder,
+    state: PurchaseOrderUiState,
+    viewModel: PurchaseOrderViewModel
+) {
+    ErpDialog(
+        title = "Закрыть заказ ${dialog.number}?",
+        subtitle = "Закрытие завершает работу с заказом",
+        glyph = ErpIconGlyph.CheckCircle,
+        gradient = Gradients.Ocean,
+        onDismiss = viewModel::dismissDialog,
+        confirmText = "Закрыть заказ",
+        onConfirm = viewModel::confirmClose,
+        confirmEnabled = !state.isActionRunning,
+        dismissText = "Назад"
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            state.operationError?.let { ErrorMessageCard(error = it) }
+            Text(
+                text = "После закрытия заказ нельзя будет изменить, отменить или принять по нему новые " +
+                    "поставки; в истории останется запись о закрытии.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = "Если часть позиций так и не поставлена, проверьте остаток по позициям до закрытия: " +
+                    "недопоставленное количество по закрытому заказу не ожидается.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
