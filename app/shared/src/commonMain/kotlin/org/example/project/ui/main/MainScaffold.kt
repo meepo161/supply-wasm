@@ -121,15 +121,27 @@ fun MainScaffold(
     onClearPasswordError: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var selected by remember { mutableStateOf(NavigationDestination.HOME) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    // При выходе экран входа не должен подставлять логин прошлого пользователя.
+    val signOut = onLogout
+    val onLogout: () -> Unit = {
+        org.example.project.ui.auth.clearLoginDraft()
+        signOut()
+    }
     val destinations = NavigationDestination.entries.filter { it.isVisibleTo(user) }
+    // Раздел берётся из адреса (#/wms), чтобы перезагрузка открывала тот же раздел (N-07).
+    var selected by remember {
+        mutableStateOf(
+            parseAppRoute(BrowserHash.read())?.destination?.takeIf { it in destinations }
+                ?: NavigationDestination.HOME
+        )
+    }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    val projectRepository: ProjectRepository = koinInject()
-    val userRepository: UserRepository = koinInject()
+    val projectRepository: ProjectRepository = koinInject<ProjectRepository>().let { raw -> remember(raw) { DedupedProjectRepository(raw) } }
+    val userRepository: UserRepository = koinInject<UserRepository>().let { raw -> remember(raw) { DedupedUserRepository(raw) } }
     val taskRepository: TaskRepository = koinInject()
     val chatRepository: ChatRepository = koinInject()
-    val wmsRepository: WmsRepository = koinInject()
+    val wmsRepository: WmsRepository = koinInject<WmsRepository>().let { raw -> remember(raw) { DedupedWmsRepository(raw) } }
     val bomRepository: BomRepository = koinInject()
     val productionRepository: ProductionRepository = koinInject()
     val supplierRepository: SupplierRepository = koinInject()
@@ -300,6 +312,82 @@ fun MainScaffold(
             selected = NavigationDestination.BOM
         }
     }
+
+    // Адресная строка: состояние -> адрес (N-07).
+    val wmsState = wmsViewModel?.uiState?.collectAsState()
+    val openedNomenclatureId = wmsState?.value?.selectedNomenclature?.id
+    // Карточка из адреса открывается асинхронно: пока она не открылась, адрес не перезаписывается.
+    var pendingNomenclatureId by remember {
+        mutableStateOf(
+            parseAppRoute(BrowserHash.read())
+                ?.takeIf { it.destination == NavigationDestination.WMS && NavigationDestination.WMS in destinations }
+                ?.nomenclatureId
+        )
+    }
+    val applyRoute: (AppRoute) -> Unit = { route ->
+        if (route.destination in destinations) {
+            selected = route.destination
+            if (route.destination == NavigationDestination.WMS) {
+                val current = wmsViewModel?.uiState?.value?.selectedNomenclature?.id
+                if (route.nomenclatureId != null && route.nomenclatureId != current) {
+                    pendingNomenclatureId = route.nomenclatureId
+                    wmsViewModel?.openNomenclature(route.nomenclatureId)
+                } else if (route.nomenclatureId == null && current != null) {
+                    pendingNomenclatureId = null
+                    wmsViewModel?.selectNomenclature(null)
+                    wmsViewModel?.loadNomenclature()
+                }
+            }
+        }
+    }
+    val currentApplyRoute by androidx.compose.runtime.rememberUpdatedState(applyRoute)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        // Перезагрузка страницы с адресом карточки номенклатуры.
+        val route = parseAppRoute(BrowserHash.read())
+        if (route != null) currentApplyRoute(route)
+    }
+    DisposableEffect(Unit) {
+        // «Назад/Вперёд» и ручная правка адреса: адрес -> состояние.
+        val unsubscribe = BrowserHash.subscribe {
+            parseAppRoute(BrowserHash.read())?.let(currentApplyRoute)
+        }
+        onDispose(unsubscribe)
+    }
+    androidx.compose.runtime.LaunchedEffect(pendingNomenclatureId) {
+        if (pendingNomenclatureId != null) {
+            kotlinx.coroutines.delay(5000)
+            pendingNomenclatureId = null
+        }
+    }
+    val routeInitial = remember { booleanArrayOf(true) }
+    val currentRoute = AppRoute(
+        selected,
+        openedNomenclatureId.takeIf { selected == NavigationDestination.WMS }
+    )
+    androidx.compose.runtime.LaunchedEffect(currentRoute, pendingNomenclatureId) {
+        val pending = pendingNomenclatureId
+        if (pending != null && selected == NavigationDestination.WMS) {
+            if (openedNomenclatureId == pending) pendingNomenclatureId = null
+            if (openedNomenclatureId != pending) return@LaunchedEffect
+        }
+        val hash = currentRoute.toHash()
+        if (BrowserHash.read() != hash) {
+            // Первая запись заменяет пустой адрес, дальше каждый переход добавляет запись в историю.
+            if (routeInitial[0]) BrowserHash.replace(hash) else BrowserHash.push(hash)
+        }
+        routeInitial[0] = false
+    }
+
+    var quickCreate by remember { mutableStateOf<QuickCreate?>(null) }
+    val taskUiState by taskViewModel.uiState.collectAsState()
+    val notificationUiState by notificationViewModel.uiState.collectAsState()
+    val unreadNotifications = notificationUiState.notifications.count { !it.isRead }
+    androidx.compose.runtime.LaunchedEffect(taskUiState.selectedTask, projectUiState.selectedProject) {
+        // Созданная сущность открывается, диалог закрывается (как в разделах задач и проектов).
+        if (quickCreate == QuickCreate.TASK && taskUiState.selectedTask != null) quickCreate = null
+        if (quickCreate == QuickCreate.PROJECT && projectUiState.selectedProject != null) quickCreate = null
+    }
+
     var sidebarCollapsed by remember { mutableStateOf(false) }
     var favoriteDestinations by remember { mutableStateOf(setOf(NavigationDestination.TASKS, NavigationDestination.PROJECTS)) }
     val onToggleFavorite: (NavigationDestination) -> Unit = { dest ->
@@ -339,7 +427,19 @@ fun MainScaffold(
                     onOpenDocument = onOpenDocument,
                     onOpenNomenclature = onOpenNomenclature,
                     isFavorite = selected in favoriteDestinations,
-                    onToggleFavorite = { onToggleFavorite(selected) }
+                    onToggleFavorite = { onToggleFavorite(selected) },
+                    unreadNotifications = unreadNotifications,
+                    onCreateTask = {
+                        selected = NavigationDestination.TASKS
+                        quickCreate = QuickCreate.TASK
+                    },
+                    onCreateProject = {
+                        selected = NavigationDestination.PROJECTS
+                        if (projectUiState.createForm.ownerId == null) {
+                            projectViewModel.updateCreateForm(projectUiState.createForm.copy(ownerId = user.id))
+                        }
+                        quickCreate = QuickCreate.PROJECT
+                    }
                 )
             },
             bottomBar = {
@@ -418,8 +518,33 @@ fun MainScaffold(
                 }
             }
         }
+        when (quickCreate) {
+            QuickCreate.TASK -> org.example.project.ui.tasks.TaskCreateDialog(
+                form = taskUiState.createForm,
+                users = taskUiState.users,
+                projects = taskUiState.projects,
+                currentUser = user,
+                error = taskUiState.createError,
+                onFormChange = taskViewModel::updateCreateForm,
+                onCreate = { taskViewModel.createTask(user.id) },
+                onDismiss = { quickCreate = null }
+            )
+            QuickCreate.PROJECT -> org.example.project.ui.projects.ProjectCreateDialog(
+                form = projectUiState.createForm,
+                users = projectUiState.users,
+                currentUser = user,
+                error = projectUiState.createError,
+                onFormChange = projectViewModel::updateCreateForm,
+                onCreate = projectViewModel::createProject,
+                onDismiss = { quickCreate = null }
+            )
+            null -> Unit
+        }
     }
 }
+
+/** Быстрое создание из верхней панели: используются те же диалоги, что и в разделах. */
+private enum class QuickCreate { TASK, PROJECT }
 
 /* ------------------------------- Верхняя панель ------------------------------ */
 
@@ -440,7 +565,10 @@ private fun TopBar(
     onOpenDocument: (Long) -> Unit,
     onOpenNomenclature: (Long) -> Unit,
     isFavorite: Boolean,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    unreadNotifications: Int,
+    onCreateTask: () -> Unit,
+    onCreateProject: () -> Unit
 ) {
     val palette = LocalBrandPalette.current
     val theme = LocalThemeController.current
@@ -525,67 +653,45 @@ private fun TopBar(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box {
-                RoundIconButton(
-                    glyph = ErpIconGlyph.Plus,
-                    contentDescription = "Быстрые действия",
-                    onClick = { quickActionsExpanded = true }
-                )
-                DropdownMenu(
-                    expanded = quickActionsExpanded,
-                    onDismissRequest = { quickActionsExpanded = false }
-                ) {
-                    if (NavigationDestination.TASKS in destinations) {
-                        DropdownMenuItem(
-                            text = { Text("Перейти к задачам") },
-                            onClick = {
-                                quickActionsExpanded = false
-                                onSelect(NavigationDestination.TASKS)
-                            }
-                        )
-                    }
-                    if (NavigationDestination.PROJECTS in destinations) {
-                        DropdownMenuItem(
-                            text = { Text("Перейти к проектам") },
-                            onClick = {
-                                quickActionsExpanded = false
-                                onSelect(NavigationDestination.PROJECTS)
-                            }
-                        )
-                    }
-                    if (NavigationDestination.DEMANDS in destinations) {
-                        DropdownMenuItem(
-                            text = { Text("Создать потребность (Снабжение)") },
-                            onClick = {
-                                quickActionsExpanded = false
-                                onSelect(NavigationDestination.DEMANDS)
-                            }
-                        )
-                    }
-                    if (NavigationDestination.DOCUMENTS in destinations) {
-                        DropdownMenuItem(
-                            text = { Text("Документы") },
-                            onClick = {
-                                quickActionsExpanded = false
-                                onSelect(NavigationDestination.DOCUMENTS)
-                            }
-                        )
-                    }
-                    if (NavigationDestination.WMS in destinations) {
-                        DropdownMenuItem(
-                            text = { Text("Склад (WMS)") },
-                            onClick = {
-                                quickActionsExpanded = false
-                                onSelect(NavigationDestination.WMS)
-                            }
-                        )
+            if (NavigationDestination.TASKS in destinations || NavigationDestination.PROJECTS in destinations) {
+                Box {
+                    RoundIconButton(
+                        glyph = ErpIconGlyph.Plus,
+                        contentDescription = "Создать",
+                        label = if (showSearch) "Создать" else null,
+                        onClick = { quickActionsExpanded = true }
+                    )
+                    // Только действия, которые создают запись; переходы по разделам — в меню навигации.
+                    DropdownMenu(
+                        expanded = quickActionsExpanded,
+                        onDismissRequest = { quickActionsExpanded = false }
+                    ) {
+                        if (NavigationDestination.TASKS in destinations) {
+                            DropdownMenuItem(
+                                text = { Text("Новая задача") },
+                                onClick = {
+                                    quickActionsExpanded = false
+                                    onCreateTask()
+                                }
+                            )
+                        }
+                        if (NavigationDestination.PROJECTS in destinations) {
+                            DropdownMenuItem(
+                                text = { Text("Новый проект") },
+                                onClick = {
+                                    quickActionsExpanded = false
+                                    onCreateProject()
+                                }
+                            )
+                        }
                     }
                 }
             }
             Spacer(Modifier.width(8.dp))
             RoundIconButton(
                 glyph = ErpIconGlyph.Bell,
-                contentDescription = "Уведомления",
+                contentDescription = if (unreadNotifications > 0) "Уведомления, непрочитанных: $unreadNotifications" else "Уведомления",
+                badge = unreadNotifications,
                 onClick = onOpenNotifications
             )
             Spacer(Modifier.width(8.dp))
@@ -650,12 +756,17 @@ private fun TopBar(
     }
 }
 
-/** Кнопка-иконка верхней панели: контурная, с доступным именем и рамкой фокуса. */
+/**
+ * Кнопка-иконка верхней панели: контурная, с доступным именем и рамкой фокуса.
+ * [label] добавляет подпись справа от значка, [badge] — счётчик в углу (0 — без счётчика).
+ */
 @Composable
 private fun RoundIconButton(
     glyph: ErpIconGlyph,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    label: String? = null,
+    badge: Int = 0,
     onClick: () -> Unit
 ) {
     val palette = LocalBrandPalette.current
@@ -664,31 +775,60 @@ private fun RoundIconButton(
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(6.dp)
-    Box(
-        modifier = modifier
-            .size(40.dp)
-            .clip(shape)
-            .background(
-                when {
-                    pressed -> scheme.surfaceContainerHighest
-                    hovered -> scheme.surfaceContainerHigh
-                    else -> palette.glassOverlay
-                }
+    Box(contentAlignment = Alignment.TopEnd) {
+        Row(
+            modifier = modifier
+                .height(40.dp)
+                .then(if (label == null) Modifier.width(40.dp) else Modifier.padding(0.dp))
+                .clip(shape)
+                .background(
+                    when {
+                        pressed -> scheme.surfaceContainerHighest
+                        hovered -> scheme.surfaceContainerHigh
+                        else -> palette.glassOverlay
+                    }
+                )
+                .border(1.dp, palette.glassBorder.first(), shape)
+                .erpInteractive(interaction, shape)
+                .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+                .padding(horizontal = if (label == null) 0.dp else 12.dp)
+                .semantics {
+                    this.contentDescription = contentDescription
+                    role = Role.Button
+                },
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ErpIcon(
+                glyph = glyph,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
             )
-            .border(1.dp, palette.glassBorder.first(), shape)
-            .erpInteractive(interaction, shape)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .semantics {
-                this.contentDescription = contentDescription
-                role = Role.Button
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        ErpIcon(
-            glyph = glyph,
-            tint = scheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp)
-        )
+            if (label != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+        }
+        if (badge > 0) {
+            Text(
+                text = if (badge > 99) "99+" else badge.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onError,
+                maxLines = 1,
+                modifier = Modifier
+                    .padding(top = 1.dp, end = 1.dp)
+                    .heightIn(min = 16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(scheme.error)
+                    .padding(horizontal = 5.dp)
+            )
+        }
     }
 }
 
