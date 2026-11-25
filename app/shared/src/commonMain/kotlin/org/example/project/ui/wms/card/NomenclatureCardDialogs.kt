@@ -84,6 +84,14 @@ internal fun EditCardDialog(
     val warehouseIds = remember { mutableStateListOf<Long>().apply { addAll(card.allowedWarehouses.map { it.id }) } }
     var newCategoryOpen by remember { mutableStateOf(false) }
 
+    // Поля, на которые указал сервер (details ответа): подсвечивается именно поле с ошибкой.
+    // После правки поля подсветка снимается; сама ошибка показана один раз — в диалоге.
+    val edited = remember(state.actionError) { mutableStateListOf<String>() }
+    val serverFields = state.actionError?.details?.keys.orEmpty()
+    fun serverError(vararg keys: String): Boolean =
+        keys.any { key -> key !in edited && serverFields.any { it == key || it.startsWith("$key[") || it.startsWith("$key.") } }
+    fun touch(key: String) { if (key !in edited) edited.add(key) }
+
     val leadTimeValue = leadTime.trim().ifEmpty { "0" }.toIntOrNull()
     val valid = name.isNotBlank() && leadTimeValue != null && leadTimeValue >= 0
 
@@ -126,19 +134,24 @@ internal fun EditCardDialog(
     ) {
         state.actionError?.let { ErrorMessageCard(error = it) }
         Text(
-            "${item.type.localizedName()} · ед. ${item.unit}" +
-                (if (item.lotTracked) " · партии" else "") + (if (item.serialTracked) " · серийные номера" else ""),
+            "Тип: ${item.type.localizedName()} · базовая единица: ${item.unit}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            "Учёт по партиям: ${if (item.lotTracked) "да" else "нет"} · серийный учёт: ${if (item.serialTracked) "да" else "нет"}. " +
+                "Эти признаки задаются при создании и не меняются: от них зависят остатки и проведённые документы.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Section("Основное")
-        OutlinedTextField(name, { name = it }, label = { Text("Наименование *") }, singleLine = true, isError = name.isBlank(), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(description, { description = it }, label = { Text("Описание") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(name, { name = it; touch("name") }, label = { Text("Наименование *") }, singleLine = true, isError = name.isBlank() || serverError("name"), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(description, { description = it; touch("description") }, label = { Text("Описание") }, minLines = 2, isError = serverError("description"), modifier = Modifier.fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SearchableDropdown(
                 items = state.categories.filter { !it.archived || it.id == categoryId },
                 selected = state.categories.firstOrNull { it.id == categoryId },
-                onSelect = { categoryId = it.id },
+                onSelect = { categoryId = it.id; touch("categoryId") },
                 label = "Категория",
                 itemText = { it.path },
                 emptyText = "Категорий пока нет",
@@ -162,23 +175,23 @@ internal fun EditCardDialog(
         }
         Section("Производитель и параметры")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(manufacturer, { manufacturer = it }, label = { Text("Производитель") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedTextField(manufacturerModel, { manufacturerModel = it }, label = { Text("Модель производителя") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedTextField(article, { article = it }, label = { Text("Артикул") }, singleLine = true, modifier = Modifier.weight(1f))
+            OutlinedTextField(manufacturer, { manufacturer = it; touch("manufacturer") }, label = { Text("Производитель") }, singleLine = true, isError = serverError("manufacturer"), modifier = Modifier.weight(1f))
+            OutlinedTextField(manufacturerModel, { manufacturerModel = it; touch("manufacturerModel") }, label = { Text("Модель производителя") }, singleLine = true, isError = serverError("manufacturerModel"), modifier = Modifier.weight(1f))
+            OutlinedTextField(article, { article = it; touch("article") }, label = { Text("Артикул") }, singleLine = true, isError = serverError("article"), modifier = Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumberField(weight, { weight = it }, "Масса, кг", Modifier.weight(1f))
-            NumberField(length, { length = it }, "Длина, мм", Modifier.weight(1f))
-            NumberField(width, { width = it }, "Ширина, мм", Modifier.weight(1f))
-            NumberField(height, { height = it }, "Высота, мм", Modifier.weight(1f))
+            NumberField(weight, { weight = it; touch("weightKg") }, "Масса, кг", Modifier.weight(1f), serverError("weightKg"))
+            NumberField(length, { length = it; touch("lengthMm") }, "Длина, мм", Modifier.weight(1f), serverError("lengthMm"))
+            NumberField(width, { width = it; touch("widthMm") }, "Ширина, мм", Modifier.weight(1f), serverError("widthMm"))
+            NumberField(height, { height = it; touch("heightMm") }, "Высота, мм", Modifier.weight(1f), serverError("heightMm"))
         }
         Section("Характеристики")
         attributes.forEachIndexed { index, attr ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Правка берёт текущую строку в момент ввода, а не снимок композиции:
                 // иначе быстрый ввод в соседнее поле затирает уже введённое.
-                OutlinedTextField(attr.name, { v -> attributes[index] = attributes[index].copy(name = v) }, label = { Text("Название") }, singleLine = true, modifier = Modifier.weight(1.2f))
-                OutlinedTextField(attr.value, { v -> attributes[index] = attributes[index].copy(value = v) }, label = { Text("Значение") }, singleLine = true, modifier = Modifier.weight(1.2f))
+                OutlinedTextField(attr.name, { v -> attributes[index] = attributes[index].copy(name = v); touch("attributes[$index].name") }, label = { Text("Название") }, singleLine = true, isError = serverError("attributes[$index].name"), modifier = Modifier.weight(1.2f))
+                OutlinedTextField(attr.value, { v -> attributes[index] = attributes[index].copy(value = v); touch("attributes[$index].value") }, label = { Text("Значение") }, singleLine = true, isError = serverError("attributes[$index].value"), modifier = Modifier.weight(1.2f))
                 OutlinedTextField(attr.unit, { v -> attributes[index] = attributes[index].copy(unit = v) }, label = { Text("Ед.") }, singleLine = true, modifier = Modifier.weight(0.6f))
                 ErpIconButton(ErpIconGlyph.Close, "Удалить характеристику", onClick = { attributes.removeAt(index) })
             }
@@ -186,19 +199,20 @@ internal fun EditCardDialog(
         TextButton(onClick = { attributes.add(AttributeDraft("", "", "")) }) { Text("+ Добавить характеристику") }
         Section("Запас и закупка")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumberField(minStock, { minStock = it }, "Мин. запас, ${item.unit}", Modifier.weight(1f))
-            NumberField(safetyStock, { safetyStock = it }, "Страховой запас, ${item.unit}", Modifier.weight(1f))
+            NumberField(minStock, { minStock = it; touch("minStock") }, "Мин. запас, ${item.unit}", Modifier.weight(1f), serverError("minStock"))
+            NumberField(safetyStock, { safetyStock = it; touch("safetyStock") }, "Страховой запас, ${item.unit}", Modifier.weight(1f), serverError("safetyStock"))
             OutlinedTextField(
-                leadTime, { leadTime = it.filter(Char::isDigit) },
-                label = { Text("Срок поставки, дн.") }, singleLine = true, isError = leadTimeValue == null, modifier = Modifier.weight(1f)
+                leadTime, { leadTime = it.filter(Char::isDigit); touch("leadTimeDays") },
+                label = { Text("Срок поставки, дн.") }, singleLine = true,
+                isError = leadTimeValue == null || serverError("leadTimeDays"), modifier = Modifier.weight(1f)
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumberField(minOrder, { minOrder = it }, "Мин. партия, ${item.unit}", Modifier.weight(1f))
-            NumberField(multiple, { multiple = it }, "Кратность заказа, ${item.unit}", Modifier.weight(1f))
+            NumberField(minOrder, { minOrder = it; touch("minOrderQty") }, "Мин. партия, ${item.unit}", Modifier.weight(1f), serverError("minOrderQty"))
+            NumberField(multiple, { multiple = it; touch("orderMultiple") }, "Кратность заказа, ${item.unit}", Modifier.weight(1f), serverError("orderMultiple"))
         }
         Section("Хранение")
-        OutlinedTextField(storage, { storage = it }, label = { Text("Условия хранения") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(storage, { storage = it; touch("storageConditions") }, label = { Text("Условия хранения") }, minLines = 2, isError = serverError("storageConditions"), modifier = Modifier.fillMaxWidth())
         Text("Допустимые склады (справочно; пусто — без ограничений)", style = MaterialTheme.typography.labelMedium)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             state.warehouses.forEach { wh ->
@@ -454,14 +468,14 @@ private fun Section(title: String) {
 }
 
 @Composable
-private fun NumberField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier) {
+private fun NumberField(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier, serverError: Boolean = false) {
     val normalized = value.trim().replace(',', '.')
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(label) },
         singleLine = true,
-        isError = normalized.isNotEmpty() && normalized.toDoubleOrNull() == null,
+        isError = (normalized.isNotEmpty() && normalized.toDoubleOrNull() == null) || serverError,
         modifier = modifier
     )
 }

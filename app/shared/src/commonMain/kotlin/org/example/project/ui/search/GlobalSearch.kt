@@ -5,11 +5,6 @@ import org.example.project.dto.NomenclatureType
 import org.example.project.ui.documents.localizedName as documentTypeName
 import org.example.project.ui.wms.localizedName as nomenclatureTypeName
 import org.example.project.ui.userText
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,7 +54,12 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import org.example.project.dto.SearchGroupDto
 import org.example.project.dto.SearchResultItemDto
 import org.example.project.dto.SearchResultType
@@ -94,9 +94,17 @@ fun GlobalSearchBox(
     val palette = LocalBrandPalette.current
     val focusRequester = remember { FocusRequester() }
 
-    val flat = viewModel.flatResults()
+    val density = LocalDensity.current
+    var fieldWidthPx by remember { mutableStateOf(0) }
 
-    Box(modifier = modifier.widthIn(max = 460.dp)) {
+    // Переход к результату закрывает список и очищает запрос (N-13).
+    val openAndReset: (SearchResultRef) -> Unit = { ref ->
+        expanded = false
+        openResult(ref, onOpenTask, onOpenProject, onOpenDocument, onOpenNomenclature)
+        viewModel.clear()
+    }
+
+    Box(modifier = modifier.widthIn(max = 460.dp).onSizeChanged { fieldWidthPx = it.width }) {
         // Поле ввода
         Row(
             modifier = Modifier
@@ -172,8 +180,7 @@ fun GlobalSearchBox(
                                 Key.Enter -> {
                                     val target = viewModel.highlighted()
                                     if (target != null) {
-                                        expanded = false
-                                        openResult(target, onOpenTask, onOpenProject, onOpenDocument, onOpenNomenclature)
+                                        openAndReset(target)
                                         true
                                     } else {
                                         viewModel.submitImmediately()
@@ -207,21 +214,22 @@ fun GlobalSearchBox(
             }
         }
 
-        AnimatedVisibility(
-            visible = expanded && state.query.isNotEmpty(),
-            enter = fadeIn() + scaleIn(initialScale = 0.97f),
-            exit = fadeOut() + scaleOut(targetScale = 0.97f)
-        ) {
-            SearchDropdown(
-                state = state,
-                highlightedIndex = state.highlightedIndex,
-                onHover = { index -> viewModel.setHighlighted(index) },
-                onSelect = { ref ->
-                    expanded = false
-                    openResult(ref, onOpenTask, onOpenProject, onOpenDocument, onOpenNomenclature)
-                },
-                modifier = Modifier.padding(top = 46.dp)
-            )
+        // Список результатов лежит поверх содержимого и не меняет размер верхней панели (N-13).
+        if (expanded && state.query.isNotEmpty()) {
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(0, with(density) { 46.dp.roundToPx() }),
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = false)
+            ) {
+                SearchDropdown(
+                    state = state,
+                    highlightedIndex = state.highlightedIndex,
+                    onHover = { index -> viewModel.setHighlighted(index) },
+                    onSelect = openAndReset,
+                    modifier = Modifier.width(with(density) { fieldWidthPx.toDp() })
+                )
+            }
         }
     }
 

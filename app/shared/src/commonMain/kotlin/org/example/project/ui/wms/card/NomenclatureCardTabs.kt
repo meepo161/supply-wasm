@@ -145,12 +145,13 @@ private fun BarcodesSection(card: NomenclatureCardDto, canManage: Boolean, busy:
         card.item.barcodes.forEach { barcode ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(barcode.barcode, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                // «Тип упаковки» и «единица измерения» — разные вещи: подписываем оба значения.
                 Text(
-                    "${barcode.packageType.localizedName()} · ${ErpFormat.qty(barcode.quantityInPackage)} ${card.item.unit}",
+                    "Упаковка: ${barcode.packageType.localizedName()} · в ней ${ErpFormat.qty(barcode.quantityInPackage)} ${card.item.unit}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (canManage) {
+                if (canManage && barcode.barcode.isNotBlank()) {
                     ErpIconButton(ErpIconGlyph.Close, "Удалить штрихкод ${barcode.barcode}", onClick = { viewModel.deleteBarcode(barcode.id) }, enabled = !busy)
                 }
             }
@@ -166,7 +167,8 @@ private fun BarcodesSection(card: NomenclatureCardDto, canManage: Boolean, busy:
                 )
                 SoftButton(
                     text = "Добавить",
-                    onClick = { viewModel.addBarcode(code.trim()); code = "" },
+                    // Поле очищается только после успеха: при ошибке сервера введённое значение остаётся.
+                    onClick = { viewModel.addBarcode(code.trim(), onSuccess = { code = "" }) },
                     enabled = code.isNotBlank() && !busy
                 )
             }
@@ -178,8 +180,9 @@ private fun BarcodesSection(card: NomenclatureCardDto, canManage: Boolean, busy:
 private fun UnitsSection(card: NomenclatureCardDto, canManage: Boolean, busy: Boolean, viewModel: NomenclatureCardViewModel) {
     var fromUnit by remember(card.item.id) { mutableStateOf("") }
     var factor by remember(card.item.id) { mutableStateOf("") }
+    val base = card.item.unit
     CardSection("Единицы измерения") {
-        Field("Базовая", card.item.unit)
+        Field("Базовая единица", base)
         card.unitConversions.forEach { conv ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
@@ -192,20 +195,22 @@ private fun UnitsSection(card: NomenclatureCardDto, canManage: Boolean, busy: Bo
                 }
             }
         }
-        if (card.unitConversions.isEmpty()) Hint("Пересчётов нет: документы ведутся только в «${card.item.unit}».")
+        if (card.unitConversions.isEmpty()) Hint("Пересчётов нет: документы ведутся только в «$base».")
         if (canManage && !card.item.archived) {
+            Hint("Пересчёт нужен, если позицию заказывают или принимают в другой единице. Пример: 1 упаковка = 10 $base.")
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("1", style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(fromUnit, { fromUnit = it }, label = { Text("Единица") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(fromUnit, { fromUnit = it }, label = { Text("Другая единица") }, placeholder = { Text("упаковка") }, singleLine = true, modifier = Modifier.weight(1f))
                 Text("=", style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(factor, { factor = it }, label = { Text("Коэффициент") }, singleLine = true, modifier = Modifier.weight(1f))
-                Text(card.item.unit, style = MaterialTheme.typography.bodyMedium)
-                SoftButton(
-                    text = "Добавить",
-                    onClick = { viewModel.addUnitConversion(fromUnit.trim(), factor); fromUnit = ""; factor = "" },
-                    enabled = fromUnit.isNotBlank() && factor.isNotBlank() && !busy
-                )
+                OutlinedTextField(factor, { factor = it }, label = { Text("Сколько в ней") }, placeholder = { Text("10") }, singleLine = true, modifier = Modifier.weight(1f))
+                Text(base, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
             }
+            SoftButton(
+                text = "Добавить пересчёт",
+                // Поля очищаются только после успеха (N-11).
+                onClick = { viewModel.addUnitConversion(fromUnit.trim(), factor, onSuccess = { fromUnit = ""; factor = "" }) },
+                enabled = fromUnit.isNotBlank() && factor.isNotBlank() && !busy
+            )
         }
     }
 }

@@ -54,6 +54,20 @@ import org.example.project.ui.theme.IconBadge
 import org.example.project.ui.theme.LocalBrandPalette
 import org.example.project.ui.theme.SoftButton
 
+/**
+ * Введённый логин живёт вне экрана: на время запроса корневой экран заменяется
+ * индикатором загрузки и состояние экрана входа теряется, а после неверного
+ * пароля логин должен остаться (N-11). Пароль не сохраняется.
+ */
+private object LoginDraft {
+    var login by mutableStateOf("")
+}
+
+/** Забывает введённый логин (при выходе из системы). */
+fun clearLoginDraft() {
+    LoginDraft.login = ""
+}
+
 @Composable
 fun LoginScreen(
     state: AuthUiState,
@@ -62,7 +76,7 @@ fun LoginScreen(
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var login by remember { mutableStateOf("") }
+    var login by LoginDraft::login
     var password by remember { mutableStateOf("") }
     var showBootstrap by remember { mutableStateOf(false) }
     var bootstrapLogin by remember { mutableStateOf("") }
@@ -84,12 +98,18 @@ fun LoginScreen(
                 modifier = Modifier
                     .weight(if (wide) 0.95f else 1f)
                     .fillMaxHeight(),
-                contentAlignment = Alignment.Center
+                // Верх формы зафиксирован: плашка ошибки не сдвигает поля (N-11).
+                contentAlignment = Alignment.TopCenter
             ) {
                 Column(
                     modifier = Modifier
                         .widthIn(max = 430.dp)
-                        .padding(horizontal = 26.dp, vertical = 32.dp)
+                        .padding(
+                            start = 26.dp,
+                            end = 26.dp,
+                            top = ((this@BoxWithConstraints.maxHeight - 620.dp) / 2).coerceAtLeast(0.dp) + 32.dp,
+                            bottom = 32.dp
+                        )
                         .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
