@@ -202,7 +202,8 @@ class NomenclatureCardViewModel(
         (repository.archive(nomenclatureId) as? ApiResult.Error)?.error
     }
 
-    fun addBarcode(code: String) = command(success = "Штрихкод $code добавлен") {
+    /** [onSuccess] вызывается только после успеха: при ошибке сервера введённое значение остаётся (N-11). */
+    fun addBarcode(code: String, onSuccess: () -> Unit = {}) = command(success = "Штрихкод $code добавлен", onSuccess = onSuccess) {
         (repository.addBarcode(nomenclatureId, CreateNomenclatureBarcodeRequest(code)) as? ApiResult.Error)?.error
     }
 
@@ -210,7 +211,8 @@ class NomenclatureCardViewModel(
         (repository.deleteBarcode(nomenclatureId, barcodeId) as? ApiResult.Error)?.error
     }
 
-    fun addUnitConversion(fromUnit: String, factor: String) = command(success = "Пересчёт добавлен") {
+    fun addUnitConversion(fromUnit: String, factor: String, onSuccess: () -> Unit = {}) =
+        command(success = "Пересчёт добавлен", onSuccess = onSuccess) {
         val unit = _state.value.card?.item?.unit ?: return@command ApiError("NO_CARD", "Карточка не загружена")
         (repository.addUnitConversion(
             nomenclatureId,
@@ -294,7 +296,12 @@ class NomenclatureCardViewModel(
 
     // --- Внутреннее ---
 
-    private fun command(success: String, reloadAfter: Boolean = true, block: suspend () -> ApiError?) {
+    private fun command(
+        success: String,
+        reloadAfter: Boolean = true,
+        onSuccess: () -> Unit = {},
+        block: suspend () -> ApiError?
+    ) {
         viewModelScope.launch {
             _state.value = _state.value.copy(busy = true, actionError = null, notice = null)
             val error = block()
@@ -304,6 +311,7 @@ class NomenclatureCardViewModel(
                     notice = success,
                     successTick = _state.value.successTick + 1
                 )
+                onSuccess()
                 if (reloadAfter) reload()
             } else {
                 _state.value = _state.value.copy(busy = false, actionError = error)

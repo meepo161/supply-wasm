@@ -1,6 +1,9 @@
 package org.example.project.ui.wms.card
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,7 +63,7 @@ import org.example.project.ui.theme.IconBadge
 import org.example.project.ui.theme.PillBadge
 import org.example.project.ui.theme.SkeletonLine
 import org.example.project.ui.theme.SoftButton
-import org.example.project.ui.theme.Tab
+import org.example.project.ui.theme.erpInteractive
 import org.example.project.ui.theme.TextButton
 import org.example.project.ui.userText
 import org.example.project.ui.wms.localizedName
@@ -270,9 +277,8 @@ private fun CardHeader(
                 }
                 if (canManage && !item.archived) {
                     SoftButton(text = "Редактировать", onClick = onEdit, enabled = !busy)
-                    TextButton(onClick = onArchive, enabled = !busy) {
-                        Text("В архив", color = MaterialTheme.colorScheme.error)
-                    }
+                    // Вторичная кнопка; подтверждение — в диалоге «Перевести позицию в архив?».
+                    SoftButton(text = "Архивировать", onClick = onArchive, enabled = !busy)
                 }
             }
         }
@@ -331,36 +337,54 @@ private fun StockMetric(
     }
 }
 
+/**
+ * Вкладки переносятся на новую строку, а не прячутся за прокруткой: при ширине
+ * около 1024 px все разделы карточки остаются видны (N-14).
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CardTabs(state: NomenclatureCardUiState, onSelect: (NomenclatureCardTab) -> Unit) {
     val tabs = state.visibleTabs
     val counts = state.card?.counts
-    ScrollableTabRow(
-        selectedTabIndex = tabs.indexOf(state.tab).coerceAtLeast(0),
-        containerColor = MaterialTheme.colorScheme.surface,
-        edgePadding = 0.dp
-    ) {
-        tabs.forEach { tab ->
-            val count = when (tab) {
-                NomenclatureCardTab.RESERVATIONS -> counts?.activeReservations
-                NomenclatureCardTab.MOVEMENTS -> counts?.movements
-                NomenclatureCardTab.USAGE -> counts?.usage
-                NomenclatureCardTab.FILES -> counts?.let { it.documents + it.attachments }
-                NomenclatureCardTab.HISTORY -> counts?.history
-                else -> null
-            }
-            Tab(
-                selected = state.tab == tab,
-                onClick = { onSelect(tab) },
-                text = {
+    val scheme = MaterialTheme.colorScheme
+    Column(modifier = Modifier.fillMaxWidth()) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            tabs.forEach { tab ->
+                val count = when (tab) {
+                    NomenclatureCardTab.RESERVATIONS -> counts?.activeReservations
+                    NomenclatureCardTab.MOVEMENTS -> counts?.movements
+                    NomenclatureCardTab.USAGE -> counts?.usage
+                    NomenclatureCardTab.FILES -> counts?.let { it.documents + it.attachments }
+                    NomenclatureCardTab.HISTORY -> counts?.history
+                    else -> null
+                }
+                val selected = state.tab == tab
+                val shape = RoundedCornerShape(6.dp)
+                val interaction = remember { MutableInteractionSource() }
+                Box(
+                    modifier = Modifier
+                        .clip(shape)
+                        .background(if (selected) scheme.primary.copy(alpha = 0.10f) else Color.Transparent)
+                        .erpInteractive(interaction, shape)
+                        .clickable(interactionSource = interaction, indication = null, onClick = { onSelect(tab) })
+                        .semantics { role = Role.Tab; this.selected = selected }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
                     Text(
                         text = if (count != null && count > 0) "${tab.title} · $count" else tab.title,
+                        style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
-                        fontWeight = if (state.tab == tab) FontWeight.SemiBold else FontWeight.Normal
+                        color = if (selected) scheme.primary else scheme.onSurfaceVariant,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                     )
                 }
-            )
+            }
         }
+        HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.6f))
     }
 }
 
