@@ -298,6 +298,9 @@ internal class WmsNames(
         else -> warehouses.find { it.id == id }?.let { "${it.code} · ${it.name}" } ?: "Склад #$id"
     }
 
+    /** Число активных ячеек склада (по загруженным спискам ячеек). */
+    fun activeLocationCount(warehouseId: Long): Int = locations.count { it.warehouseId == warehouseId && it.active }
+
     /** Склад по ID или null, если названия ещё нет (подпись тогда не показываем, чтобы не выводить «Склад #3»). */
     fun warehouseOrNull(id: Long?): String? =
         warehouses.find { it.id == id }?.let { "${it.code} · ${it.name}" }

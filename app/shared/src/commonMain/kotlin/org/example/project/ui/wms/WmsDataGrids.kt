@@ -42,10 +42,12 @@ fun WarehousesGrid(
     onClick: (WarehouseDto) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val names = LocalWmsNames.current
     val data = mapOf(
         "Код" to warehouses.map { it.code },
         "Название" to warehouses.map { it.name },
         "Адрес" to warehouses.map { it.address.orEmpty() },
+        "Ячеек" to warehouses.map { names.activeLocationCount(it.id) },
         "Активен" to warehouses.map { if (it.active) "Да" else "Нет" }
     )
     PersistentDataGrid(
@@ -72,7 +74,8 @@ fun LocationsGrid(
         "Название" to locations.map { it.name },
         "Тип" to locations.map { it.kind.localizedName() },
         "Назначение" to locations.map { it.purpose.localizedName() },
-        "Ёмкость" to locations.map { it.capacity.orEmpty() }
+        "Ёмкость" to locations.map { it.capacity ?: "—" },
+        "Активна" to locations.map { if (it.active) "Да" else "Нет" }
     )
     PersistentDataGrid(
         data = data,
@@ -92,15 +95,19 @@ fun NomenclatureGrid(
     items: List<NomenclatureDto>,
     onClick: (NomenclatureDto) -> Unit,
     modifier: Modifier = Modifier,
-    showSearch: Boolean = true
+    showSearch: Boolean = true,
+    /** Физический остаток по позиции (из уже загруженных остатков); пусто — колонка не показывается. */
+    stockByItem: Map<Long, Double> = emptyMap()
 ) {
     val data = buildMap<String, List<Any?>> {
         put("Код", items.map { it.code })
         put("Название", items.map { it.name })
         put("Тип", items.map { it.type.localizedName() })
         put("Ед.изм.", items.map { it.unit })
-        // Колонка «Архив» нужна, только когда в списке есть архивные позиции.
-        if (items.any { it.archived }) put("Архив", items.map { if (it.archived) "Да" else "Нет" })
+        put("Статус", items.map { if (it.archived) "В архиве" else "Активна" })
+        if (stockByItem.isNotEmpty()) {
+            put("Остаток", items.map { item -> "${ErpFormat.qty(stockByItem[item.id] ?: 0.0)} ${item.unit}".trim() })
+        }
     }
     PersistentDataGrid(
         data = data,
