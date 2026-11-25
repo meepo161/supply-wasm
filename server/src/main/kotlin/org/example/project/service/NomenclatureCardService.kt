@@ -385,7 +385,11 @@ class NomenclatureCardService(
                     createdAt = r.get(STOCK_MOVEMENT.CREATED_AT)?.toString()
                 )
             }
-        val page = rows.take(pageSize)
+        val page = rows.take(pageSize).let { items ->
+            // Номер документа вместо id — как в журнале склада (W-10).
+            val numbers = wmsRepository.documentNumbers(items.map { it.documentType to it.documentId })
+            items.map { it.copy(documentNumber = numbers[it.documentType.uppercase() to it.documentId]) }
+        }
         return NomenclatureMovementsPageDto(
             items = page,
             nextBefore = if (rows.size > pageSize) page.last().id else null
