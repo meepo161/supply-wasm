@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="un7datagrid-js">
+    <output-path>$PROJECT_DIR$/app/un7datagrid/build/libs</output-path>
+    <root id="archive" name="un7datagrid-js.jar">
+      <element id="module-output" name="KotlinProject.app.un7datagrid.jsMain" />
+    </root>
+  </artifact>
+</component>

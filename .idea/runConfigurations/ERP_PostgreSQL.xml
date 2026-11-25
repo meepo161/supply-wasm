@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ERP PostgreSQL" type="ShConfigurationType">
+    <option name="SCRIPT_TEXT" value="if (docker ps -aq -f name=^erp-postgres$) { docker start erp-postgres | Out-Null } else { docker compose up -d postgres }; if ($LASTEXITCODE -ne 0) { exit 1 }; do { Start-Sleep -Seconds 1; docker exec erp-postgres pg_isready -U erp -d erp } until ($LASTEXITCODE -eq 0)" />
+    <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+    <option name="SCRIPT_PATH" value="" />
+    <option name="SCRIPT_OPTIONS" value="" />
+    <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
+    <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="INDEPENDENT_INTERPRETER_PATH" value="false" />
+    <option name="INTERPRETER_PATH" value="powershell.exe" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="EXECUTE_IN_TERMINAL" value="false" />
+    <option name="EXECUTE_SCRIPT_FILE" value="false" />
+    <envs />
+    <method v="2" />
+  </configuration>
+</component>

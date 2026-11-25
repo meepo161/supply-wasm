@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ERP Start All" type="CompoundRunConfigurationType">
+    <toRun name="ERP Backend 8080" type="GradleRunConfiguration" />
+    <toRun name="ERP Web Wasm 8081 Continuous" type="GradleRunConfiguration" />
+    <method v="2" />
+  </configuration>
+</component>
