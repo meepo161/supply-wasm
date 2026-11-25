@@ -97,7 +97,11 @@ class WmsViewModel(
                     ?: _uiState.value.warehouses.firstOrNull()?.id
                 warehouseId?.let { loadLocations(it) }
             }
-            WmsTab.NOMENCLATURE -> loadNomenclature()
+            WmsTab.NOMENCLATURE -> {
+                loadNomenclature()
+                // Остатки нужны колонке «Остаток» в списке номенклатуры.
+                loadStock()
+            }
             WmsTab.STOCK -> loadStock()
             WmsTab.RECEIPTS -> loadReceipts()
             WmsTab.RESERVATIONS -> loadReservations()

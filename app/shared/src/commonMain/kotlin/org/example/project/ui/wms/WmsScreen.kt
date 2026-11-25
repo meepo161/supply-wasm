@@ -386,7 +386,18 @@ private fun NomenclatureTab(
     state: WmsUiState,
     viewModel: WmsViewModel
 ) {
+    var typeFilter by remember { mutableStateOf<org.example.project.dto.NomenclatureType?>(null) }
     val visibleItems = filterNomenclature(state.nomenclature, state.nomenclatureSearch)
+        .filter { typeFilter == null || it.type == typeFilter }
+    // Остаток берём из уже загруженных остатков (без запроса на каждую позицию) и показываем,
+    // только если фильтры остатков сброшены: иначе сумма была бы неполной.
+    val stockByItem = remember(state.stock, state.stockFilters) {
+        if (state.stockFilters != StockFilters() || state.stock.isEmpty()) {
+            emptyMap()
+        } else {
+            state.stock.groupBy { it.nomenclatureId }.mapValues { (_, rows) -> rows.sumOf { it.physicalQty.toDoubleOrNull() ?: 0.0 } }
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -397,13 +408,25 @@ private fun NomenclatureTab(
             onRefresh = viewModel::loadNomenclature,
             createLabel = "Создать номенклатуру"
         )
-        OutlinedTextField(
-            value = state.nomenclatureSearch,
-            onValueChange = viewModel::updateNomenclatureSearch,
-            label = { Text("Поиск по коду, названию, описанию или штрихкоду") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                value = state.nomenclatureSearch,
+                onValueChange = viewModel::updateNomenclatureSearch,
+                label = { Text("Поиск по коду, названию, описанию или штрихкоду") },
+                singleLine = true,
+                modifier = Modifier.weight(1.6f)
+            )
+            SearchableDropdown(
+                items = org.example.project.dto.NomenclatureType.entries,
+                selected = typeFilter,
+                onSelect = { typeFilter = it },
+                onClear = { typeFilter = null },
+                clearText = "Все типы",
+                label = "Тип номенклатуры",
+                itemText = { it.localizedName() },
+                modifier = Modifier.weight(1f)
+            )
+        }
         state.operationError?.let { ErrorMessageCard(error = it) }
         if (state.isLoading && state.nomenclature.isEmpty()) {
             LoadingOverlay()
@@ -421,6 +444,7 @@ private fun NomenclatureTab(
             )
         } else {
             NomenclatureGrid(
+                stockByItem = stockByItem,
                 items = visibleItems,
                 onClick = { viewModel.selectNomenclature(it) },
                 modifier = Modifier.fillMaxWidth().weight(1f)
@@ -447,9 +471,11 @@ private fun StockTab(
             availOk && quarantineOk
         }
     }
-    val totalPhysical = remember(filteredStock) { filteredStock.sumOf { it.physicalQty.toDoubleOrNull() ?: 0.0 } }
-    val totalReserved = remember(filteredStock) { filteredStock.sumOf { it.reservedQty.toDoubleOrNull() ?: 0.0 } }
-    val totalAvailable = remember(filteredStock) { filteredStock.sumOf { it.availableQty.toDoubleOrNull() ?: 0.0 } }
+    // Штуки и метры складывать нельзя: итог считаем отдельно по каждой единице измерения.
+    val unitById = remember(state.nomenclature) { state.nomenclature.associate { it.id to it.unit } }
+    val totalPhysical = remember(filteredStock, unitById) { totalsByUnit(filteredStock, unitById) { it.physicalQty } }
+    val totalReserved = remember(filteredStock, unitById) { totalsByUnit(filteredStock, unitById) { it.reservedQty } }
+    val totalAvailable = remember(filteredStock, unitById) { totalsByUnit(filteredStock, unitById) { it.availableQty } }
     val quarantineCount = remember(state.stock) {
         state.stock.count { it.locationPurpose == StorageLocationPurpose.QUARANTINE || it.locationPurpose == StorageLocationPurpose.DEFECT }
     }
@@ -495,9 +521,9 @@ private fun StockTab(
                 filterOnlyAvailable = false
                 filterQuarantineOnly = false
             })
-            StockKpiCard("Физически", formatQtyShort(totalPhysical), Brand.Indigo, Modifier.weight(1f))
-            StockKpiCard("В резерве", formatQtyShort(totalReserved), Brand.Amber, Modifier.weight(1f))
-            StockKpiCard("Доступно", formatQtyShort(totalAvailable), Brand.Teal, Modifier.weight(1f).clickable {
+            StockKpiCard("Физически", totalPhysical.text, Brand.Indigo, Modifier.weight(1f), hint = totalPhysical.hint)
+            StockKpiCard("В резерве", totalReserved.text, Brand.Amber, Modifier.weight(1f), hint = totalReserved.hint)
+            StockKpiCard("Доступно", totalAvailable.text, Brand.Teal, Modifier.weight(1f), hint = totalAvailable.hint, onClick = {
                 filterOnlyAvailable = !filterOnlyAvailable
             })
             StockKpiCard("Карантин / брак", "$quarantineCount", if (quarantineCount > 0) Brand.Rose else Brand.Graphite, Modifier.weight(1f).clickable {
@@ -558,12 +584,14 @@ private fun StockKpiCard(
     title: String,
     value: String,
     accent: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hint: String? = null,
+    onClick: (() -> Unit)? = null
 ) {
     // Нейтральная плитка: цвет появляется только у тревожного значения (карантин / брак).
     val alarming = accent == Brand.Rose
     Surface(
-        modifier = modifier,
+        modifier = if (onClick != null) modifier.clickable { onClick() } else modifier,
         shape = MaterialTheme.shapes.medium,
         color = if (alarming) accent.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(
@@ -578,12 +606,31 @@ private fun StockKpiCard(
                 style = MaterialTheme.typography.titleMedium,
                 color = if (alarming) org.example.project.ui.theme.readableAccent(accent) else MaterialTheme.colorScheme.onSurface
             )
+            hint?.let { Text(text = it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
 
-/** Тот же формат, что в таблицах (запятая, группы разрядов), — иначе «397.5» рядом с «19,5». */
-private fun formatQtyShort(value: Double): String = ErpFormat.qty(value)
+/** Подпись итога: «360 м · 33,5 шт» либо «разные единицы» с пояснением, если единиц больше двух. */
+private class UnitTotals(val text: String, val hint: String?)
+
+private fun totalsByUnit(
+    stock: List<org.example.project.dto.StockBalanceDto>,
+    unitById: Map<Long, String>,
+    qty: (org.example.project.dto.StockBalanceDto) -> String
+): UnitTotals {
+    val sums = linkedMapOf<String, Double>()
+    stock.forEach { row ->
+        val unit = unitById[row.nomenclatureId].orEmpty()
+        sums[unit] = (sums[unit] ?: 0.0) + (qty(row).toDoubleOrNull() ?: 0.0)
+    }
+    val parts = sums.map { (unit, sum) -> listOf(ErpFormat.qty(sum), unit).filter { it.isNotBlank() }.joinToString(" ") }
+    return when {
+        parts.isEmpty() -> UnitTotals("0", null)
+        parts.size <= 2 -> UnitTotals(parts.joinToString(" · "), null)
+        else -> UnitTotals("разные единицы", "В остатках ${parts.size} единиц измерения, общий итог не имеет смысла: " + parts.joinToString("; "))
+    }
+}
 
 @Composable
 private fun ReceiptsTab(
@@ -1939,7 +1986,8 @@ private fun WmsTopNav(
                 org.example.project.ui.theme.SoftButton(
                     text = label,
                     onClick = { onSelectTab(entry.tab) },
-                    tint = if (selected) entry.accent else Brand.Slate,
+                    // Активная вкладка — обычный акцент интерфейса, а не цвет раздела (жёлтый читался как предупреждение).
+                    tint = if (selected) null else Brand.Slate,
                     leadingIcon = entry.glyph
                 )
             }
@@ -1948,7 +1996,7 @@ private fun WmsTopNav(
                 org.example.project.ui.theme.SoftButton(
                     text = activeOperation?.let { "Операции: ${it.tab.title} ▾" } ?: "Операции ▾",
                     onClick = { opsExpanded = true },
-                    tint = activeOperation?.accent ?: Brand.Slate,
+                    tint = if (activeOperation != null) null else Brand.Slate,
                     leadingIcon = activeOperation?.glyph ?: ErpIconGlyph.Clock
                 )
                 DropdownMenu(expanded = opsExpanded, onDismissRequest = { opsExpanded = false }) {
@@ -1970,7 +2018,7 @@ private fun WmsTopNav(
                 org.example.project.ui.theme.SoftButton(
                     text = activeDict?.let { "Справочники: ${it.tab.title} ▾" } ?: "Справочники ▾",
                     onClick = { dictExpanded = true },
-                    tint = activeDict?.accent ?: Brand.Slate,
+                    tint = if (activeDict != null) null else Brand.Slate,
                     leadingIcon = activeDict?.glyph ?: ErpIconGlyph.Warehouse
                 )
                 DropdownMenu(expanded = dictExpanded, onDismissRequest = { dictExpanded = false }) {

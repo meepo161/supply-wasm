@@ -205,7 +205,7 @@ fun CreateNomenclatureDialog(
             OutlinedTextField(
                 value = form.unit,
                 onValueChange = { onFormChange(form.copy(unit = it)) },
-                label = { Text("Единица измерения *") },
+                label = { Text("Единица измерения номенклатуры *") },
                 modifier = Modifier.weight(0.55f),
                 singleLine = true
             )
@@ -245,12 +245,19 @@ fun CreateNomenclatureDialog(
                 Text("Учёт по сериям")
             }
         }
+        Text(
+            "Признаки учёта по партиям и сериям нельзя изменить после создания номенклатуры.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Text("Штрихкоды", style = MaterialTheme.typography.labelLarge)
         form.barcodes.forEachIndexed { index, barcode ->
             BarcodeRow(
                 barcode = barcode,
                 onChange = { onFormChange(form.copy(barcodes = form.barcodes.toMutableList().apply { this[index] = it })) },
-                onRemove = { onFormChange(form.copy(barcodes = form.barcodes.toMutableList().apply { removeAt(index) })) }
+                onRemove = { onFormChange(form.copy(barcodes = form.barcodes.toMutableList().apply { removeAt(index) })) },
+                // Единственное пустое поле удалять незачем.
+                canRemove = !(form.barcodes.size == 1 && barcode.barcode.isBlank())
             )
         }
         TextButton(onClick = { onFormChange(form.copy(barcodes = form.barcodes + CreateNomenclatureBarcodeRequest(barcode = ""))) }) {
@@ -264,7 +271,8 @@ fun CreateNomenclatureDialog(
 private fun BarcodeRow(
     barcode: CreateNomenclatureBarcodeRequest,
     onChange: (CreateNomenclatureBarcodeRequest) -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    canRemove: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -284,7 +292,7 @@ private fun BarcodeRow(
                 value = barcode.packageType.localizedName(),
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Тип упаковки") },
+                label = { Text("Упаковка штрихкода") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 modifier = Modifier.menuAnchor()
             )
@@ -310,7 +318,7 @@ private fun BarcodeRow(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             singleLine = true
         )
-        TextButton(onClick = onRemove) { Text("Удалить штрихкод") }
+        if (canRemove) TextButton(onClick = onRemove) { Text("Удалить штрихкод") }
     }
 }
 
