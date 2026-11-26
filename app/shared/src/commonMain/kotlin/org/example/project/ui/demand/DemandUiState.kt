@@ -42,7 +42,7 @@ enum class DemandStageFilter(val label: String) {
     ALL("Все"),
     WAITING_OFFERS("Ждут предложений"),
     WAITING_SELECTION("Ждут выбора ведущего"),
-    WAITING_PAYMENT("Ждут оплаты"),
+    WAITING_PAYMENT("Ждут заказа"),
     IN_TRANSIT("В пути на склад"),
     CLOSED("На складе / Закрыты"),
     CANCELLED("Отменённые")
@@ -96,7 +96,7 @@ data class DemandCreateOfferForm(
     val demandNumber: String = "",
     val supplierId: Long? = null,
     val deliveryDays: String = "",
-    val paymentTerms: String = "100% предоплата",
+    val paymentTerms: String = "",
     val validUntil: String = "",
     val note: String = "",
     val pendingInvoiceFile: AttachmentFileData? = null,

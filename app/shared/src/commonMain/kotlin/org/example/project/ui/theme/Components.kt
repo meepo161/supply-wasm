@@ -1104,6 +1104,8 @@ fun ErpDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val availableBodyHeight = (maxHeight - 190.dp).coerceAtLeast(80.dp)
         Surface(
             modifier = modifier
                 .padding(horizontal = 24.dp, vertical = 18.dp)
@@ -1153,7 +1155,7 @@ fun ErpDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = maxBodyHeight)
+                        .heightIn(max = minOf(maxBodyHeight, availableBodyHeight))
                         .verticalScroll(bodyScrollState)
                         .padding(horizontal = 22.dp, vertical = 18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1184,6 +1186,7 @@ fun ErpDialog(
                     }
                 }
             }
+        }
         }
     }
 }

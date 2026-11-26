@@ -22,6 +22,7 @@ fun ProjectsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showSpecification by remember(state.selectedProject?.id) { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedProject) {
         if (showCreateDialog && state.selectedProject != null) {
@@ -69,6 +70,8 @@ fun ProjectsScreen(
             onBack = viewModel::backToList,
             modifier = modifier,
             tabsState = state,
+            onRefreshSupply = { viewModel.loadSupplyOverview(selected.id) },
+            onCreateSpecification = { showSpecification = true },
             onTabSelected = viewModel::selectTab,
             onTabRefresh = { viewModel.loadTab() },
             onTaskStatusFilter = viewModel::filterTasks,
@@ -94,6 +97,16 @@ fun ProjectsScreen(
                 onDismissError = viewModel::dismissPlanError
             )
         )
+        if (showSpecification) {
+            ProjectSpecificationDialog(
+                project = selected,
+                onDismiss = { showSpecification = false },
+                onSent = {
+                    showSpecification = false
+                    viewModel.loadSupplyOverview(selected.id)
+                }
+            )
+        }
     } else {
         ProjectListScreen(
             projects = state.projects,

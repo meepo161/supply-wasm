@@ -98,6 +98,8 @@ fun ProjectDetailScreen(
     // Вкладки карточки (PRJ-13/PRJ-14). Передаётся весь снимок состояния,
     // чтобы сигнатура не разрасталась на десять отдельных параметров.
     tabsState: ProjectsUiState? = null,
+    onRefreshSupply: () -> Unit = {},
+    onCreateSpecification: () -> Unit = {},
     onTabSelected: (ProjectTab) -> Unit = {},
     onTabRefresh: () -> Unit = {},
     onTaskStatusFilter: (org.example.project.dto.TaskStatus?) -> Unit = {},
@@ -242,6 +244,10 @@ fun ProjectDetailScreen(
                     onOpenProject = onOpenProject,
                     summary = tabsState?.summary,
                     planSummary = tabsState?.planSummary,
+                    supplyState = tabsState,
+                    onRefreshSupply = onRefreshSupply,
+                    onCreateSpecification = onCreateSpecification,
+                    canCreateSpecification = currentUser.hasPermission("demands", "create") || currentUser.hasPermission("bom", "create"),
                     users = users,
                     canManageMembers = canManageMembers,
                     memberError = memberError,
@@ -344,6 +350,10 @@ private fun ProjectOverviewTab(
     onOpenProject: () -> Unit,
     summary: org.example.project.dto.ProjectSummaryDto? = null,
     planSummary: org.example.project.dto.ProjectPlanSummaryDto? = null,
+    supplyState: ProjectsUiState? = null,
+    onRefreshSupply: () -> Unit = {},
+    onCreateSpecification: () -> Unit = {},
+    canCreateSpecification: Boolean = false,
     users: List<UserDto> = emptyList(),
     canManageMembers: Boolean = false,
     memberError: org.example.project.dto.ApiError? = null,
@@ -358,6 +368,12 @@ private fun ProjectOverviewTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (supplyState != null) {
+            ProjectSupplySection(supplyState, onRefreshSupply)
+        }
+        if (canCreateSpecification) {
+            Button(onClick = onCreateSpecification) { Text("Подготовить спецификацию и передать в снабжение") }
+        }
         if (project.status == ProjectStatus.DRAFT && isOwner) {
             OpenProjectSection(
                 openForm = openForm,
@@ -402,6 +418,32 @@ private fun ProjectOverviewTab(
                     onAddMember = onAddMember,
                     onRemoveMember = onRemoveMember
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProjectSupplySection(state: ProjectsUiState, onRefresh: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text("Обеспечение проекта", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = onRefresh, enabled = !state.supplyLoading) { Text("Обновить") }
+        }
+        if (state.supplyLoading) Text("Загрузка обеспечения…")
+        state.supplyError?.let { ErrorMessageCard(error = it) }
+        state.supplyOverview?.let { overview ->
+            if (overview.lines.isEmpty()) Text("Переданных в снабжение позиций пока нет.")
+            overview.lines.forEach { line ->
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("${line.nomenclatureCode} · ${line.nomenclatureName}", fontWeight = FontWeight.SemiBold)
+                        Text("Требуется: ${line.requiredQuantity} ${line.unit} · Зарезервировано: ${line.reservedQuantity} ${line.unit} · Заказано: ${line.orderedQuantity} ${line.unit}")
+                        Text("Поступило: ${line.receivedQuantity} ${line.unit} · Ожидается: ${line.awaitingDeliveryQuantity} ${line.unit} · Ещё обеспечить: ${line.remainingToEnsureQuantity} ${line.unit}")
+                        Text("${line.stageLabel} · Следующий шаг: ${line.nextActorRole} — ${line.nextActionHint}")
+                        line.stallReason?.takeIf { it.isNotBlank() }?.let { Text("Причина задержки: $it") }
+                    }
+                }
             }
         }
     }

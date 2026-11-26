@@ -29,6 +29,29 @@ class DemandRoutesTest {
     }
 
     @Test
+    fun `procurement reserves available stock and leaves shortage`() = testApp {
+        val admin = jsonClient()
+        val user = createUserWithRole(admin, "reserve-buyer", "password", "Buyer",
+            demandCreatorPermissions() + wmsPermissions() + projectPermissions() + listOf(CreatePermissionRequest("suppliers", "offer")))
+        val client = loginClient("reserve-buyer", "password")
+        val warehouse = createWarehouse(client, "WH-RES")
+        val location = createLocation(client, warehouse.id, "RES-1")
+        val project = createProject(client, user.id)
+        val material = createNomenclature(client, "RES-MAT", NomenclatureType.PURCHASED_COMPONENT)
+        postInitialStock(client, warehouse.id, location.id, material.id, "4")
+        val demand = createManualDemand(client, DemandSourceType.PROJECT, project.id,
+            listOf(DemandLineInput(1, material.id, "10", "pcs")))
+        val response = client.post("/api/demands/${demand.header.id}/lines/${demand.lines.single().id}/reserve-stock") {
+            contentType(ContentType.Application.Json)
+            setBody(stringify(ReserveDemandStockRequest()))
+        }
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+        val line = response.bodyAs<ApiResponse<DemandDetailDto>>().data!!.lines.single()
+        assertEquals(0, java.math.BigDecimal("4").compareTo(java.math.BigDecimal(line.stockReservedQuantity)))
+        assertEquals(0, java.math.BigDecimal("6").compareTo(java.math.BigDecimal(line.deficitQuantity!!)))
+    }
+
+    @Test
     fun `create manual demand starts approved and can be cancelled`() = testApp {
         val admin = jsonClient()
         val creator = createUserWithRole(
@@ -193,6 +216,18 @@ class DemandRoutesTest {
 
         val response = strangerClient.get("/api/demands/${demand.header.id}")
         assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `warehouse read permission does not reveal unrelated project overview`() = testApp {
+        val admin = jsonClient()
+        val owner = createUserWithRole(admin, "owner-overview", "password", "Owner", projectPermissions())
+        createUserWithRole(admin, "other-overview", "password", "Warehouse reader", listOf(CreatePermissionRequest("wms", "read")))
+        val ownerClient = loginClient("owner-overview", "password")
+        val otherClient = loginClient("other-overview", "password")
+        val project = createProject(ownerClient, owner.id)
+        val response = otherClient.get("/api/projects/${project.id}/supply-overview")
+        assertEquals(HttpStatusCode.Forbidden, response.status, response.bodyAsText())
     }
 
     private fun demandCreatorPermissions() = listOf(

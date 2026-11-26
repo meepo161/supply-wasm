@@ -823,10 +823,7 @@ class DemandService(
             ?: throw NotFoundException("project", projectId)
         val hasAccess = projectRepository.isMember(projectId, currentUser.userId) ||
             project.ownerId == currentUser.userId ||
-            currentUser.hasPermission("projects", "read_any") ||
-            currentUser.hasPermission("demands", "read_any") ||
-            currentUser.hasPermission("suppliers", "read") ||
-            currentUser.hasPermission("wms", "read")
+            currentUser.hasPermission("projects", "read_any")
         if (!hasAccess) {
             throw ForbiddenException("Access to project supply overview denied")
         }

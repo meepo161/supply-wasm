@@ -506,9 +506,8 @@ class SupplierService(
             throw ValidationException("Offer must contain at least one line", mapOf("lines" to "required"))
         }
         val invoiceDocumentId = request.invoiceDocumentId
-        if (invoiceDocumentId != null) {
-            requireInvoiceDocument(invoiceDocumentId, currentUser)
-        }
+            ?: throw ValidationException("Необходимо приложить счёт поставщика", mapOf("invoiceDocumentId" to "required"))
+        requireInvoiceDocument(invoiceDocumentId, currentUser)
         val invoiceDate = request.invoiceDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
             parseDate(it, "invoiceDate")
         }

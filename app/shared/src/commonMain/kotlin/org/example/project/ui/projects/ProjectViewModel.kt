@@ -88,6 +88,8 @@ class ProjectViewModel(
     fun selectProject(project: ProjectDto) {
         _uiState.value = _uiState.value.copy(
             selectedProject = project,
+            supplyOverview = null,
+            supplyError = null,
             detailLoading = true,
             openError = null,
             memberError = null,
@@ -107,9 +109,22 @@ class ProjectViewModel(
             planError = null
         )
         loadProjectTasks(project.id)
+        loadSupplyOverview(project.id)
         viewModelScope.launch {
             refreshSelectedProject(project.id)
             loadTab(ProjectTab.OVERVIEW)
+        }
+    }
+
+    fun loadSupplyOverview(projectId: Long) {
+        _uiState.value = _uiState.value.copy(supplyLoading = true, supplyError = null)
+        viewModelScope.launch {
+            val result = projectRepository.getSupplyOverview(projectId)
+            if (_uiState.value.selectedProject?.id != projectId) return@launch
+            _uiState.value = when (result) {
+                is ApiResult.Success -> _uiState.value.copy(supplyOverview = result.data, supplyLoading = false)
+                is ApiResult.Error -> _uiState.value.copy(supplyError = result.error, supplyLoading = false)
+            }
         }
     }
 
@@ -815,6 +830,9 @@ data class ProjectsUiState(
     val projects: List<ProjectDto> = emptyList(),
     val users: List<UserDto> = emptyList(),
     val selectedProject: ProjectDto? = null,
+    val supplyOverview: org.example.project.dto.ProjectSupplyOverviewDto? = null,
+    val supplyLoading: Boolean = false,
+    val supplyError: ApiError? = null,
     val isLoading: Boolean = false,
     val detailLoading: Boolean = false,
     val error: org.example.project.dto.ApiError? = null,

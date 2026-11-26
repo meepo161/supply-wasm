@@ -312,6 +312,8 @@ class TaskViewModelRevocationTest {
             override suspend fun listOptions() = org.example.project.data.ApiResult.Success(emptyList<org.example.project.dto.UserOptionDto>())
         }
         val projects = object : org.example.project.data.ProjectRepository {
+            override suspend fun getSupplyOverview(projectId: Long) = error("unused")
+            override suspend fun handoffSpecification(projectId: Long, request: org.example.project.dto.HandoffProjectSpecRequest) = error("unused")
             override suspend fun list() = org.example.project.data.ApiResult.Success(emptyList<org.example.project.dto.ProjectDto>())
             override suspend fun get(id: Long) = error("unused")
             override suspend fun create(request: org.example.project.dto.CreateProjectRequest) = error("unused")
@@ -454,6 +456,8 @@ private fun openGenerationTaskViewModel(
         override suspend fun listOptions() = org.example.project.data.ApiResult.Success(emptyList<org.example.project.dto.UserOptionDto>())
     }
     val projects = object : org.example.project.data.ProjectRepository {
+        override suspend fun getSupplyOverview(projectId: Long) = error("unused")
+        override suspend fun handoffSpecification(projectId: Long, request: org.example.project.dto.HandoffProjectSpecRequest) = error("unused")
         override suspend fun list() = org.example.project.data.ApiResult.Success(emptyList<org.example.project.dto.ProjectDto>())
         override suspend fun get(id: Long) = error("unused")
         override suspend fun create(request: org.example.project.dto.CreateProjectRequest) = error("unused")

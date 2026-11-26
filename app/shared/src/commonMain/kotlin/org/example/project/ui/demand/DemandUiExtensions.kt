@@ -43,7 +43,7 @@ fun DemandLineStatus.localizedName(): String = when (this) {
 fun demandStage(demand: DemandHeaderDto, offersCount: Int?): DemandStageFilter = when {
     demand.status == DemandStatus.CANCELLED -> DemandStageFilter.CANCELLED
     demand.status == DemandStatus.COVERED -> DemandStageFilter.CLOSED
-    demand.isPaid -> DemandStageFilter.IN_TRANSIT
+    demand.isPaid || demand.nextActorRole == "Кладовщик" -> DemandStageFilter.IN_TRANSIT
     demand.selectedSupplierName != null -> DemandStageFilter.WAITING_PAYMENT
     offersCount != null -> if (offersCount > 0) DemandStageFilter.WAITING_SELECTION else DemandStageFilter.WAITING_OFFERS
     demand.status == DemandStatus.IN_PROCUREMENT -> DemandStageFilter.WAITING_SELECTION
@@ -58,7 +58,7 @@ fun demandStageLabel(demand: DemandHeaderDto, offersCount: Int?): String = when 
     }
     DemandStageFilter.WAITING_SELECTION -> "На выборе у ведущего"
     DemandStageFilter.WAITING_PAYMENT -> buildString {
-        append("Ждёт оплаты")
+        append("Ждёт оформления заказа")
         val details = listOfNotNull(
             demand.selectedSupplierName,
             demand.selectedGrossTotal?.let { ErpFormat.money(it) }
@@ -68,9 +68,9 @@ fun demandStageLabel(demand: DemandHeaderDto, offersCount: Int?): String = when 
         }
     }
     DemandStageFilter.IN_TRANSIT -> if (demand.status == DemandStatus.PARTIALLY_COVERED) {
-        "Оплачено · Частично на складе"
+        "Заказан · Частично обеспечено"
     } else {
-        "Оплачено · В пути на склад"
+        "Заказан · В пути на склад"
     }
     DemandStageFilter.CLOSED -> "На складе ✓"
     DemandStageFilter.CANCELLED -> "Отменена"

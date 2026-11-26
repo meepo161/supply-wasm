@@ -219,6 +219,43 @@ class DemandViewModel(
         selectDemand(id)
     }
 
+    fun canReserveStock(): Boolean = currentUser.hasPermission("suppliers", "offer") ||
+        currentUser.hasPermission("suppliers", "order") || currentUser.hasPermission("wms", "manage")
+
+    fun returnOfferForRevision(offer: org.example.project.dto.SupplierOfferDto, reason: String) {
+        val demandId = _uiState.value.selectedDemand?.header?.id ?: return
+        if (_uiState.value.isActionRunning) return
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = supplierRepository.returnOfferForRevision(
+                offer.id, org.example.project.dto.ReturnOfferForRevisionRequest(reason.trim(), offer.version)
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isActionRunning = false)
+                    if (_uiState.value.selectedDemand?.header?.id == demandId) selectDemand(demandId)
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(isActionRunning = false, operationError = result.error)
+            }
+        }
+    }
+
+    fun reserveDemandStock(lineId: Long) {
+        val demandId = _uiState.value.selectedDemand?.header?.id ?: return
+        if (!canReserveStock() || _uiState.value.isActionRunning) return
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            val result = demandRepository.reserveDemandLineStock(demandId, lineId)
+            if (_uiState.value.selectedDemand?.header?.id != demandId) {
+                _uiState.value = _uiState.value.copy(isActionRunning = false)
+                return@launch
+            }
+            _uiState.value = when (result) {
+                is ApiResult.Success -> _uiState.value.copy(selectedDemand = result.data, isActionRunning = false)
+                is ApiResult.Error -> _uiState.value.copy(operationError = result.error, isActionRunning = false)
+            }
+        }
+    }
+
     fun refreshSelectedDemandIfOpen() {
         if (_uiState.value.currentPage == DemandPage.DETAIL) {
             refreshSelectedDemand()
@@ -831,6 +868,32 @@ class DemandViewModel(
 
     fun updatePaymentNote(value: String) {
         _uiState.value = _uiState.value.copy(paymentNote = value)
+    }
+
+    fun placeDemandOrder() {
+        if (!canOrder() || _uiState.value.isActionRunning) return
+        val demand = _uiState.value.selectedDemand ?: return
+        val expected = _uiState.value.paymentExpectedAt.trim()
+        if (expected.isNotEmpty() && !Regex("""\d{4}-\d{2}-\d{2}""").matches(expected)) {
+            _uiState.value = _uiState.value.copy(operationError = ApiError("VALIDATION_ERROR", "Укажите корректную плановую дату прихода"))
+            return
+        }
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            val result = demandRepository.placeDemandOrder(demand.header.id,
+                org.example.project.dto.PlaceDemandOrderRequest(expectedAt = expected.ifEmpty { null }, markPaid = false))
+            if (_uiState.value.selectedDemand?.header?.id != demand.header.id) {
+                _uiState.value = _uiState.value.copy(isActionRunning = false)
+                return@launch
+            }
+            when (result) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    selectedDemand = result.data, isActionRunning = false,
+                    successMessage = "Заказ оформлен и передан в очередь склада. Оплата не отмечена."
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(isActionRunning = false, operationError = result.error)
+            }
+        }
     }
 
     fun markDemandPaid() {

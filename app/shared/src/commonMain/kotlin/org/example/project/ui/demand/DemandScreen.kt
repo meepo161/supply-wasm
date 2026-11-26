@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
@@ -529,7 +530,8 @@ private fun DemandDetailPage(
 
         DemandLinesBlock(
             demand = demand,
-            state = state
+            state = state,
+            viewModel = viewModel
         )
 
         DemandOffersBlock(
@@ -562,6 +564,10 @@ private fun DemandCockpitHeader(
     val hasSelectedOffer = demand.offers.any { it.status == SupplierOfferStatus.SELECTED } ||
         header.selectedSupplierName != null
     val isPaid = header.isPaid || demand.orders.any { it.paidAt != null }
+    val isOrdered = demand.orders.any { it.status in setOf(
+        org.example.project.dto.PurchaseOrderStatus.SENT, org.example.project.dto.PurchaseOrderStatus.PARTIALLY_DELIVERED,
+        org.example.project.dto.PurchaseOrderStatus.DELIVERED, org.example.project.dto.PurchaseOrderStatus.CLOSED
+    ) }
     val paidAt = header.paidAt ?: demand.orders.firstNotNullOfOrNull { it.paidAt }
     val canSelect = viewModel.canSelectOfferFor(header.initiatorId)
     val openDays = demandOpenDays(header.createdAt, todayIso)
@@ -635,7 +641,9 @@ private fun DemandCockpitHeader(
                 header = header,
                 offersCount = demand.offers.size,
                 hasSelectedOffer = hasSelectedOffer,
-                isPaid = isPaid
+                isPaid = isPaid,
+                isOrdered = isOrdered,
+                hasReceipt = demand.receipts.any { it.status == "POSTED" }
             )
 
             HorizontalDivider()
@@ -656,7 +664,7 @@ private fun DemandCockpitHeader(
                         }
                         header.status == DemandStatus.COVERED -> {
                             StatusHintBanner(
-                                text = "Все позиции приняты на склад ✓",
+                                text = "Все позиции обеспечены под потребность ✓",
                                 accent = Brand.Mint
                             )
                         }
@@ -666,14 +674,17 @@ private fun DemandCockpitHeader(
                                 accent = Brand.Teal
                             )
                         }
+                        isOrdered -> {
+                            StatusHintBanner(text = "Заказан · ожидает приёмки на складе", accent = Brand.Teal)
+                        }
                         hasSelectedOffer -> {
                             val info = listOfNotNull(header.selectedSupplierName, header.selectedGrossTotal?.let { ErpFormat.money(it) })
                                 .joinToString(", ")
                             StatusHintBanner(
                                 text = if (viewModel.canOrder()) {
-                                    "Вариант выбран ($info) — оплатите счёт и отметьте оплату для передачи на склад"
+                                    "Вариант выбран ($info) — оформите заказ поставщику"
                                 } else {
-                                    "Вариант выбран ($info) — ожидает оплаты снабжением"
+                                    "Вариант выбран ($info) — ожидает оформления заказа снабжением"
                                 },
                                 accent = Brand.Orange
                             )
@@ -743,10 +754,10 @@ private fun DemandCockpitHeader(
                                     enabled = !state.isActionRunning
                                 )
                             }
-                            hasSelectedOffer && !isPaid && viewModel.canOrder() -> {
+                            hasSelectedOffer && !isOrdered && viewModel.canOrder() -> {
                                 GradientButton(
-                                    text = if (state.isActionRunning) "Сохранение…" else "✓ Отметить «Оплачено»",
-                                    onClick = viewModel::markDemandPaid,
+                                    text = if (state.isActionRunning) "Сохранение…" else "Оформить и отметить заказанным",
+                                    onClick = viewModel::placeDemandOrder,
                                     gradient = Gradients.Emerald,
                                     enabled = !state.isActionRunning
                                 )
@@ -771,7 +782,9 @@ private fun DemandProgressStepper(
     header: DemandHeaderDto,
     offersCount: Int,
     hasSelectedOffer: Boolean,
-    isPaid: Boolean
+    isPaid: Boolean,
+    isOrdered: Boolean,
+    hasReceipt: Boolean
 ) {
     if (header.status == DemandStatus.CANCELLED) {
         StatusHintBanner(text = "Заявка отменена — цепочка остановлена", accent = Brand.Rose)
@@ -793,16 +806,16 @@ private fun DemandProgressStepper(
         else -> StepState.PENDING
     }
     val step4 = when {
-        isPaid || header.status == DemandStatus.COVERED -> StepState.DONE
+        isOrdered || isPaid -> StepState.DONE
         hasSelectedOffer -> StepState.ACTIVE
         else -> StepState.PENDING
     }
     val step5 = when {
-        header.status == DemandStatus.COVERED -> StepState.DONE
-        header.status == DemandStatus.PARTIALLY_COVERED || isPaid -> StepState.ACTIVE
+        hasReceipt && header.status == DemandStatus.COVERED -> StepState.DONE
+        isOrdered || isPaid -> StepState.ACTIVE
         else -> StepState.PENDING
     }
-    val step5Label = if (header.status == DemandStatus.PARTIALLY_COVERED) {
+    val step5Label = if (hasReceipt && header.status == DemandStatus.PARTIALLY_COVERED) {
         "5. Частично на складе"
     } else {
         "5. Принято на склад"
@@ -812,7 +825,7 @@ private fun DemandProgressStepper(
         "1. Заявка создана" to step1,
         "2. Предложения ($offersCount)" to step2,
         "3. Выбор ведущего" to step3,
-        "4. Оплачено" to step4,
+        "4. Заказан" to step4,
         step5Label to step5
     )
 
@@ -898,7 +911,8 @@ private fun StatusHintBanner(text: String, accent: Color) {
 @Composable
 private fun DemandLinesBlock(
     demand: DemandDetailDto,
-    state: DemandUiState
+    state: DemandUiState,
+    viewModel: DemandViewModel
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 16.dp) {
         SectionHeader(
@@ -976,15 +990,23 @@ private fun DemandLinesBlock(
                                 color = if (hasStock) Brand.Teal else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Принято по заявке: ${ErpFormat.qty(line.coveredQuantity)} ${line.unit}",
+                                text = "Обеспечено всего: ${ErpFormat.qty(line.coveredQuantity)} ${line.unit}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Осталось получить: ${ErpFormat.qty(remaining)} ${line.unit}",
+                                text = "К закупке: ${ErpFormat.qty(remaining)} ${line.unit}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium,
                                 color = if (remaining.toDoubleSafe() > 0.0) Brand.Orange else Brand.Mint
+                            )
+                        }
+                        Text("Резерв со склада: ${ErpFormat.qty(line.stockReservedQuantity)} ${line.unit}", style = MaterialTheme.typography.bodySmall)
+                        if (viewModel.canReserveStock() && hasStock && remaining.toDoubleSafe() > 0 && line.status != DemandLineStatus.CANCELLED) {
+                            SoftButton(
+                                text = "Зарезервировать доступное под потребность",
+                                onClick = { viewModel.reserveDemandStock(line.id) },
+                                enabled = !state.isActionRunning
                             )
                         }
                     }
@@ -1096,6 +1118,7 @@ private fun DemandOffersBlock(
                                         canSelect = canSelect && notClosed,
                                         isPaid = isPaid,
                                         onSelectOffer = { viewModel.selectOffer(offer) },
+                                        onReturnOffer = { reason -> viewModel.returnOfferForRevision(offer, reason) },
                                         onClearSelection = { viewModel.clearOfferSelection(offer) },
                                         onPreviewInvoice = { viewModel.openOfferInvoice(offer, preview = true) },
                                         onDownloadInvoice = { viewModel.openOfferInvoice(offer, preview = false) }
@@ -1119,6 +1142,7 @@ private fun DemandOffersBlock(
                             canSelect = canSelect && notClosed,
                             isPaid = isPaid,
                             onSelectOffer = { viewModel.selectOffer(offer) },
+                            onReturnOffer = { reason -> viewModel.returnOfferForRevision(offer, reason) },
                             onClearSelection = { viewModel.clearOfferSelection(offer) },
                             onPreviewInvoice = { viewModel.openOfferInvoice(offer, preview = true) },
                             onDownloadInvoice = { viewModel.openOfferInvoice(offer, preview = false) }
@@ -1139,10 +1163,13 @@ private fun OfferCockpitCard(
     canSelect: Boolean,
     isPaid: Boolean,
     onSelectOffer: () -> Unit,
+    onReturnOffer: (String) -> Unit,
     onClearSelection: () -> Unit,
     onPreviewInvoice: () -> Unit,
     onDownloadInvoice: () -> Unit
 ) {
+    var returning by remember(offer.id) { mutableStateOf(false) }
+    var returnReason by remember(offer.id) { mutableStateOf("") }
     val isSelected = offer.status == SupplierOfferStatus.SELECTED
     val borderColor = if (isSelected) Brand.Mint else MaterialTheme.colorScheme.outlineVariant
     val bgColor = if (isSelected) {
@@ -1188,6 +1215,9 @@ private fun OfferCockpitCard(
                 }
                 if (isCheapest) {
                     PillBadge(text = "Минимальная цена", accent = Brand.Blue)
+                }
+                if (offer.status == SupplierOfferStatus.NEEDS_REVISION) {
+                    PillBadge(text = "На доработке", accent = Brand.Amber)
                 }
                 if (offer.status in setOf(
                         SupplierOfferStatus.REJECTED,
@@ -1251,6 +1281,7 @@ private fun OfferCockpitCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        offer.revisionNote?.takeIf { it.isNotBlank() }?.let { Text("Замечание ведущего: $it", style = MaterialTheme.typography.bodySmall) }
 
         if (offer.lines.isNotEmpty()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
@@ -1312,6 +1343,7 @@ private fun OfferCockpitCard(
                     compact = true,
                     enabled = !state.isActionRunning
                 )
+                SoftButton(text = "Вернуть на доработку", onClick = { returning = true }, enabled = !state.isActionRunning)
             }
             if (isSelected && !isPaid && canSelect) {
                 SoftButton(
@@ -1321,6 +1353,18 @@ private fun OfferCockpitCard(
                     enabled = !state.isActionRunning
                 )
             }
+        }
+    }
+    if (returning) {
+        org.example.project.ui.theme.ErpDialog(
+            title = "Вернуть предложение на доработку",
+            confirmText = "Вернуть снабжению",
+            confirmEnabled = returnReason.isNotBlank() && !state.isActionRunning,
+            onConfirm = { onReturnOffer(returnReason); returning = false },
+            onDismiss = { returning = false }
+        ) {
+            OutlinedTextField(value = returnReason, onValueChange = { returnReason = it },
+                label = { Text("Что необходимо уточнить *") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
         }
     }
 }
@@ -1344,6 +1388,12 @@ private fun DemandPaymentAndWarehouseBlock(
     }
 
     val order = demand.orders.firstOrNull()
+    val isOrdered = demand.orders.any { it.status in setOf(
+        org.example.project.dto.PurchaseOrderStatus.SENT,
+        org.example.project.dto.PurchaseOrderStatus.PARTIALLY_DELIVERED,
+        org.example.project.dto.PurchaseOrderStatus.DELIVERED,
+        org.example.project.dto.PurchaseOrderStatus.CLOSED
+    ) }
     val paidAt = header.paidAt ?: order?.paidAt
     val paidByName = order?.paidByName
     val supplierName = header.selectedSupplierName ?: selectedOffer?.supplierName ?: order?.supplierName ?: "—"
@@ -1385,7 +1435,7 @@ private fun DemandPaymentAndWarehouseBlock(
                             )
                         }
                         Text(
-                            text = "Заказ: ${order?.number ?: "будет оформлен при оплате"}",
+                            text = "Заказ: ${order?.number ?: "ещё не оформлен"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1439,7 +1489,7 @@ private fun DemandPaymentAndWarehouseBlock(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Ожидается оплата выбранного счёта",
+                        text = if (isOrdered) "Заказан · оплата не отмечена" else "Выбранное предложение готово к заказу",
                         style = MaterialTheme.typography.labelLarge,
                         color = Brand.Orange
                     )
@@ -1463,8 +1513,15 @@ private fun DemandPaymentAndWarehouseBlock(
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
                     ) {
+                        if (!isOrdered && selectedOffer != null) {
+                            GradientButton(
+                                text = if (state.isActionRunning) "Сохранение…" else "Оформить и отметить заказанным",
+                                onClick = viewModel::placeDemandOrder,
+                                enabled = !state.isActionRunning
+                            )
+                        }
                         GradientButton(
                             text = if (state.isActionRunning) "Сохранение…" else "✓ Отметить «Оплачено»",
                             onClick = viewModel::markDemandPaid,
@@ -1482,10 +1539,10 @@ private fun DemandPaymentAndWarehouseBlock(
             )
             if (demand.receipts.isEmpty()) {
                 StatusHintBanner(
-                    text = if (isPaid) {
-                        "Ждёт прихода на складе — кладовщик увидит оплаченный заказ в очереди приёмки"
+                    text = if (isOrdered) {
+                        "Ждёт прихода на складе — кладовщик увидит заказ в очереди приёмки"
                     } else {
-                        "Ждёт прихода на складе после оплаты"
+                        "Сначала оформите заказ поставщику"
                     },
                     accent = Brand.Slate
                 )
