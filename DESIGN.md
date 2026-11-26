@@ -3,9 +3,9 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-11-23
-- Primary product surfaces: desktop ERP/WMS, task list, task card and Task Chat.
-- Evidence reviewed: `docs/ТЗ_ERP_WMS_CHAT_TASK_MANAGER.md` (M.2, M.3, M.5, M.8, N), `docs/decisions.md` (MVP-02, D-50, D-51), `app/shared/src/commonMain/kotlin/org/example/project/ui/tasks/` and the shared theme components.
+- Last refreshed: 2026-11-26
+- Primary product surfaces: desktop ERP/WMS, role workspaces for engineering, procurement and warehouse, project supply balance, task list, task card and Task Chat.
+- Evidence reviewed: `docs/ТЗ_ERP_WMS_CHAT_TASK_MANAGER.md` (M.2, M.3, M.5, M.8, N), `docs/decisions.md` (D-64, D-65), `app/shared/src/commonMain/kotlin/org/example/project/ui/{home,demand,projects,wms}/` and the shared theme components.
 
 ## Brand
 
@@ -15,20 +15,20 @@
 
 ## Product goals
 
-- Goals: enable an employee or manager to find an authorised task, assess its state and deadline, then open its work card in one step.
+- Goals: enable each role to see what needs attention, what can be done now, and who owns the next step; make project material coverage traceable from specification to partial receipt.
 - Non-goals: simulate Kanban, analytics, saved views or server pagination before their API and business rules exist.
 - Success signals: dense desktop scanability; useful narrowing by text, status, task area and participation; cards remain legible on small screens.
 
 ## Personas and jobs
 
-- Primary personas: executor, initiator, reviewer and project participant.
-- User jobs: locate work, understand ownership and urgency, open a task and continue task-related discussion.
+- Primary personas: leading engineer, procurement specialist, warehouse keeper and production operator.
+- User jobs: engineer passes a specification and decides between offers; procurement reserves stock and buys the shortage; keeper receives actual quantities; operator completes only assigned production work.
 - Key contexts of use: a desktop workstation is primary; a phone is a secondary, card-oriented view.
 
 ## Information architecture
 
-- Primary navigation: `Главная`, `Задачи`, `Проекты`, `Чат`; the tasks route contains all tasks available to the current user, not only personally assigned work.
-- Core routes/screens: task table/list, task card, Task Chat workspace.
+- Primary navigation: a permission-filtered rail with `Главная`, `Проекты`, unified `Снабжение`, `Склад`, and `Задачи`; separate supply pages must link back to the relevant project, demand and next owner.
+- Core routes/screens: role-aware home, project overview with supply balance, demand workspace, expected-receipt queue, task table/list, task card and Task Chat workspace.
 - Content hierarchy: page title and primary creation action, compact discovery/filter toolbar, task records, task card.
 
 ## Design principles

@@ -186,8 +186,17 @@ def main():
         ("ООО «ТехноПривод»", "7701234560"),
         ("АО «ЭлектроМеханика»", "6658017928"),
     ]:
-        sup = clients["buyer"].post("/api/suppliers", {"name": name, "inn": inn, "idempotencyKey": key("sup")})
-        clients["buyer"].post(f"/api/suppliers/{sup['id']}/verify", {"status": "VERIFIED", "version": sup.get("version", 0)})
+        # Создание возвращает SupplierCardDto, а не SupplierDto. Проверку
+        # выполняет другой пользователь: сервер запрещает самоподтверждение
+        # контрагента без отдельного права suppliers:verify_any.
+        card = clients["buyer"].post(
+            "/api/suppliers", {"name": name, "inn": inn, "idempotencyKey": key("sup")}
+        )
+        sup = card["supplier"]
+        admin.post(
+            f"/api/suppliers/{sup['id']}/verification",
+            {"status": "VERIFIED", "version": sup["version"], "idempotencyKey": key("verify")}
+        )
         suppliers[name] = sup["id"]
 
     # --- Проект ---
