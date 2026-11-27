@@ -24,6 +24,9 @@ data class DemandUiState(
     val offersCountByDemand: Map<Long, Int> = emptyMap(),
     val offersCountLoaded: Boolean = false,
     val stageFilter: DemandStageFilter = DemandStageFilter.ALL,
+    val projectFilterId: Long? = null,
+    val priorityFilter: DemandPriorityFilter = DemandPriorityFilter.ALL,
+    val sortMode: DemandSortMode = DemandSortMode.NEWEST,
     val searchQuery: String = "",
     val currentPage: DemandPage = DemandPage.LIST,
     val isLoading: Boolean = false,
@@ -46,6 +49,19 @@ enum class DemandStageFilter(val label: String) {
     IN_TRANSIT("В пути на склад"),
     CLOSED("На складе / Закрыты"),
     CANCELLED("Отменённые")
+}
+
+enum class DemandPriorityFilter(val label: String) {
+    ALL("Все приоритеты"),
+    URGENT("Срочные / Крит."),
+    AT_RISK("Горят / просрочены")
+}
+
+enum class DemandSortMode(val label: String) {
+    NEWEST("Сначала новые"),
+    REQUIRED_DATE("По сроку"),
+    PRIORITY("По приоритету"),
+    AMOUNT_DESC("По сумме")
 }
 
 enum class DemandPage(val title: String) {

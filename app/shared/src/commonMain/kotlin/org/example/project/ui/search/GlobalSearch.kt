@@ -106,21 +106,18 @@ fun GlobalSearchBox(
 
     Box(modifier = modifier.widthIn(max = 460.dp).onSizeChanged { fieldWidthPx = it.width }) {
         // Поле ввода
+        val scheme = MaterialTheme.colorScheme
+        val searchFill = if (palette.isDark) scheme.surfaceContainer else androidx.compose.ui.graphics.Color(0xFFF1F5FA)
+        val searchBorder = if (expanded) scheme.primary else scheme.outline
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(palette.glassOverlay.copy(alpha = 0.7f))
+                .background(if (expanded) scheme.surface else searchFill)
                 .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        listOf(
-                            if (expanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                            else palette.glassBorder[0],
-                            palette.glassBorder[1]
-                        )
-                    ),
+                    width = if (expanded) 2.dp else 1.dp,
+                    color = searchBorder,
                     shape = RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 12.dp),

@@ -178,9 +178,7 @@ private fun UsersTab(state: AdminUiState, viewModel: AdminViewModel) {
                     gradient = Gradients.Aurora,
                     compact = true
                 )
-                Spacer(modifier = Modifier.width(8.dp))
             }
-            SoftButton(text = "Обновить", onClick = viewModel::loadUsers)
         }
         if (state.users.isEmpty()) {
             EmptyState("Нет пользователей.")
@@ -267,9 +265,7 @@ private fun DepartmentsTab(state: AdminUiState, viewModel: AdminViewModel) {
                 }) {
                     Text("Новое подразделение")
                 }
-                Spacer(modifier = Modifier.width(8.dp))
             }
-            TextButton(onClick = viewModel::loadDepartments) { Text("Обновить") }
         }
         if (state.departments.isEmpty()) {
             EmptyState("Нет подразделений.")
@@ -324,12 +320,7 @@ private fun RolesTab(state: AdminUiState, viewModel: AdminViewModel) {
                 Button(onClick = { viewModel.showDialog(AdminDialog.CreateRole) }) {
                     Text("Новая роль")
                 }
-                Spacer(modifier = Modifier.width(8.dp))
             }
-            TextButton(onClick = {
-                viewModel.loadRoles()
-                viewModel.loadPermissions()
-            }) { Text("Обновить") }
         }
         if (state.roles.isEmpty()) {
             EmptyState("Нет ролей.")

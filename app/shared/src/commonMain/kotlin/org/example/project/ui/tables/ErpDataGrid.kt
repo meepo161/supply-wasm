@@ -33,7 +33,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
@@ -246,12 +246,7 @@ fun ErpDataGrid(
                         },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = scheme.surface,
-                            unfocusedContainerColor = scheme.surface.copy(alpha = 0.7f),
-                            focusedBorderColor = Brand.Indigo.copy(alpha = 0.7f),
-                            unfocusedBorderColor = scheme.outlineVariant.copy(alpha = 0.55f)
-                        ),
+                        colors = org.example.project.ui.theme.erpTextFieldColors(),
                         shape = RoundedCornerShape(6.dp),
                         modifier = Modifier.weight(1f).height(44.dp)
                     )
@@ -728,7 +723,8 @@ fun ErpDataGrid(
                 }
             }
 
-            if (!compact) {
+            val minPageSize = pageSizes.minOrNull() ?: 20
+            if (!compact && totalFiltered > minPageSize) {
                 HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.55f))
 
                 // 3. Нижняя панель пагинации
@@ -773,9 +769,15 @@ private fun defaultColumnWidthDp(columnName: String, values: List<Any?>?): Float
     val lengths = values.orEmpty().asSequence().take(500)
         .map { it?.toString()?.length ?: 0 }.sorted().toList()
     if (lengths.isEmpty()) return defaultColumnWidthByName(columnName)
-    val typical = lengths[((lengths.size - 1) * 9) / 10]
+    val typical = if (lengths.size <= 30) {
+        lengths.last()
+    } else {
+        lengths[((lengths.size - 1) * 95) / 100]
+    }
     val chars = maxOf(columnName.trim().length + 2, typical)
-    return (chars * 7.2f + 32f).coerceIn(64f, 380f)
+    val lower = columnName.trim().lowercase()
+    val badgeExtra = if (lower.contains("статус") || lower.contains("приоритет") || lower.contains("тип")) 18f else 0f
+    return (chars * 7.6f + 38f + badgeExtra).coerceIn(64f, 400f)
 }
 
 private fun defaultColumnWidthByName(columnName: String): Float {

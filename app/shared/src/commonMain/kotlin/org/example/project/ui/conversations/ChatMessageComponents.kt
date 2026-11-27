@@ -1,12 +1,16 @@
 package org.example.project.ui.conversations
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -26,8 +30,10 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,7 +119,13 @@ fun PendingAttachmentRow(
 }
 
 @Composable
-fun DecodedImagePreview(bytes: ByteArray, modifier: Modifier = Modifier) {
+fun DecodedImagePreview(
+    bytes: ByteArray,
+    modifier: Modifier = Modifier,
+    fileName: String? = null,
+    onDownload: (() -> Unit)? = null
+) {
+    var lightboxOpen by remember(bytes) { mutableStateOf(false) }
     val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = bytes) {
         value = withContext(Dispatchers.Default) {
             runCatching {
@@ -137,7 +149,64 @@ fun DecodedImagePreview(bytes: ByteArray, modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .heightIn(max = 240.dp)
                 .clip(RoundedCornerShape(8.dp))
+                .clickable { lightboxOpen = true }
         )
+        if (lightboxOpen) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { lightboxOpen = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.85f))
+                        .clickable { lightboxOpen = false }
+                        .padding(24.dp)
+                ) {
+                    Image(
+                        bitmap = decodedBitmap,
+                        contentDescription = fileName ?: "Изображение",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .fillMaxSize(0.9f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(enabled = false) {}
+                    )
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (onDownload != null) {
+                            org.example.project.ui.theme.SoftButton(
+                                text = "Скачать",
+                                onClick = onDownload,
+                                leadingIcon = ErpIconGlyph.Documents
+                            )
+                        }
+                        org.example.project.ui.theme.SoftButton(
+                            text = "Закрыть",
+                            onClick = { lightboxOpen = false },
+                            leadingIcon = ErpIconGlyph.Close
+                        )
+                    }
+                    fileName?.let {
+                        Text(
+                            text = it,
+                            color = Color.White.copy(alpha = 0.9f),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

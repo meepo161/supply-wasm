@@ -27,9 +27,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,8 @@ import org.example.project.ui.theme.EmptyState
 import org.example.project.ui.theme.ErpIcon
 import org.example.project.ui.theme.ErpIconGlyph
 import org.example.project.ui.theme.GlassCard
+import org.example.project.ui.home.currentIsoDate
+import org.example.project.ui.home.isOverdue
 import org.example.project.ui.theme.GradientButton
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.IconBadge
@@ -78,17 +81,27 @@ fun TaskListScreen(
     currentUserId: Long? = null,
     modifier: Modifier = Modifier
 ) {
+    val prefs by org.example.project.ui.main.UserPreferencesStore.state.collectAsState()
     var statusFilter by rememberSaveable { mutableStateOf(TaskStatusFilter.ALL) }
     var areaFilter by rememberSaveable { mutableStateOf(TaskAreaFilter.ALL) }
-    var mineOnly by rememberSaveable { mutableStateOf(false) }
+    var mineOnly by rememberSaveable { mutableStateOf(prefs.tasksMineOnlyByDefault) }
+    var overdueOnly by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    val filtered = remember(tasks, statusFilter, areaFilter, mineOnly, currentUserId, query) {
+    val todayIso = remember { currentIsoDate() }
+    val overdueCount = remember(tasks, todayIso) {
+        tasks.count { !it.isClosedLike() && it.isOverdue(todayIso) }
+    }
+    val filtered = remember(tasks, statusFilter, areaFilter, mineOnly, overdueOnly, currentUserId, query, todayIso, prefs.tasksOverdueFirst) {
         tasks
             .filterByStatuses(statusFilter.statuses)
             .filterByArea(areaFilter)
             .let { if (mineOnly) it.filterMine(currentUserId) else it }
+            .let { list -> if (overdueOnly) list.filter { !it.isClosedLike() && it.isOverdue(todayIso) } else list }
             .filterByQuery(query)
-            .sortedBy { it.dueDate?.takeIf { d -> d.isNotBlank() } ?: "9999-12-31" }
+            .sortedWith(
+                compareByDescending<TaskDto> { prefs.tasksOverdueFirst && !it.isClosedLike() && it.isOverdue(todayIso) }
+                    .thenBy { it.dueDate?.takeIf { d -> d.isNotBlank() } ?: "9999-12-31" }
+            )
     }
 
     Column(
@@ -120,13 +133,6 @@ fun TaskListScreen(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SoftButton(
-                    text = "Обновить",
-                    onClick = onRefresh,
-                    enabled = !isLoading,
-                    leadingIcon = ErpIconGlyph.Refresh
-                )
-                Spacer(Modifier.width(10.dp))
                 GradientButton(
                     text = "Создать задачу",
                     onClick = onCreateClick,
@@ -162,14 +168,14 @@ fun TaskListScreen(
             )
         }
 
-        // Единая компактная строка фильтров (статус + область + мои + сбросить)
-        Row(
+        // Единая компактная панель фильтров с переносом (статус + область + мои + просрочены + сбросить)
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TaskStatusFilter.entries.forEach { item ->
                 FilterPill(
@@ -197,13 +203,20 @@ fun TaskListScreen(
                     onClick = { mineOnly = !mineOnly }
                 )
             }
-            if (statusFilter != TaskStatusFilter.ALL || areaFilter != TaskAreaFilter.ALL || mineOnly || query.isNotBlank()) {
+            FilterPill(
+                label = "Просрочены",
+                count = overdueCount,
+                selected = overdueOnly,
+                onClick = { overdueOnly = !overdueOnly }
+            )
+            if (statusFilter != TaskStatusFilter.ALL || areaFilter != TaskAreaFilter.ALL || mineOnly || overdueOnly || query.isNotBlank()) {
                 SoftButton(
                     text = "Сбросить",
                     onClick = {
                         statusFilter = TaskStatusFilter.ALL
                         areaFilter = TaskAreaFilter.ALL
                         mineOnly = false
+                        overdueOnly = false
                         query = ""
                     },
                     leadingIcon = ErpIconGlyph.Close

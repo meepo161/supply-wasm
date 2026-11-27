@@ -97,6 +97,7 @@ class ConversationViewModel(
     fun loadAll() {
         if (released) return
         queryJob?.cancel()
+        coroutineScope.launch { refreshPresence() }
         loadWorkspace(append = false)
     }
 
@@ -233,7 +234,7 @@ class ConversationViewModel(
             conversation.projectId?.let { openProjectChat(it) }
             return
         }
-        selectConversation(conversation)
+        selectConversation(conversation, refreshDetails = true)
     }
 
     /** Task Chat использует общий экран; репозиторий направляет вызовы в Task Chat API. */
@@ -243,7 +244,7 @@ class ConversationViewModel(
         selectConversation(conversation)
     }
 
-    fun selectConversation(conversation: ConversationDto) {
+    fun selectConversation(conversation: ConversationDto, refreshDetails: Boolean = false) {
         if (released || isSameConversation(_uiState.value.selectedConversation, conversation.id, conversation.kind)) return
         val navigation = navigationGate.next()
         messageSearchGeneration++
@@ -255,11 +256,28 @@ class ConversationViewModel(
         realtimeMerger = ConversationRealtimeMerger(
             initialEventId = reconnectCursors[conversation.localKey()]?.lastEventId ?: 0
         )
+        val prevKey = _uiState.value.selectedConversation?.localKey()
+        val updatedDrafts = if (prevKey != null) {
+            val d = localState.draft(prevKey)
+            if (d.isBlank()) _uiState.value.drafts - prevKey else _uiState.value.drafts + (prevKey to d)
+        } else _uiState.value.drafts
         _uiState.value = _uiState.value.copy(
             selectedConversation = conversation,
-            messages = restoredMessages(conversation, isLoading = true)
+            messages = restoredMessages(conversation, isLoading = true),
+            drafts = updatedDrafts
         )
         historyJob = coroutineScope.launch {
+            if (refreshDetails && conversation.id > 0 && conversation.pinnedMessages.isEmpty()) {
+                launch {
+                    val fresh = conversationRepository.get(conversation.id)
+                    if (fresh is ApiResult.Success &&
+                        navigationGate.isCurrent(navigation) &&
+                        isSameConversation(_uiState.value.selectedConversation, conversation.id, conversation.kind)
+                    ) {
+                        _uiState.value = _uiState.value.copy(selectedConversation = fresh.data)
+                    }
+                }
+            }
             loadMessagesInitial(conversation.id, conversation.kind, navigation)
             if (navigationGate.isCurrent(navigation) &&
                 isSameConversation(_uiState.value.selectedConversation, conversation.id, conversation.kind)
@@ -360,6 +378,22 @@ class ConversationViewModel(
         )
     }
 
+    fun createChannel(title: String, memberIds: List<Long>) {
+        if (title.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                createError = ApiError("VALIDATION_ERROR", "Укажите название канала")
+            )
+            return
+        }
+        createConversation(
+            CreateConversationRequest(
+                kind = ConversationKind.CHANNEL,
+                title = title.trim(),
+                memberIds = memberIds
+            )
+        )
+    }
+
     private fun createConversation(request: CreateConversationRequest) {
         if (_uiState.value.isCreating) return
         _uiState.value = _uiState.value.copy(
@@ -437,10 +471,16 @@ class ConversationViewModel(
 
     fun updateDraft(value: String) {
         val selected = _uiState.value.selectedConversation ?: return
-        localState.setDraft(selected.localKey(), value)
+        val key = selected.localKey()
+        localState.setDraft(key, value)
+        val updatedDrafts = if (value.isBlank()) _uiState.value.drafts - key else _uiState.value.drafts + (key to value)
         _uiState.value = _uiState.value.copy(
-            messages = _uiState.value.messages.copy(draft = value)
+            messages = _uiState.value.messages.copy(draft = value),
+            drafts = updatedDrafts
         )
+        if (value.isNotBlank() && selected.id > 0) {
+            coroutineScope.launch { conversationRepository.notifyTyping(selected.id) }
+        }
     }
 
     fun pickFile() {
@@ -1248,7 +1288,280 @@ class ConversationViewModel(
                 }
                 _uiState.value = _uiState.value.copy(items = items).withMergedEntries(currentUser)
             }
+            is ConversationRealtimeEvent.Typing -> {
+                if (event.userId != currentUser.id) {
+                    val name = event.fullName?.takeIf { it.isNotBlank() } ?: return
+                    if (name !in _uiState.value.typingUsers) {
+                        _uiState.value = _uiState.value.copy(typingUsers = _uiState.value.typingUsers + name)
+                    }
+                    coroutineScope.launch {
+                        delay(4_000)
+                        _uiState.value = _uiState.value.copy(
+                            typingUsers = _uiState.value.typingUsers.filterNot { it == name }
+                        )
+                    }
+                }
+            }
             else -> Unit
+        }
+    }
+
+    fun openSavedMessages() {
+        if (released) return
+        coroutineScope.launch {
+            when (val res = conversationRepository.getOrCreateSavedMessages()) {
+                is ApiResult.Success -> {
+                    selectConversation(res.data)
+                    loadAll()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(error = res.error)
+            }
+        }
+    }
+
+    fun refreshPresence() {
+        if (released) return
+        coroutineScope.launch {
+            when (val res = conversationRepository.listPresence()) {
+                is ApiResult.Success -> {
+                    val map = res.data.associateBy { it.userId }
+                    val mine = map[currentUser.id]?.status ?: _uiState.value.myPresence
+                    _uiState.value = _uiState.value.copy(presenceByUser = map, myPresence = mine)
+                }
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    fun setMyPresence(status: org.example.project.dto.UserPresenceStatus) {
+        if (released) return
+        _uiState.value = _uiState.value.copy(myPresence = status)
+        coroutineScope.launch {
+            when (val res = conversationRepository.updatePresence(status)) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        presenceByUser = _uiState.value.presenceByUser + (currentUser.id to res.data),
+                        myPresence = res.data.status
+                    )
+                }
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    fun pinMessage(messageId: Long) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            when (val res = conversationRepository.pinMessage(conv.id, messageId)) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.selectedConversation?.id == conv.id) {
+                        _uiState.value = _uiState.value.copy(
+                            selectedConversation = conv.copy(pinnedMessages = res.data)
+                        )
+                    }
+                }
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    fun unpinMessage(messageId: Long) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            when (val res = conversationRepository.unpinMessage(conv.id, messageId)) {
+                is ApiResult.Success -> {
+                    if (_uiState.value.selectedConversation?.id == conv.id) {
+                        _uiState.value = _uiState.value.copy(
+                            selectedConversation = conv.copy(pinnedMessages = res.data)
+                        )
+                    }
+                }
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    fun createPoll(question: String, options: List<String>, isAnonymous: Boolean, isMultiple: Boolean) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            val res = conversationRepository.createPoll(
+                conv.id,
+                org.example.project.dto.CreatePollRequest(question, options, isAnonymous, isMultiple)
+            )
+            if (res is ApiResult.Success) {
+                refreshMessages()
+            }
+        }
+    }
+
+    fun votePoll(pollId: Long, optionIds: List<Long>) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            val res = conversationRepository.votePoll(
+                conv.id,
+                pollId,
+                org.example.project.dto.VotePollRequest(optionIds)
+            )
+            if (res is ApiResult.Success) {
+                val updated = _uiState.value.messages.messages.map {
+                    if (it.id == res.data.id) res.data else it
+                }
+                _uiState.value = _uiState.value.copy(
+                    messages = _uiState.value.messages.copy(messages = updated)
+                )
+            }
+        }
+    }
+
+    fun openThread(rootMessage: ConversationMessageDto) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        _uiState.value = _uiState.value.copy(
+            activeThreadRoot = rootMessage,
+            threadMessages = emptyList(),
+            threadLoading = true
+        )
+        coroutineScope.launch {
+            when (val res = conversationRepository.listThread(conv.id, rootMessage.id)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    threadMessages = res.data,
+                    threadLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(threadLoading = false)
+            }
+        }
+    }
+
+    fun closeThread() {
+        _uiState.value = _uiState.value.copy(
+            activeThreadRoot = null,
+            threadMessages = emptyList(),
+            threadLoading = false
+        )
+    }
+
+    fun sendThreadReply(content: String) {
+        val conv = _uiState.value.selectedConversation ?: return
+        val root = _uiState.value.activeThreadRoot ?: return
+        if (conv.id <= 0 || content.isBlank()) return
+        coroutineScope.launch {
+            val res = conversationRepository.sendThreadReply(
+                conv.id,
+                root.id,
+                SendChatMessageRequest(content = content.trim(), idempotencyKey = newIdempotencyKey())
+            )
+            if (res is ApiResult.Success) {
+                val updatedMessages = _uiState.value.messages.messages.map { msg ->
+                    if (msg.id == root.id) msg.copy(threadReplyCount = msg.threadReplyCount + 1) else msg
+                }
+                _uiState.value = _uiState.value.copy(
+                    threadMessages = _uiState.value.threadMessages + res.data,
+                    messages = _uiState.value.messages.copy(messages = updatedMessages)
+                )
+            }
+        }
+    }
+
+    fun scheduleMessage(content: String, scheduledAt: String?, isSilent: Boolean) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0 || content.isBlank()) return
+        coroutineScope.launch {
+            val res = conversationRepository.scheduleOrSendSilent(
+                conv.id,
+                org.example.project.dto.ScheduledMessageRequest(
+                    content = content.trim(),
+                    scheduledAt = scheduledAt,
+                    isSilent = isSilent,
+                    replyToMessageId = _uiState.value.messages.replyToMessageId,
+                    idempotencyKey = newIdempotencyKey()
+                )
+            )
+            if (res is ApiResult.Success) {
+                updateDraft("")
+                setReplyToMessageId(null)
+                if (scheduledAt.isNullOrBlank()) {
+                    refreshMessages()
+                } else {
+                    loadScheduled()
+                }
+            }
+        }
+    }
+
+    fun loadScheduled() {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            when (val res = conversationRepository.listScheduled(conv.id)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(scheduledMessages = res.data)
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    fun summarizeActiveConversation() {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        _uiState.value = _uiState.value.copy(aiSummaryLoading = true, aiSummary = null)
+        coroutineScope.launch {
+            when (val res = conversationRepository.summarizeConversation(conv.id)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    aiSummary = res.data,
+                    aiSummaryLoading = false
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(aiSummaryLoading = false)
+            }
+        }
+    }
+
+    fun clearAiSummary() {
+        _uiState.value = _uiState.value.copy(aiSummary = null, aiSummaryLoading = false)
+    }
+
+    fun updateGroupInfo(title: String?, description: String?) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            when (val res = conversationRepository.updateConversation(
+                conv.id,
+                org.example.project.dto.UpdateConversationRequest(title = title, description = description)
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(selectedConversation = res.data)
+                    loadAll()
+                }
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    fun updateGroupMembers(addIds: List<Long>, removeIds: List<Long>) {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            when (val res = conversationRepository.updateMembers(
+                conv.id,
+                org.example.project.dto.UpdateConversationMembersRequest(addIds, removeIds)
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(selectedConversation = res.data)
+                is ApiResult.Error -> Unit
+            }
+        }
+    }
+
+    fun leaveActiveGroup() {
+        val conv = _uiState.value.selectedConversation ?: return
+        if (conv.id <= 0) return
+        coroutineScope.launch {
+            val res = conversationRepository.leaveConversation(conv.id)
+            if (res is ApiResult.Success) {
+                backToList()
+                loadAll()
+            }
         }
     }
 
@@ -1337,8 +1650,14 @@ class ConversationViewModel(
 private fun ConversationDto.localKey(): String = conversationKey(kind, id)
 
 internal fun ConversationsUiState.withMergedEntries(currentUser: UserDto): ConversationsUiState {
-    val serverConversations = items.map { it.toConversationDto() }
-    return copy(conversations = serverConversations, entries = serverConversations)
+    val sortedItems = items.sortedWith(
+        compareByDescending<ConversationListItemDto> { it.isPinned }
+            .thenByDescending { it.unreadCount > 0 }
+            .thenByDescending { !it.lastMessageAt.isNullOrBlank() }
+            .thenByDescending { it.lastMessageAt ?: "" }
+    )
+    val serverConversations = sortedItems.map { it.toConversationDto() }
+    return copy(items = sortedItems, conversations = serverConversations, entries = serverConversations)
 }
 
 data class ConversationsUiState(
@@ -1363,7 +1682,17 @@ data class ConversationsUiState(
     val isCreating: Boolean = false,
     val createdConversationKey: String? = null,
     val pendingDialogActions: Set<String> = emptySet(),
-    val createError: ApiError? = null
+    val createError: ApiError? = null,
+    val drafts: Map<String, String> = emptyMap(),
+    val presenceByUser: Map<Long, org.example.project.dto.UserPresenceDto> = emptyMap(),
+    val myPresence: org.example.project.dto.UserPresenceStatus = org.example.project.dto.UserPresenceStatus.ONLINE,
+    val typingUsers: List<String> = emptyList(),
+    val activeThreadRoot: ConversationMessageDto? = null,
+    val threadMessages: List<ConversationMessageDto> = emptyList(),
+    val threadLoading: Boolean = false,
+    val scheduledMessages: List<ConversationMessageDto> = emptyList(),
+    val aiSummary: org.example.project.dto.ConversationAiSummaryDto? = null,
+    val aiSummaryLoading: Boolean = false
 )
 
 data class ConversationMessagesUiState(

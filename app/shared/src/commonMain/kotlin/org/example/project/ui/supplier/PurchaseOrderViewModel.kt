@@ -79,6 +79,23 @@ class PurchaseOrderViewModel(
         }
     }
 
+    /** Обновление при открытии экрана или получении события из «Снабжения (Заявки)» / склада. */
+    fun refreshOnOpen() {
+        loadOrders()
+        loadSelectedOffers()
+        if (_uiState.value.activeTab == PurchaseOrderTab.DELIVERIES) {
+            loadDeliveries()
+        }
+        _uiState.value.selectedOrder?.id?.let { loadOrderDetails(it) }
+    }
+
+    private fun availableOffersForCreate(
+        offers: List<org.example.project.dto.SupplierOfferDto> = _uiState.value.selectedOffers,
+        orders: List<PurchaseOrderDto> = _uiState.value.orders
+    ): List<org.example.project.dto.SupplierOfferDto> = offers.filter { offer ->
+        orders.none { it.offerId == offer.id && it.status != PurchaseOrderStatus.CANCELLED }
+    }
+
     private fun loadSelectedOffers(preselectId: Long? = null, reportErrors: Boolean = false) {
         viewModelScope.launch {
             when (val result = supplierRepository.listOffers(status = SupplierOfferStatus.SELECTED)) {
@@ -86,8 +103,9 @@ class PurchaseOrderViewModel(
                     update { it.copy(selectedOffers = result.data) }
                     // Диалог открыт без предложения, а оно появилось после обновления списка.
                     val state = _uiState.value
+                    val available = availableOffersForCreate(result.data, state.orders)
                     if (state.activeDialog == PurchaseOrderDialog.Create && state.createForm.offerId == null && preselectId == null) {
-                        result.data.firstOrNull()?.let { selectOfferForOrder(it.id) }
+                        available.firstOrNull()?.let { selectOfferForOrder(it.id) }
                     }
                 }
                 // При входе ошибка не показывается (нет права — нет и кнопки), в диалоге — показывается.
@@ -164,7 +182,7 @@ class PurchaseOrderViewModel(
             fail("Нет права оформлять заказ поставщику")
             return
         }
-        val offers = _uiState.value.selectedOffers
+        val offers = availableOffersForCreate()
         val offer = offers.firstOrNull { it.id == offerId } ?: offers.firstOrNull()
         update {
             it.copy(

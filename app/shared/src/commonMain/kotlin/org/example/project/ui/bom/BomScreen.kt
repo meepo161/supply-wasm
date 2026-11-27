@@ -167,7 +167,6 @@ private fun ModelsPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                SoftButton(text = "Обновить", onClick = viewModel::loadModels, leadingIcon = ErpIconGlyph.Refresh)
                 if (viewModel.hasPermission("bom", "create")) {
                     GradientButton(
                         text = "Новая модель",
@@ -479,7 +478,6 @@ private fun PageHeader(
             if (canCreate) {
                 GradientButton(text = createLabel, onClick = onCreate, gradient = Gradients.Aurora, compact = true)
             }
-            SoftButton(text = "Обновить", onClick = onRefresh)
         }
     }
 }

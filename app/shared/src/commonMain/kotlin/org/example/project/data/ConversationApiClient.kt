@@ -5,9 +5,11 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.delete
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -18,15 +20,20 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readReason
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.example.project.dto.ApiError
 import org.example.project.dto.ApiResponse
 import org.example.project.dto.ChatMessageDto
 import org.example.project.dto.ChatMessagePageDto
 import org.example.project.dto.ChatSearchResultDto
+import org.example.project.dto.ConversationAiSummaryDto
 import org.example.project.dto.ConversationDialogStateRequest
 import org.example.project.dto.ConversationDto
 import org.example.project.dto.ConversationKind
@@ -36,13 +43,22 @@ import org.example.project.dto.ConversationListPageDto
 import org.example.project.dto.ConversationMessageDto
 import org.example.project.dto.ConversationMessagePageDto
 import org.example.project.dto.CreateConversationRequest
+import org.example.project.dto.CreatePollRequest
 import org.example.project.dto.EditMessageRequest
 import org.example.project.dto.ForwardMessageRequest
 import org.example.project.dto.MarkChatReadRequest
+import org.example.project.dto.PinnedMessageDto
 import org.example.project.dto.ReactionRequest
 import org.example.project.dto.ReactionSummaryDto
 import org.example.project.dto.RevokeMessageRequest
+import org.example.project.dto.ScheduledMessageRequest
 import org.example.project.dto.SendChatMessageRequest
+import org.example.project.dto.UpdateConversationMembersRequest
+import org.example.project.dto.UpdateConversationRequest
+import org.example.project.dto.UpdatePresenceRequest
+import org.example.project.dto.UserPresenceDto
+import org.example.project.dto.UserPresenceStatus
+import org.example.project.dto.VotePollRequest
 
 /**
  * Единый клиент разговоров. Отрицательный conversationId — виртуальный
@@ -52,6 +68,7 @@ import org.example.project.dto.SendChatMessageRequest
 class ConversationApiClient(private val client: HttpClient) : ConversationRepository {
 
     private val realtimeJson = Json { ignoreUnknownKeys = true }
+    private val typingSignals = MutableSharedFlow<Long>(extraBufferCapacity = 16)
 
     override suspend fun list(): ApiResult<List<ConversationDto>> =
         execute { client.get("/api/conversations") }
@@ -339,29 +356,137 @@ class ConversationApiClient(private val client: HttpClient) : ConversationReposi
                 realtimeCursorParameters(after, afterEvent).forEach { (name, value) -> parameter(name, value) }
             }
         ) {
-            for (frame in incoming) {
-                when (frame) {
-                    is Frame.Text -> {
-                        val text = frame.data.decodeToString()
-                        val event = if (conversationId < 0) {
-                            parseTaskChatRealtimeEvent(realtimeJson, text, -conversationId)
-                                ?.toConversationEvent(-conversationId)
-                        } else {
-                            parseConversationRealtimeEvent(realtimeJson, text, conversationId)
-                        }
-                        event?.let { emit(it) }
+            coroutineScope {
+                val typingJob = launch {
+                    typingSignals.filter { it == conversationId }.collect {
+                        runCatching { outgoing.send(Frame.Text("""{"action":"TYPING"}""")) }
                     }
-                    is Frame.Close -> {
-                        val reason = frame.readReason()
-                        when {
-                            isConversationOverflowClose(reason) -> throw ConversationOverflowException()
-                            reason?.code == CloseReason.Codes.VIOLATED_POLICY.code ->
-                                throw ConversationAccessRevokedException()
+                }
+                try {
+                    for (frame in incoming) {
+                        when (frame) {
+                            is Frame.Text -> {
+                                val text = frame.data.decodeToString()
+                                val event = if (conversationId < 0) {
+                                    parseTaskChatRealtimeEvent(realtimeJson, text, -conversationId)
+                                        ?.toConversationEvent(-conversationId)
+                                } else {
+                                    parseConversationRealtimeEvent(realtimeJson, text, conversationId)
+                                }
+                                event?.let { emit(it) }
+                            }
+                            is Frame.Close -> {
+                                val reason = frame.readReason()
+                                when {
+                                    isConversationOverflowClose(reason) -> throw ConversationOverflowException()
+                                    reason?.code == CloseReason.Codes.VIOLATED_POLICY.code ->
+                                        throw ConversationAccessRevokedException()
+                                }
+                            }
+                            else -> Unit
                         }
                     }
-                    else -> Unit
+                } finally {
+                    typingJob.cancel()
                 }
             }
+        }
+    }
+
+    override suspend fun notifyTyping(conversationId: Long) {
+        typingSignals.tryEmit(conversationId)
+    }
+
+    override suspend fun getOrCreateSavedMessages(): ApiResult<ConversationDto> =
+        execute { client.post("/api/conversations/saved") }
+
+    override suspend fun updateConversation(
+        conversationId: Long,
+        request: UpdateConversationRequest
+    ): ApiResult<ConversationDto> = execute {
+        client.patch("/api/conversations/$conversationId") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+    }
+
+    override suspend fun updateMembers(
+        conversationId: Long,
+        request: UpdateConversationMembersRequest
+    ): ApiResult<ConversationDto> = execute {
+        client.post("/api/conversations/$conversationId/members") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+    }
+
+    override suspend fun leaveConversation(conversationId: Long): ApiResult<Unit> =
+        execute { client.post("/api/conversations/$conversationId/leave") }
+
+    override suspend fun pinMessage(conversationId: Long, messageId: Long): ApiResult<List<PinnedMessageDto>> =
+        execute { client.post("/api/conversations/$conversationId/messages/$messageId/pin") }
+
+    override suspend fun unpinMessage(conversationId: Long, messageId: Long): ApiResult<List<PinnedMessageDto>> =
+        execute { client.delete("/api/conversations/$conversationId/messages/$messageId/pin") }
+
+    override suspend fun createPoll(
+        conversationId: Long,
+        request: CreatePollRequest
+    ): ApiResult<ConversationMessageDto> = execute {
+        client.post("/api/conversations/$conversationId/polls") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+    }
+
+    override suspend fun votePoll(
+        conversationId: Long,
+        pollId: Long,
+        request: VotePollRequest
+    ): ApiResult<ConversationMessageDto> = execute {
+        client.post("/api/conversations/$conversationId/polls/$pollId/vote") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+    }
+
+    override suspend fun listThread(conversationId: Long, rootMessageId: Long): ApiResult<List<ConversationMessageDto>> =
+        execute { client.get("/api/conversations/$conversationId/messages/$rootMessageId/thread") }
+
+    override suspend fun sendThreadReply(
+        conversationId: Long,
+        rootMessageId: Long,
+        request: SendChatMessageRequest
+    ): ApiResult<ConversationMessageDto> = execute {
+        client.post("/api/conversations/$conversationId/messages/$rootMessageId/thread") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+    }
+
+    override suspend fun scheduleOrSendSilent(
+        conversationId: Long,
+        request: ScheduledMessageRequest
+    ): ApiResult<ConversationMessageDto> = execute {
+        client.post("/api/conversations/$conversationId/scheduled") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+    }
+
+    override suspend fun listScheduled(conversationId: Long): ApiResult<List<ConversationMessageDto>> =
+        execute { client.get("/api/conversations/$conversationId/scheduled") }
+
+    override suspend fun summarizeConversation(conversationId: Long): ApiResult<ConversationAiSummaryDto> =
+        execute { client.post("/api/conversations/$conversationId/ai-summary") }
+
+    override suspend fun listPresence(): ApiResult<List<UserPresenceDto>> =
+        execute { client.get("/api/presence") }
+
+    override suspend fun updatePresence(status: UserPresenceStatus): ApiResult<UserPresenceDto> = execute {
+        client.post("/api/presence") {
+            contentType(ContentType.Application.Json)
+            setBody(UpdatePresenceRequest(status))
         }
     }
 

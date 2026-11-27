@@ -9,7 +9,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +45,8 @@ fun TaskCreateDialog(
         subtitle = "Опишите работу, назначьте исполнителя и срок",
         glyph = ErpIconGlyph.Tasks,
         gradient = Gradients.Ocean,
+        width = 660.dp,
+        maxBodyHeight = 680.dp,
         onDismiss = onDismiss,
         confirmText = "Создать задачу",
         onConfirm = onCreate,

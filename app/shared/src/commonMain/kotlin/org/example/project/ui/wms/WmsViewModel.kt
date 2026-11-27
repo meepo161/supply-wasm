@@ -8,11 +8,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 import org.example.project.data.ApiResult
+import org.example.project.data.DemandRepository
+import org.example.project.data.PurchaseOrderRepository
+import org.example.project.data.SupplierRepository
 import org.example.project.data.WmsRepository
 import org.example.project.dto.ApiError
+import org.example.project.dto.CreateDemandRequest
 import org.example.project.dto.CreateNomenclatureBarcodeRequest
 import org.example.project.dto.CreateNomenclatureRequest
 import org.example.project.dto.CreateReceiptRequest
+import org.example.project.dto.CreateSupplierClaimRequest
+import org.example.project.dto.DemandLineInput
+import org.example.project.dto.DemandPriority
+import org.example.project.dto.DemandSourceType
 import org.example.project.dto.ExpectedReceiptLineDto
 import org.example.project.dto.LinkReceiptRequest
 import org.example.project.dto.CreateReservationRequest
@@ -28,9 +36,11 @@ import org.example.project.dto.ReceiptStatus
 import org.example.project.dto.ReleaseReservationRequest
 import org.example.project.dto.ReservationDto
 import org.example.project.dto.ReservationStatus
+import org.example.project.dto.StockBalanceDto
 import org.example.project.dto.StorageLocationDto
 import org.example.project.dto.StorageLocationKind
 import org.example.project.dto.StorageLocationPurpose
+import org.example.project.dto.SupplierClaimType
 import org.example.project.dto.CancelTransferRequest
 import org.example.project.dto.CreateIssueOrderRequest
 import org.example.project.dto.CreateReturnOrderRequest
@@ -75,7 +85,10 @@ import org.example.project.dto.UpdateSerialCalibrationRequest
 
 class WmsViewModel(
     private val repository: WmsRepository,
-    private val currentUserId: Long
+    private val currentUserId: Long,
+    private val purchaseOrderRepository: PurchaseOrderRepository? = null,
+    private val supplierRepository: SupplierRepository? = null,
+    private val demandRepository: DemandRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WmsUiState())
@@ -152,6 +165,79 @@ class WmsViewModel(
 
     fun dismissDialog() {
         _uiState.value = _uiState.value.copy(activeDialog = null, operationError = null)
+    }
+
+    /** В 1 клик создаёт рекламацию поставщику по проведённой приёмке с расхождениями. */
+    fun createClaimFromReceipt(receipt: ReceiptDto) {
+        val poRepo = purchaseOrderRepository ?: return
+        val supRepo = supplierRepository ?: return
+        val orderId = receipt.purchaseOrderId ?: return
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null, successMessage = null)
+        viewModelScope.launch {
+            when (val orderRes = poRepo.getOrder(orderId)) {
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = orderRes.error
+                )
+                is ApiResult.Success -> {
+                    val order = orderRes.data
+                    val discrepancyLines = receipt.lines.filter { line ->
+                        val diff = kotlin.math.abs(
+                            (line.expectedQuantity.toDoubleOrNull() ?: 0.0) -
+                                (line.receivedQuantity.toDoubleOrNull() ?: 0.0)
+                        )
+                        (line.discrepancyKind != null && line.discrepancyKind?.name != "NONE") || diff > 0.0001
+                    }
+                    var totalAmount = 0.0
+                    val descLines = discrepancyLines.map { line ->
+                        val expected = line.expectedQuantity.toDoubleOrNull() ?: 0.0
+                        val received = line.receivedQuantity.toDoubleOrNull() ?: 0.0
+                        val diff = kotlin.math.abs(expected - received)
+                        val orderLine = order.lines.firstOrNull { it.nomenclatureId == line.nomenclatureId }
+                        val unitPrice = orderLine?.unitPrice?.toDoubleOrNull() ?: 0.0
+                        totalAmount += diff * unitPrice
+                        val nomLabel = line.nomenclatureCode?.takeIf { it.isNotBlank() }
+                            ?: line.nomenclatureName?.takeIf { it.isNotBlank() }
+                            ?: "№${line.nomenclatureId}"
+                        "$nomLabel: ожидалось ${line.expectedQuantity}, принято ${line.receivedQuantity}"
+                    }
+                    val claimType = if (discrepancyLines.any { it.discrepancyKind?.name == "DAMAGE" || it.discrepancyKind?.name == "DEFECT" }) {
+                        SupplierClaimType.DEFECT
+                    } else {
+                        SupplierClaimType.SHORTAGE
+                    }
+                    val roundedAmount = kotlin.math.round(totalAmount * 100.0) / 100.0
+                    val description = buildString {
+                        append("Приёмка ${receipt.number} по заказу ${order.number}")
+                        if (descLines.isNotEmpty()) {
+                            append(":\n")
+                            append(descLines.joinToString("\n"))
+                        }
+                    }
+                    when (val claimRes = supRepo.createClaim(
+                        CreateSupplierClaimRequest(
+                            supplierId = order.supplierId,
+                            purchaseOrderId = order.id,
+                            purchaseDeliveryId = receipt.purchaseDeliveryId,
+                            receiptId = receipt.id,
+                            claimType = claimType,
+                            description = description,
+                            claimAmount = roundedAmount.toString(),
+                            currency = order.currency
+                        )
+                    )) {
+                        is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            successMessage = "Создана рекламация ${claimRes.data.number} поставщику ${order.supplierName}"
+                        )
+                        is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            operationError = claimRes.error
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun loadWarehouses() {
@@ -2521,6 +2607,70 @@ class WmsViewModel(
                 )
             }
         }
+    }
+
+    fun canCreateDemand(): Boolean = demandRepository != null
+
+    /** Создаёт заявку на пополнение задела по всем позициям ниже минимума. */
+    fun createDemandFromLowStock() {
+        val repo = demandRepository ?: return
+        val deficitItems = _uiState.value.lowStock.filter {
+            (it.deficitQty.toDoubleOrNull() ?: 0.0) > 0.0001
+        }
+        if (deficitItems.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Нет позиций с дефицитом для заказа")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true, operationError = null, successMessage = null)
+        viewModelScope.launch {
+            val lines = deficitItems.mapIndexed { idx, item ->
+                val raw = item.deficitQty.replace(',', '.').toDoubleOrNull() ?: 1.0
+                val rounded = kotlin.math.round(raw * 1000.0) / 1000.0
+                val qtyText = if (rounded % 1.0 == 0.0) rounded.toLong().toString() else rounded.toString()
+                DemandLineInput(
+                    lineNo = idx + 1,
+                    nomenclatureId = item.nomenclatureId,
+                    quantity = qtyText,
+                    unit = item.unit
+                )
+            }
+            when (val res = repo.createDemand(
+                CreateDemandRequest(
+                    sourceType = DemandSourceType.STOCKPILE,
+                    projectId = null,
+                    stockpileNote = "Пополнение неснижаемого остатка (ниже минимума, ${lines.size} поз.)",
+                    priority = DemandPriority.HIGH,
+                    idempotencyKey = "wms-lowstock-$currentUserId-${kotlin.random.Random.nextInt(100000, 999999)}",
+                    lines = lines
+                )
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    successMessage = "Создана заявка ${res.data.header.number} на пополнение остатков (${lines.size} поз.)"
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
+
+    /** Открывает диалог быстрого резерва с предзаполненными номенклатурой и складом. */
+    fun openQuickReservation(nomenclatureId: Long, warehouseId: Long? = null) {
+        _uiState.value = _uiState.value.copy(
+            selectedTab = WmsTab.RESERVATIONS,
+            activeDialog = WmsDialog.CreateReservation,
+            selectedNomenclature = null,
+            createReservationForm = CreateReservationForm(
+                nomenclatureId = nomenclatureId,
+                warehouseId = warehouseId ?: _uiState.value.warehouses.firstOrNull { it.active }?.id
+            ),
+            operationError = null
+        )
+        loadReservations()
     }
 }
 

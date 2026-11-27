@@ -34,7 +34,7 @@ fun PersistentDataGrid(
     val persistentConfig = remember(config, tableKey, data.keys) {
         val storageKey = "erp.table-column-widths.$tableKey"
         config.copy(
-            initialColumnWeights = decodeColumnWidths(TableColumnWidthStorage.read(storageKey)),
+            initialColumnWeights = config.initialColumnWeights + decodeColumnWidths(TableColumnWidthStorage.read(storageKey)),
             onColumnWeightsChange = { widths ->
                 TableColumnWidthStorage.write(storageKey, encodeColumnWidths(widths))
             }

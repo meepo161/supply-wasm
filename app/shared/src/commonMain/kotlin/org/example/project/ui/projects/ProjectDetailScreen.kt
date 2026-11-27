@@ -29,7 +29,7 @@ import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import org.example.project.ui.theme.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import org.example.project.ui.theme.Tab
@@ -210,17 +210,27 @@ fun ProjectDetailScreen(
             }
         }
 
-        PrimaryTabRow(
+        androidx.compose.material3.PrimaryScrollableTabRow(
             selectedTabIndex = activeTab.ordinal,
+            edgePadding = 0.dp,
             containerColor = MaterialTheme.colorScheme.surface
         ) {
             ProjectTab.entries.forEach { tab ->
+                val badgeCount = when (tab) {
+                    ProjectTab.STAGES -> tabsState?.stages?.size?.takeIf { it > 0 } ?: tabsState?.planSummary?.stageCount
+                    ProjectTab.TASKS -> projectTasks.size
+                    ProjectTab.RISKS -> tabsState?.risks?.size?.takeIf { it > 0 } ?: tabsState?.planSummary?.openRiskCount
+                    ProjectTab.DEMANDS -> tabsState?.demands?.size?.takeIf { it > 0 } ?: tabsState?.summary?.demandCount
+                    ProjectTab.DOCUMENTS -> tabsState?.documents?.size?.takeIf { it > 0 } ?: tabsState?.summary?.documentCount
+                    else -> null
+                }
+                val tabLabel = if (badgeCount != null && badgeCount > 0) "${tab.title} ($badgeCount)" else tab.title
                 Tab(
                     selected = activeTab == tab,
                     onClick = { onTabChange(tab) },
                     text = {
                         Text(
-                            text = tab.title,
+                            text = tabLabel,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             fontWeight = if (activeTab == tab) FontWeight.SemiBold else FontWeight.Normal
@@ -368,6 +378,12 @@ private fun ProjectOverviewTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        ProjectPassportStrip(
+            project = project,
+            users = users,
+            summary = summary,
+            planSummary = planSummary
+        )
         if (supplyState != null) {
             ProjectSupplySection(supplyState, onRefreshSupply)
         }
@@ -424,24 +440,150 @@ private fun ProjectOverviewTab(
 }
 
 @Composable
+private fun ProjectPassportStrip(
+    project: ProjectDto,
+    users: List<UserDto>,
+    summary: org.example.project.dto.ProjectSummaryDto?,
+    planSummary: org.example.project.dto.ProjectPlanSummaryDto?
+) {
+    val ownerName = project.members.find { it.userId == project.ownerId }?.fullName
+        ?: users.find { it.id == project.ownerId }?.fullName
+        ?: "ID ${project.ownerId}"
+    val startStr = org.example.project.ui.theme.ErpFormat.dateRu(project.plannedStartAt)
+    val endStr = org.example.project.ui.theme.ErpFormat.dateRu(project.plannedEndAt)
+    val datesStr = if (startStr == "—" && endStr == "—") "Сроки не заданы" else "$startStr · $endStr"
+
+    GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 14.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Руководитель: $ownerName",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
+                )
+                project.customer?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = "Заказчик: $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = "Сроки: $datesStr",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Участников: ${project.members.size}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (summary != null || planSummary != null) {
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    planSummary?.let { p ->
+                        PillBadge(
+                            text = "Этапы: ${p.completedStageCount}/${p.stageCount}",
+                            accent = Brand.Indigo
+                        )
+                        if (p.openRiskCount > 0) {
+                            PillBadge(
+                                text = "Открытые риски: ${p.openRiskCount}",
+                                accent = Brand.Amber
+                            )
+                        }
+                    }
+                    summary?.let { s ->
+                        PillBadge(
+                            text = "Задачи: ${s.completedTaskCount}/${s.taskCount}",
+                            accent = Brand.Blue
+                        )
+                        if (s.openTaskCount > 0) {
+                            PillBadge(
+                                text = "В работе: ${s.openTaskCount}",
+                                accent = Brand.Teal
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ProjectSupplySection(state: ProjectsUiState, onRefresh: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("Обеспечение проекта", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onRefresh, enabled = !state.supplyLoading) { Text("Обновить") }
-        }
+        Text("Обеспечение проекта", style = MaterialTheme.typography.titleMedium)
         if (state.supplyLoading) Text("Загрузка обеспечения…")
         state.supplyError?.let { ErrorMessageCard(error = it) }
         state.supplyOverview?.let { overview ->
             if (overview.lines.isEmpty()) Text("Переданных в снабжение позиций пока нет.")
             overview.lines.forEach { line ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("${line.nomenclatureCode} · ${line.nomenclatureName}", fontWeight = FontWeight.SemiBold)
-                        Text("Требуется: ${line.requiredQuantity} ${line.unit} · Зарезервировано: ${line.reservedQuantity} ${line.unit} · Заказано: ${line.orderedQuantity} ${line.unit}")
-                        Text("Поступило: ${line.receivedQuantity} ${line.unit} · Ожидается: ${line.awaitingDeliveryQuantity} ${line.unit} · Ещё обеспечить: ${line.remainingToEnsureQuantity} ${line.unit}")
-                        Text("${line.stageLabel} · Следующий шаг: ${line.nextActorRole} — ${line.nextActionHint}")
-                        line.stallReason?.takeIf { it.isNotBlank() }?.let { Text("Причина задержки: $it") }
+                val stageAccent = when {
+                    line.remainingToEnsureQuantity.toDoubleOrNull()?.let { it <= 0.0 } == true -> Brand.Mint
+                    line.orderedQuantity.toDoubleOrNull()?.let { it > 0.0 } == true -> Brand.Blue
+                    else -> Brand.Amber
+                }
+                GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 12.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = listOfNotNull(
+                                    line.demandNumber?.takeIf { it.isNotBlank() }?.let { "Заявка $it" },
+                                    "${line.nomenclatureCode} · ${line.nomenclatureName}"
+                                ).joinToString(" · "),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            PillBadge(
+                                text = line.stageLabel,
+                                accent = stageAccent,
+                                filled = stageAccent == Brand.Mint
+                            )
+                        }
+                        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("Требуется: ${line.requiredQuantity} ${line.unit}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                            Text("Резерв: ${line.reservedQuantity} ${line.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Заказано: ${line.orderedQuantity} ${line.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Поступило: ${line.receivedQuantity} ${line.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Ожидается: ${line.awaitingDeliveryQuantity} ${line.unit}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val rem = line.remainingToEnsureQuantity.toDoubleOrNull() ?: 0.0
+                            Text(
+                                text = "Ещё обеспечить: ${line.remainingToEnsureQuantity} ${line.unit}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (rem > 0.0) Brand.Orange else Brand.Teal
+                            )
+                        }
+                        Text(
+                            text = "Следующий шаг: ${line.nextActorRole} — ${line.nextActionHint}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        line.stallReason?.takeIf { it.isNotBlank() }?.let {
+                            Text("Причина задержки: $it", style = MaterialTheme.typography.labelSmall, color = Brand.Rose)
+                        }
                     }
                 }
             }
@@ -482,9 +624,6 @@ private fun ProjectTasksTab(
                     onClick = { mineOnly = !mineOnly },
                     label = { Text("Мои") }
                 )
-                TextButton(onClick = onRefresh, enabled = !isLoading) {
-                    Text("Обновить")
-                }
             }
         }
 

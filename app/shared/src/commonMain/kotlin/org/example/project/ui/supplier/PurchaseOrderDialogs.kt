@@ -72,9 +72,13 @@ private fun CreateOrderDialog(state: PurchaseOrderUiState, viewModel: PurchaseOr
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (state.selectedOffers.isEmpty()) {
+            if (availableOffers.isEmpty()) {
                 Text(
-                    text = "Нет предложений в статусе «выбрано». Сначала инициатор должен выбрать предложение.",
+                    text = if (state.selectedOffers.isEmpty()) {
+                        "Нет предложений в статусе «выбрано». Сначала выберите предложение в «Снабжение (Заявки)»."
+                    } else {
+                        "По всем выбранным предложениям заказы уже оформлены (в том числе из «Снабжение (Заявки)»)."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Brand.Amber
                 )

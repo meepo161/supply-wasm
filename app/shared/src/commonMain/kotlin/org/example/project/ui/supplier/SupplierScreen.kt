@@ -51,50 +51,58 @@ import org.example.project.ui.theme.SectionHeader
 import org.example.project.ui.theme.SoftButton
 
 @Composable
-fun SupplierScreen(viewModel: SupplierViewModel, modifier: Modifier = Modifier) {
+fun SupplierScreen(
+    viewModel: SupplierViewModel,
+    modifier: Modifier = Modifier,
+    embedded: Boolean = false
+) {
     val state by viewModel.uiState.collectAsState()
+    val tabs = if (embedded) listOf(SupplierTab.SUPPLIERS, SupplierTab.CLAIMS) else SupplierTab.entries
+    val effectiveTab = if (embedded && state.selectedTab == SupplierTab.OFFERS) SupplierTab.SUPPLIERS else state.selectedTab
 
     Column(modifier = modifier.fillMaxSize()) {
-        PageHeader(
-            title = "Поставщики",
-            glyph = ErpIconGlyph.Cart,
-            gradient = Gradients.Sunset,
-            subtitle = "Карточки контрагентов, предложения и сравнение по потребностям",
-            actions = {
-                if (state.selectedTab == SupplierTab.SUPPLIERS && viewModel.canManage()) {
-                    GradientButton(
-                        text = "Новый поставщик",
-                        onClick = { viewModel.showDialog(SupplierDialog.CreateSupplier) },
-                        gradient = Gradients.Sunset,
-                        leadingIcon = ErpIconGlyph.Plus,
-                        compact = true
-                    )
+        if (!embedded) {
+            PageHeader(
+                title = "Поставщики",
+                glyph = ErpIconGlyph.Cart,
+                gradient = Gradients.Sunset,
+                subtitle = "Карточки контрагентов, предложения и сравнение по потребностям",
+                actions = {
+                    if (effectiveTab == SupplierTab.SUPPLIERS && viewModel.canManage()) {
+                        GradientButton(
+                            text = "Новый поставщик",
+                            onClick = { viewModel.showDialog(SupplierDialog.CreateSupplier) },
+                            gradient = Gradients.Sunset,
+                            leadingIcon = ErpIconGlyph.Plus,
+                            compact = true
+                        )
+                    }
+                    if (effectiveTab == SupplierTab.OFFERS && viewModel.canOffer()) {
+                        GradientButton(
+                            text = "Внести предложение",
+                            onClick = { viewModel.showDialog(SupplierDialog.CreateOffer) },
+                            gradient = Gradients.Ocean,
+                            leadingIcon = ErpIconGlyph.Plus,
+                            compact = true
+                        )
+                    }
+                    if (effectiveTab == SupplierTab.CLAIMS && viewModel.canManage()) {
+                        GradientButton(
+                            text = "Новая рекламация",
+                            onClick = { viewModel.showDialog(SupplierDialog.CreateClaim) },
+                            gradient = Gradients.Sunset,
+                            leadingIcon = ErpIconGlyph.Plus,
+                            compact = true
+                        )
+                    }
                 }
-                if (state.selectedTab == SupplierTab.OFFERS && viewModel.canOffer()) {
-                    GradientButton(
-                        text = "Внести предложение",
-                        onClick = { viewModel.showDialog(SupplierDialog.CreateOffer) },
-                        gradient = Gradients.Ocean,
-                        leadingIcon = ErpIconGlyph.Plus,
-                        compact = true
-                    )
-                }
-                if (state.selectedTab == SupplierTab.CLAIMS && viewModel.canManage()) {
-                    GradientButton(
-                        text = "Новая рекламация",
-                        onClick = { viewModel.showDialog(SupplierDialog.CreateClaim) },
-                        gradient = Gradients.Sunset,
-                        leadingIcon = ErpIconGlyph.Plus,
-                        compact = true
-                    )
-                }
-            }
-        )
-        Spacer(Modifier.height(8.dp))
-        ScrollableTabRow(selectedTabIndex = SupplierTab.entries.indexOf(state.selectedTab)) {
-            SupplierTab.entries.forEach { tab ->
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        ScrollableTabRow(selectedTabIndex = tabs.indexOf(effectiveTab).coerceAtLeast(0)) {
+            tabs.forEach { tab ->
                 Tab(
-                    selected = state.selectedTab == tab,
+                    selected = effectiveTab == tab,
                     onClick = { viewModel.selectTab(tab) },
                     text = { Text(tab.title) }
                 )
@@ -105,7 +113,7 @@ fun SupplierScreen(viewModel: SupplierViewModel, modifier: Modifier = Modifier) 
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 12.dp)
         ) {
-            when (state.selectedTab) {
+            when (effectiveTab) {
                 SupplierTab.SUPPLIERS -> SuppliersPane(state, viewModel)
                 SupplierTab.OFFERS -> OffersPane(state, viewModel)
                 SupplierTab.CLAIMS -> ClaimsPane(state, viewModel)
@@ -124,8 +132,7 @@ private fun SuppliersPane(state: SupplierUiState, viewModel: SupplierViewModel) 
                 title = "Список",
                 count = state.suppliers.size,
                 accent = Brand.Orange,
-                subtitle = "Поиск и фильтры применяются сразу",
-                action = { SoftButton(text = "Обновить", onClick = viewModel::loadSuppliers) }
+                subtitle = "Поиск и фильтры применяются сразу"
             )
             Spacer(Modifier.height(8.dp))
             org.example.project.ui.theme.ErpTextField(
@@ -419,20 +426,16 @@ private fun OffersPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                 count = if (state.offersDemandFilter == null) state.offers.size
                 else state.offers.count { it.demandId == state.offersDemandFilter },
                 accent = Brand.Blue,
-                subtitle = if (state.offersDemandFilter == null) "Все полученные предложения" else "Предложения по выбранной потребности",
-                action = { SoftButton(text = "Обновить", onClick = viewModel::loadOffers) }
+                subtitle = if (state.offersDemandFilter == null) "Все полученные предложения" else "Предложения по выбранной потребности"
             )
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                DemandFilterDropdown(
-                    demands = state.demands,
-                    selectedId = state.offersDemandFilter,
-                    onSelect = viewModel::filterOffersByDemand,
-                    modifier = Modifier.weight(1f),
-                    allowAll = true
-                )
-                SoftButton(text = "Обновить сравнение", onClick = viewModel::refreshComparison)
-            }
+            DemandFilterDropdown(
+                demands = state.demands,
+                selectedId = state.offersDemandFilter,
+                onSelect = viewModel::filterOffersByDemand,
+                modifier = Modifier.fillMaxWidth(),
+                allowAll = true
+            )
             Spacer(Modifier.height(8.dp))
             state.successMessage?.let { message ->
                 SuccessNote(message, viewModel::dismissSuccess)
@@ -679,8 +682,7 @@ private fun ClaimsPane(state: SupplierUiState, viewModel: SupplierViewModel) {
                 title = "Рекламации поставщикам",
                 count = state.claims.size,
                 accent = Brand.Orange,
-                subtitle = "Претензионная работа и возвраты",
-                action = { SoftButton(text = "Обновить", onClick = viewModel::loadClaims) }
+                subtitle = "Претензионная работа и возвраты"
             )
         }
         if (state.isClaimsLoading && state.claims.isEmpty()) {

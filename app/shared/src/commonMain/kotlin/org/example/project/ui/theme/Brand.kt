@@ -109,12 +109,12 @@ data class BrandPalette(
 
 val LightPalette = BrandPalette(
     isDark = false,
-    pageGradient = listOf(Color(0xFFF2F4F7), Color(0xFFF2F4F7)),
+    pageGradient = listOf(Color(0xFFE7EDF5), Color(0xFFE7EDF5)),
     blobs = listOf(Color.Transparent, Color.Transparent, Color.Transparent),
     heroGradient = listOf(Color(0xFF1A2533), Color(0xFF1A2533)),
     sidebarGradient = Gradients.Sidebar,
     glassOverlay = Color(0xFFFFFFFF),
-    glassBorder = listOf(Color(0xFFD9DFE7), Color(0xFFD9DFE7)),
+    glassBorder = listOf(Color(0xFFC5D0DF), Color(0xFFC5D0DF)),
     shadowTint = Color(0xFF111821)
 )
 

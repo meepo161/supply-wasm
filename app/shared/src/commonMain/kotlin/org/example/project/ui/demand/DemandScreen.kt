@@ -4,6 +4,7 @@ package org.example.project.ui.demand
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,7 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
@@ -80,26 +81,32 @@ import org.koin.compose.koinInject
 fun DemandScreen(
     viewModel: DemandViewModel,
     currentUser: UserDto,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenPurchaseOrder: ((Long) -> Unit)? = null,
+    onOpenInvoice: ((Long) -> Unit)? = null,
+    invoiceViewModel: org.example.project.ui.supplier.SupplierInvoiceViewModel? = null,
+    embedded: Boolean = false
 ) {
     val state by viewModel.uiState.collectAsState()
 
     Column(modifier = modifier.fillMaxSize()) {
-        PageHeader(
-            title = if (state.currentPage == DemandPage.DETAIL && state.selectedDemand != null) {
-                "Заявка ${state.selectedDemand?.header?.number.orEmpty()}"
-            } else {
-                state.currentPage.title
-            },
-            glyph = ErpIconGlyph.Cart,
-            gradient = Gradients.Sunset,
-            subtitle = if (state.currentPage == DemandPage.DETAIL) {
-                "Единый пульт заявки: позиции, предложения со счетами, выбор, оплата и склад"
-            } else {
-                "Пульт заявок, предложения со счетами, оплата и поступление на склад"
-            },
-            onBack = if (state.currentPage != DemandPage.LIST) viewModel::goBack else null
-        )
+        if (!embedded) {
+            PageHeader(
+                title = if (state.currentPage == DemandPage.DETAIL && state.selectedDemand != null) {
+                    "Заявка ${state.selectedDemand?.header?.number.orEmpty()}"
+                } else {
+                    state.currentPage.title
+                },
+                glyph = ErpIconGlyph.Cart,
+                gradient = Gradients.Sunset,
+                subtitle = if (state.currentPage == DemandPage.DETAIL) {
+                    "Единый пульт заявки: позиции, предложения со счетами, выбор, оплата и склад"
+                } else {
+                    "Пульт заявок, предложения со счетами, оплата и поступление на склад"
+                },
+                onBack = if (state.currentPage != DemandPage.LIST) viewModel::goBack else null
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -108,10 +115,12 @@ fun DemandScreen(
         ) {
             when (state.currentPage) {
                 DemandPage.LIST -> DemandListPage(state, viewModel)
-                DemandPage.DETAIL -> DemandDetailPage(state, viewModel)
+                DemandPage.DETAIL -> DemandDetailPage(state, viewModel, onOpenPurchaseOrder, onOpenInvoice, invoiceViewModel)
             }
         }
     }
+
+    invoiceViewModel?.let { org.example.project.ui.supplier.SupplierInvoiceDialogs(it) }
 
     when (state.activeDialog) {
         DemandDialog.CreateDemand -> CreateDemandDialog(
@@ -177,19 +186,69 @@ private fun DemandListPage(
         counts
     }
 
+    val todayIso = remember { currentIsoDate() }
+    val activeProjectsInDemands = remember(state.demands, state.projects) {
+        val ids = state.demands.mapNotNull { it.projectId }.toSet()
+        state.projects.filter { it.id in ids }
+    }
+    val kpiSummary = remember(state.demands, state.offersCountByDemand, state.offersCountLoaded, todayIso) {
+        var inWork = 0
+        var urgentOrRisk = 0
+        var waitingOffers = 0
+        var waitingOrder = 0
+        var unpaidTotal = 0.0
+        state.demands.forEach { d ->
+            val offersCount = if (state.offersCountLoaded) state.offersCountByDemand[d.id] ?: 0 else null
+            val stage = demandStage(d, offersCount)
+            if (d.status != DemandStatus.COVERED && d.status != DemandStatus.CANCELLED) {
+                inWork++
+                val overdue = d.requiredDate?.take(10)?.let { it < todayIso } == true
+                val atRisk = isDemandAtRisk(d.status, demandOpenDays(d.createdAt, todayIso))
+                if (overdue || atRisk || d.priority.name == "CRITICAL" || d.priority.name == "HIGH") {
+                    urgentOrRisk++
+                }
+            }
+            if (stage == DemandStageFilter.WAITING_OFFERS) waitingOffers++
+            if (stage == DemandStageFilter.WAITING_PAYMENT) waitingOrder++
+            if (!d.isPaid && d.status != DemandStatus.CANCELLED) {
+                unpaidTotal += d.selectedGrossTotal?.toDoubleSafe() ?: 0.0
+            }
+        }
+        listOf(inWork, urgentOrRisk, waitingOffers, waitingOrder) to unpaidTotal
+    }
+
     val filteredDemands = remember(
         state.demands,
         state.stageFilter,
+        state.projectFilterId,
+        state.priorityFilter,
+        state.sortMode,
         state.searchQuery,
         state.projects,
         state.offersCountByDemand,
-        state.offersCountLoaded
+        state.offersCountLoaded,
+        todayIso
     ) {
         val q = state.searchQuery.trim().lowercase()
-        state.demands.filter { d ->
+        val filtered = state.demands.filter { d ->
             val offersCount = if (state.offersCountLoaded) state.offersCountByDemand[d.id] ?: 0 else null
             val stageMatches = state.stageFilter == DemandStageFilter.ALL || demandStage(d, offersCount) == state.stageFilter
             if (!stageMatches) return@filter false
+            if (state.projectFilterId != null && d.projectId != state.projectFilterId) return@filter false
+            val priorityMatches = when (state.priorityFilter) {
+                DemandPriorityFilter.ALL -> true
+                DemandPriorityFilter.URGENT -> {
+                    val overdue = d.requiredDate?.take(10)?.let { it < todayIso } == true
+                    val atRisk = isDemandAtRisk(d.status, demandOpenDays(d.createdAt, todayIso))
+                    d.priority.name == "CRITICAL" || d.priority.name == "HIGH" || overdue || atRisk
+                }
+                DemandPriorityFilter.AT_RISK -> {
+                    val overdue = d.requiredDate?.take(10)?.let { it < todayIso } == true
+                    val atRisk = isDemandAtRisk(d.status, demandOpenDays(d.createdAt, todayIso))
+                    overdue || atRisk
+                }
+            }
+            if (!priorityMatches) return@filter false
             if (q.isEmpty()) return@filter true
             val project = d.projectId?.let { id -> state.projects.firstOrNull { it.id == id } }
             listOfNotNull(
@@ -203,70 +262,216 @@ private fun DemandListPage(
                 project?.name
             ).any { it.lowercase().contains(q) }
         }
+        when (state.sortMode) {
+            DemandSortMode.NEWEST -> filtered.sortedByDescending { it.id }
+            DemandSortMode.REQUIRED_DATE -> filtered.sortedWith(
+                compareBy<DemandHeaderDto> { it.requiredDate ?: "9999-12-31" }.thenByDescending { it.id }
+            )
+            DemandSortMode.PRIORITY -> filtered.sortedWith(
+                compareByDescending<DemandHeaderDto> {
+                    when (it.priority.name) {
+                        "CRITICAL" -> 4
+                        "HIGH" -> 3
+                        "NORMAL" -> 2
+                        else -> 1
+                    }
+                }.thenByDescending { it.id }
+            )
+            DemandSortMode.AMOUNT_DESC -> filtered.sortedByDescending { it.selectedGrossTotal?.toDoubleSafe() ?: 0.0 }
+        }
     }
 
     Column(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Показано: ${filteredDemands.size} из ${state.demands.size}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ViewModeToggle(
-                    current = viewMode,
-                    supported = setOf(ListViewMode.CARDS, ListViewMode.TABLE),
-                    onChange = { viewMode = it }
-                )
-                if (viewModel.hasPermission("create") && state.demands.size >= 2) {
-                    SoftButton(text = "Объединить", onClick = {
-                        selectedToMerge = emptySet()
-                        mergeTitle = ""
-                        mergeError = null
-                        showMergeDialog = true
-                    })
+        GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 12.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        val (counts, unpaidTotal) = kpiSummary
+                        DemandKpiPill("В работе: ${counts[0]}", Brand.Blue) {
+                            viewModel.resetFilters()
+                        }
+                        DemandKpiPill("Горят / срочные: ${counts[1]}", Brand.Rose) {
+                            viewModel.updateStageFilter(DemandStageFilter.ALL)
+                            viewModel.updatePriorityFilter(DemandPriorityFilter.URGENT)
+                        }
+                        DemandKpiPill("Ждут предложений: ${counts[2]}", Brand.Amber) {
+                            viewModel.updatePriorityFilter(DemandPriorityFilter.ALL)
+                            viewModel.updateStageFilter(DemandStageFilter.WAITING_OFFERS)
+                        }
+                        if (counts[3] > 0) {
+                            DemandKpiPill("Ждут заказа: ${counts[3]}", Brand.Orange) {
+                                viewModel.updatePriorityFilter(DemandPriorityFilter.ALL)
+                                viewModel.updateStageFilter(DemandStageFilter.WAITING_PAYMENT)
+                            }
+                        }
+                        if (unpaidTotal > 0.0) {
+                            val rounded = kotlin.math.round(unpaidTotal * 100.0) / 100.0
+                            DemandKpiPill("К оплате: ${ErpFormat.money(rounded.toString(), "RUB")}", Brand.Teal) {
+                                viewModel.updateStageFilter(DemandStageFilter.WAITING_PAYMENT)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ViewModeToggle(
+                            current = viewMode,
+                            supported = setOf(ListViewMode.CARDS, ListViewMode.TABLE),
+                            onChange = { viewMode = it }
+                        )
+                        if (viewModel.hasPermission("create") && state.demands.size >= 2) {
+                            SoftButton(
+                                text = "Объединить",
+                                compact = true,
+                                onClick = {
+                                    selectedToMerge = emptySet()
+                                    mergeTitle = ""
+                                    mergeError = null
+                                    showMergeDialog = true
+                                }
+                            )
+                        }
+                        if (viewModel.hasPermission("create")) {
+                            GradientButton(
+                                text = "Новая потребность",
+                                onClick = { viewModel.showDialog(DemandDialog.CreateDemand) },
+                                gradient = Gradients.Sunset,
+                                leadingIcon = ErpIconGlyph.Plus,
+                                compact = true
+                            )
+                        }
+                    }
                 }
-                SoftButton(text = "Обновить", onClick = viewModel::loadDemands, leadingIcon = ErpIconGlyph.Refresh)
-                if (viewModel.hasPermission("create")) {
-                    GradientButton(
-                        text = "Новая потребность",
-                        onClick = { viewModel.showDialog(DemandDialog.CreateDemand) },
-                        gradient = Gradients.Sunset,
-                        leadingIcon = ErpIconGlyph.Plus
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ErpTextField(
+                        value = state.searchQuery,
+                        onValueChange = viewModel::updateSearchQuery,
+                        label = "Поиск по номеру, составу, проекту или поставщику",
+                        glyph = ErpIconGlyph.Search,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (activeProjectsInDemands.isNotEmpty()) {
+                        var projExpanded by remember { mutableStateOf(false) }
+                        val selectedProj = activeProjectsInDemands.firstOrNull { it.id == state.projectFilterId }
+                        androidx.compose.foundation.layout.Box {
+                            SoftButton(
+                                text = selectedProj?.let { "Проект: ${it.number}" } ?: "Проект: Все",
+                                onClick = { projExpanded = true },
+                                tint = if (selectedProj != null) Brand.Violet else Brand.Blue,
+                                compact = true
+                            )
+                            androidx.compose.material3.DropdownMenu(
+                                expanded = projExpanded,
+                                onDismissRequest = { projExpanded = false }
+                            ) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Все проекты") },
+                                    onClick = {
+                                        viewModel.updateProjectFilter(null)
+                                        projExpanded = false
+                                    }
+                                )
+                                activeProjectsInDemands.forEach { p ->
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("${p.number} · ${p.name}") },
+                                        onClick = {
+                                            viewModel.updateProjectFilter(p.id)
+                                            projExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    var sortExpanded by remember { mutableStateOf(false) }
+                    androidx.compose.foundation.layout.Box {
+                        SoftButton(
+                            text = "Сортировка: ${state.sortMode.label}",
+                            onClick = { sortExpanded = true },
+                            tint = Brand.Blue,
+                            compact = true
+                        )
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = sortExpanded,
+                            onDismissRequest = { sortExpanded = false }
+                        ) {
+                            DemandSortMode.entries.forEach { mode ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(mode.label) },
+                                    onClick = {
+                                        viewModel.updateSortMode(mode)
+                                        sortExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically
+                ) {
+                    DemandStageFilter.entries.forEach { filter ->
+                        val count = stageCounts[filter] ?: 0
+                        if (filter == DemandStageFilter.ALL || count > 0 || state.stageFilter == filter) {
+                            ErpFilterChip(
+                                selected = state.stageFilter == filter,
+                                onClick = { viewModel.updateStageFilter(filter) },
+                                label = { Text("${filter.label} ($count)") }
+                            )
+                        }
+                    }
+                    DemandPriorityFilter.entries.filter { it != DemandPriorityFilter.ALL }.forEach { pf ->
+                        ErpFilterChip(
+                            selected = state.priorityFilter == pf,
+                            onClick = {
+                                viewModel.updatePriorityFilter(
+                                    if (state.priorityFilter == pf) DemandPriorityFilter.ALL else pf
+                                )
+                            },
+                            label = { Text(pf.label) }
+                        )
+                    }
+                    if (state.stageFilter != DemandStageFilter.ALL ||
+                        state.projectFilterId != null ||
+                        state.priorityFilter != DemandPriorityFilter.ALL ||
+                        state.sortMode != DemandSortMode.NEWEST ||
+                        state.searchQuery.isNotBlank()
+                    ) {
+                        SoftButton(
+                            text = "Сбросить",
+                            onClick = viewModel::resetFilters,
+                            tint = Brand.Rose,
+                            compact = true
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = "Показано: ${filteredDemands.size} из ${state.demands.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-        }
-
-        ErpTextField(
-            value = state.searchQuery,
-            onValueChange = viewModel::updateSearchQuery,
-            label = "Поиск по номеру, составу, проекту или поставщику",
-            glyph = ErpIconGlyph.Search,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            DemandStageFilter.entries.forEach { filter ->
-                val count = stageCounts[filter] ?: 0
-                ErpFilterChip(
-                    selected = state.stageFilter == filter,
-                    onClick = { viewModel.updateStageFilter(filter) },
-                    label = { Text("${filter.label} ($count)") }
-                )
             }
         }
 
@@ -303,6 +508,15 @@ private fun DemandListPage(
                             projects = state.projects,
                             offersCount = offersCount,
                             todayIso = todayIso,
+                            canOffer = viewModel.canOffer(),
+                            canOrder = viewModel.canOrder(),
+                            canCreate = viewModel.canCreate(),
+                            canCancel = viewModel.hasPermission("update"),
+                            isActionRunning = state.isActionRunning,
+                            onAddOffer = { viewModel.openCreateOfferForDemand(d.id) },
+                            onMarkPaid = { viewModel.markDemandPaidById(d.id) },
+                            onDuplicate = { viewModel.duplicateDemandToForm(d.id) },
+                            onCancel = { viewModel.openCancelForDemand(d.id) },
                             onClick = { viewModel.selectDemand(d.id) }
                         )
                     }
@@ -371,11 +585,44 @@ private fun DemandListPage(
 }
 
 @Composable
+private fun DemandKpiPill(
+    text: String,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = 0.12f))
+            .border(1.dp, accent.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = accent
+        )
+    }
+}
+
+@Composable
 private fun DemandRegistryCard(
     demand: DemandHeaderDto,
     projects: List<ProjectDto>,
     offersCount: Int?,
     todayIso: String,
+    canOffer: Boolean = false,
+    canOrder: Boolean = false,
+    canCreate: Boolean = false,
+    canCancel: Boolean = false,
+    isActionRunning: Boolean = false,
+    onAddOffer: () -> Unit = {},
+    onMarkPaid: () -> Unit = {},
+    onDuplicate: () -> Unit = {},
+    onCancel: () -> Unit = {},
     onClick: () -> Unit
 ) {
     val openDays = demandOpenDays(demand.createdAt, todayIso)
@@ -491,6 +738,67 @@ private fun DemandRegistryCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                demand.selectedSupplierName?.let { sup ->
+                    val sum = demand.selectedGrossTotal?.let { " · ${ErpFormat.money(it, "RUB")}" } ?: ""
+                    Text(
+                        text = "Поставщик: $sup$sum",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Brand.Teal
+                    )
+                }
+                if (demand.isPaid) {
+                    PillBadge(text = "Оплачено ✓", accent = Brand.Mint, filled = true)
+                } else if (demand.selectedSupplierName != null && demand.status != DemandStatus.CANCELLED) {
+                    PillBadge(text = "Ждёт оплаты", accent = Brand.Orange)
+                }
+            }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically
+            ) {
+                if (canOffer && demand.status != DemandStatus.COVERED &&
+                    demand.status != DemandStatus.CANCELLED && !demand.isPaid
+                ) {
+                    SoftButton(
+                        text = "+ Предложение",
+                        onClick = onAddOffer,
+                        tint = Brand.Blue,
+                        compact = true,
+                        enabled = !isActionRunning
+                    )
+                }
+                if (canOrder && demand.selectedSupplierName != null &&
+                    !demand.isPaid && demand.status != DemandStatus.CANCELLED
+                ) {
+                    SoftButton(
+                        text = "Оплатить / Заказать",
+                        onClick = onMarkPaid,
+                        tint = Brand.Mint,
+                        compact = true,
+                        enabled = !isActionRunning
+                    )
+                }
+                if (canCreate) {
+                    SoftButton(
+                        text = "Повторить",
+                        onClick = onDuplicate,
+                        tint = Brand.Violet,
+                        compact = true,
+                        enabled = !isActionRunning
+                    )
+                }
+                if (canCancel && demand.status.canCancel()) {
+                    SoftButton(
+                        text = "Отменить",
+                        onClick = onCancel,
+                        tint = Brand.Rose,
+                        compact = true,
+                        enabled = !isActionRunning
+                    )
+                }
             }
         }
     }
@@ -503,7 +811,10 @@ private fun DemandRegistryCard(
 @Composable
 private fun DemandDetailPage(
     state: DemandUiState,
-    viewModel: DemandViewModel
+    viewModel: DemandViewModel,
+    onOpenPurchaseOrder: ((Long) -> Unit)? = null,
+    onOpenInvoice: ((Long) -> Unit)? = null,
+    invoiceViewModel: org.example.project.ui.supplier.SupplierInvoiceViewModel? = null
 ) {
     val demand = state.selectedDemand
     if (demand == null) {
@@ -543,7 +854,10 @@ private fun DemandDetailPage(
         DemandPaymentAndWarehouseBlock(
             demand = demand,
             state = state,
-            viewModel = viewModel
+            viewModel = viewModel,
+            onOpenPurchaseOrder = onOpenPurchaseOrder,
+            onOpenInvoice = onOpenInvoice,
+            invoiceViewModel = invoiceViewModel
         )
 
         Spacer(Modifier.height(12.dp))
@@ -764,11 +1078,6 @@ private fun DemandCockpitHeader(
                             }
                         }
                     }
-                    SoftButton(
-                        text = "Обновить",
-                        onClick = viewModel::refreshSelectedDemand,
-                        leadingIcon = ErpIconGlyph.Refresh
-                    )
                 }
             }
         }
@@ -922,6 +1231,51 @@ private fun DemandLinesBlock(
             subtitle = "Потребность по позициям и свободный остаток на складе"
         )
         Spacer(Modifier.height(10.dp))
+        val hasSelectedOrOrder = demand.orders.isNotEmpty() ||
+            demand.offers.any { it.status == SupplierOfferStatus.SELECTED }
+        val orderedByNom = mutableMapOf<Long, Double>()
+        demand.orders
+            .filter { it.status != org.example.project.dto.PurchaseOrderStatus.CANCELLED }
+            .forEach { order ->
+                order.lines.forEach { ol ->
+                    orderedByNom[ol.nomenclatureId] = (orderedByNom[ol.nomenclatureId] ?: 0.0) + ol.quantity.toDoubleSafe()
+                }
+            }
+        val deficitLines = demand.lines.filter { line ->
+            val covered = line.coveredQuantity.toDoubleSafe()
+            val ordered = orderedByNom[line.nomenclatureId] ?: 0.0
+            (line.quantity.toDoubleSafe() - maxOf(covered, ordered)) > 0.0001
+        }
+        if (hasSelectedOrOrder && deficitLines.isNotEmpty() &&
+            demand.header.status != DemandStatus.CANCELLED && viewModel.canCreate()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Brand.Amber.copy(alpha = 0.14f))
+                    .border(1.dp, Brand.Amber.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Остались незакупленные позиции (${deficitLines.size} поз.)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Brand.Orange,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                SoftButton(
+                    text = if (state.isActionRunning) "Создание…" else "Вынести остаток в новую заявку",
+                    onClick = viewModel::splitRemainingIntoNewDemand,
+                    tint = Brand.Orange,
+                    enabled = !state.isActionRunning
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+        }
         if (demand.lines.isEmpty()) {
             Text(
                 text = "Позиции в заявке не указаны.",
@@ -1063,7 +1417,7 @@ private fun DemandOffersBlock(
                 if (viewModel.canOffer() && notClosed) {
                     SoftButton(
                         text = "+ Внести предложение",
-                        onClick = viewModel::openCreateOfferDialog,
+                        onClick = { viewModel.openCreateOfferDialog() },
                         leadingIcon = ErpIconGlyph.Plus,
                         tint = Brand.Blue,
                         enabled = !state.isActionRunning
@@ -1091,12 +1445,36 @@ private fun DemandOffersBlock(
                 if (viewModel.canOffer() && notClosed) {
                     GradientButton(
                         text = "+ Внести предложение со счётом",
-                        onClick = viewModel::openCreateOfferDialog,
+                        onClick = { viewModel.openCreateOfferDialog() },
                         compact = true
                     )
+                    val quickSuppliers = state.suppliers.take(4)
+                    if (quickSuppliers.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            quickSuppliers.forEach { sup ->
+                                SoftButton(
+                                    text = "+ ${sup.name}",
+                                    onClick = { viewModel.openCreateOfferDialog(sup.id) },
+                                    tint = Brand.Indigo,
+                                    compact = true
+                                )
+                            }
+                        }
+                    }
                 }
             }
             return@GlassCard
+        }
+
+        if (demand.offers.size >= 2) {
+            OfferComparisonMatrix(
+                offers = demand.offers,
+                cheapestOfferId = cheapestOfferId
+            )
+            Spacer(Modifier.height(10.dp))
         }
 
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -1377,7 +1755,10 @@ private fun OfferCockpitCard(
 private fun DemandPaymentAndWarehouseBlock(
     demand: DemandDetailDto,
     state: DemandUiState,
-    viewModel: DemandViewModel
+    viewModel: DemandViewModel,
+    onOpenPurchaseOrder: ((Long) -> Unit)? = null,
+    onOpenInvoice: ((Long) -> Unit)? = null,
+    invoiceViewModel: org.example.project.ui.supplier.SupplierInvoiceViewModel? = null
 ) {
     val header = demand.header
     val selectedOffer = demand.offers.firstOrNull { it.status == SupplierOfferStatus.SELECTED }
@@ -1441,12 +1822,33 @@ private fun DemandPaymentAndWarehouseBlock(
                         )
                     }
                 }
-                if (selectedOffer != null && (selectedOffer.invoiceDocumentId != null || !selectedOffer.invoiceFileName.isNullOrBlank())) {
-                    SoftButton(
-                        text = "📄 Открыть счёт",
-                        onClick = { viewModel.openOfferInvoice(selectedOffer, preview = true) },
-                        tint = Brand.Blue
-                    )
+                val linkedInvoice = if (order != null && invoiceViewModel != null && invoiceViewModel.canRead()) {
+                    invoiceViewModel.uiState.collectAsState().value.invoices.firstOrNull { it.purchaseOrderId == order.id }
+                } else null
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (order != null && onOpenPurchaseOrder != null) {
+                        SoftButton(
+                            text = "Открыть заказ ${order.number}",
+                            onClick = { onOpenPurchaseOrder(order.id) },
+                            tint = Brand.Violet,
+                            compact = true
+                        )
+                    }
+                    if (linkedInvoice != null && onOpenInvoice != null) {
+                        SoftButton(
+                            text = "Открыть счёт ${linkedInvoice.number}",
+                            onClick = { onOpenInvoice(linkedInvoice.id) },
+                            tint = Brand.Blue,
+                            compact = true
+                        )
+                    } else if (selectedOffer != null && (selectedOffer.invoiceDocumentId != null || !selectedOffer.invoiceFileName.isNullOrBlank())) {
+                        SoftButton(
+                            text = "📄 Открыть счёт",
+                            onClick = { viewModel.openOfferInvoice(selectedOffer, preview = true) },
+                            tint = Brand.Blue,
+                            compact = true
+                        )
+                    }
                 }
             }
 
@@ -1537,6 +1939,28 @@ private fun DemandPaymentAndWarehouseBlock(
                 text = "Поступление на склад",
                 style = MaterialTheme.typography.labelLarge
             )
+            val invoiceState = invoiceViewModel?.uiState?.collectAsState()?.value
+            val checkedInvoice = if (order != null && invoiceState != null && invoiceViewModel.canRead()) {
+                invoiceState.invoices.firstOrNull {
+                    it.purchaseOrderId == order.id &&
+                        it.status == org.example.project.dto.SupplierInvoiceStatus.CHECKED &&
+                        it.receiptId == null
+                }
+            } else null
+            if (checkedInvoice != null && invoiceViewModel != null && invoiceViewModel.canManage()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
+                    GradientButton(
+                        text = if (invoiceState?.isBusy == true) "Передача…" else "Передать на приёмку на склад",
+                        onClick = { invoiceViewModel.sendToWarehouse(checkedInvoice) },
+                        gradient = Gradients.Emerald,
+                        compact = true,
+                        enabled = invoiceState?.isBusy != true
+                    )
+                }
+            }
             if (demand.receipts.isEmpty()) {
                 StatusHintBanner(
                     text = if (isOrdered) {
@@ -1634,5 +2058,90 @@ private fun EmptyState(text: String, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun OfferComparisonMatrix(
+    offers: List<SupplierOfferDto>,
+    cheapestOfferId: Long?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "Конкурентный лист (сравнение предложений)",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = Brand.Blue
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        offers.sortedBy { it.totals?.grossTotal?.toDoubleSafe() ?: Double.MAX_VALUE }.forEach { offer ->
+            val isCheapest = offer.id == cheapestOfferId
+            val isSelected = offer.status == SupplierOfferStatus.SELECTED
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        when {
+                            isSelected -> Brand.Mint.copy(alpha = 0.14f)
+                            isCheapest -> Brand.Teal.copy(alpha = 0.08f)
+                            else -> Color.Transparent
+                        }
+                    )
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = offer.supplierName ?: "Поставщик №${offer.supplierId}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1.4f)
+                )
+                Text(
+                    text = ErpFormat.money(offer.totals?.grossTotal, offer.currency),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isCheapest || isSelected) Brand.Teal else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = offer.deliveryDays?.let { "$it дн." } ?: "—",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(0.6f)
+                )
+                Text(
+                    text = offer.paymentTerms ?: "—",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isSelected) {
+                    PillBadge(text = "Выбрано ✓", accent = Brand.Mint, filled = true)
+                } else if (isCheapest) {
+                    PillBadge(text = "Лучшая цена", accent = Brand.Teal)
+                } else {
+                    val (stLabel, stColor) = when (offer.status) {
+                        SupplierOfferStatus.RECEIVED -> "Получено" to Brand.Blue
+                        SupplierOfferStatus.SHORTLISTED -> "В шорт-листе" to Brand.Indigo
+                        SupplierOfferStatus.NEEDS_REVISION -> "На доработке" to Brand.Amber
+                        SupplierOfferStatus.SELECTED -> "Выбрано" to Brand.Mint
+                        SupplierOfferStatus.REJECTED -> "Отклонено" to Brand.Rose
+                        SupplierOfferStatus.WITHDRAWN -> "Отозвано" to Brand.Slate
+                        SupplierOfferStatus.EXPIRED -> "Истекло" to Brand.Rose
+                    }
+                    PillBadge(text = stLabel, accent = stColor)
+                }
+            }
+        }
     }
 }

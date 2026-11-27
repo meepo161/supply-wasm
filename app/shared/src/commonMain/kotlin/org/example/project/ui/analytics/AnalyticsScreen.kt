@@ -125,7 +125,16 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    val erpEventsClient: org.example.project.data.ErpEventsClient = koinInject()
+
     LaunchedEffect(Unit) { reload() }
+    LaunchedEffect(erpEventsClient) {
+        erpEventsClient.observeEvents().collect { event ->
+            if (event.domain != org.example.project.dto.ErpEventDomain.PRESENCE) {
+                reload()
+            }
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         PageHeader(
@@ -145,7 +154,7 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
             ) {
                 PrimaryScrollableTabRow(
                     selectedTabIndex = selectedTab.ordinal,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     AnalyticsTab.entries.forEach { tab ->
                         Tab(
@@ -155,7 +164,6 @@ fun AnalyticsScreen(modifier: Modifier = Modifier) {
                         )
                     }
                 }
-                SoftButton(text = "Обновить", onClick = ::reload)
             }
 
             if (loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())

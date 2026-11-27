@@ -75,6 +75,8 @@ fun HomeScreen(
     onOpenConversation: (Long) -> Unit,
     onOpenProjectChat: (Long) -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenDemand: ((Long) -> Unit)? = null,
+    onCreateDemand: (() -> Unit)? = null,
     onNavigateDestination: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -95,10 +97,9 @@ fun HomeScreen(
     }
     val companyOverdueCount = state.allTasks.count { it.isOpen() && it.isOverdue(today) }
     val unreadNotifications = state.notifications.filter { !it.isRead }
-    var reverseBlockOrder by remember { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val twoColumns = maxWidth >= 1180.dp
+        val twoColumns = maxWidth >= 1060.dp
         val scroll = rememberScrollState()
 
         Column(
@@ -106,8 +107,8 @@ fun HomeScreen(
                 .fillMaxSize()
                 .verticalScroll(scroll)
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             HeroCard(
                 userName = viewModel.currentUser.fullName,
@@ -116,6 +117,7 @@ fun HomeScreen(
                 companyOverdueCount = companyOverdueCount,
                 openCount = openAssigned.size,
                 overdueCount = overdue.size,
+                upcomingCount = upcoming.size,
                 reviewCount = onReview.size,
                 unreadCount = unreadNotifications.size,
                 isLoading = state.isLoadingTasks,
@@ -138,189 +140,85 @@ fun HomeScreen(
 
             state.operationError?.let { ErrorMessageCard(error = it) }
 
-            if (state.actionQueue.isNotEmpty()) {
-                ActionQueueSection(
-                    items = state.actionQueue,
-                    onNavigate = onNavigateDestination
+            val assistantBlock: @Composable () -> Unit = {
+                AssistantHomeCard(
+                    available = state.assistantAvailable,
+                    model = state.assistantModel,
+                    statusReason = state.assistantStatusReason,
+                    conversations = state.assistantConversations,
+                    activeConversationId = state.assistantConversationId,
+                    messages = state.assistantMessages,
+                    pendingFiles = state.assistantPendingFiles,
+                    input = state.assistantInput,
+                    isLoading = state.assistantLoading,
+                    error = state.assistantError,
+                    onInputChange = viewModel::updateAssistantInput,
+                    onPickFile = viewModel::pickAssistantFile,
+                    onRemovePendingFile = viewModel::removeAssistantPendingFile,
+                    onSelectConversation = viewModel::selectAssistantConversation,
+                    onDeleteConversation = viewModel::deleteAssistantConversation,
+                    onSend = viewModel::sendAssistantMessage,
+                    onConfirmDraft = viewModel::confirmAssistantDraft,
+                    onDismissDraft = viewModel::dismissAssistantDraft,
+                    onNavigateDestination = onNavigateDestination,
+                    onClear = viewModel::clearAssistantChat
                 )
             }
 
-            MetricRow(
-                metrics = listOf(
-                    Metric("Просрочено", overdue.size, ErpIconGlyph.Alert, Gradients.Sunset, Brand.Rose),
-                    Metric("Ближайшие сроки", upcoming.size, ErpIconGlyph.Clock, Gradients.AmberGlow, Brand.Amber),
-                    Metric("На приёмке", onReview.size, ErpIconGlyph.CheckCircle, Gradients.Aurora, Brand.Teal),
-                    Metric("В работе", openAssigned.size, ErpIconGlyph.Tasks, Gradients.Primary, Brand.Blue)
-                ),
-                loading = state.isLoadingTasks
-            )
-
-            AssistantHomeCard(
-                available = state.assistantAvailable,
-                model = state.assistantModel,
-                statusReason = state.assistantStatusReason,
-                conversations = state.assistantConversations,
-                activeConversationId = state.assistantConversationId,
-                messages = state.assistantMessages,
-                pendingFiles = state.assistantPendingFiles,
-                input = state.assistantInput,
-                isLoading = state.assistantLoading,
-                error = state.assistantError,
-                onInputChange = viewModel::updateAssistantInput,
-                onPickFile = viewModel::pickAssistantFile,
-                onRemovePendingFile = viewModel::removeAssistantPendingFile,
-                onSelectConversation = viewModel::selectAssistantConversation,
-                onDeleteConversation = viewModel::deleteAssistantConversation,
-                onSend = viewModel::sendAssistantMessage,
-                onConfirmDraft = viewModel::confirmAssistantDraft,
-                onDismissDraft = viewModel::dismissAssistantDraft,
-                onNavigateDestination = onNavigateDestination,
-                onClear = viewModel::clearAssistantChat
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                SoftButton(
-                    text = if (reverseBlockOrder) "Стандартный порядок блоков" else "Поменять порядок блоков",
-                    onClick = { reverseBlockOrder = !reverseBlockOrder }
-                )
+            val operationsColumn: @Composable () -> Unit = {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    if (state.actionQueue.isNotEmpty()) {
+                        ActionQueueSection(
+                            items = state.actionQueue,
+                            onNavigate = onNavigateDestination
+                        )
+                    }
+                    if (state.activeDemands.isNotEmpty() || onCreateDemand != null) {
+                        ActiveDemandsSection(
+                            demands = state.activeDemands,
+                            todayIso = today,
+                            onOpenDemand = { id -> onOpenDemand?.invoke(id) },
+                            onOpenAllDemands = { onNavigateDestination("DEMANDS") },
+                            onCreateDemand = onCreateDemand
+                        )
+                    }
+                    TasksAndEventsCard(
+                        companyScope = companyScope,
+                        openTasks = openAssigned,
+                        overdueTasks = overdue,
+                        upcomingTasks = upcoming,
+                        reviewTasks = onReview,
+                        notifications = unreadNotifications,
+                        loadingTasks = state.isLoadingTasks,
+                        loadingNotifications = state.isLoadingNotifications,
+                        onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
+                        onNotificationClick = { notification ->
+                            viewModel.openNotificationEntity(
+                                notification, onOpenTask, onOpenConversation, onOpenProjectChat
+                            )
+                        },
+                        onOpenAllNotifications = onOpenNotifications
+                    )
+                }
             }
 
             if (twoColumns) {
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    if (reverseBlockOrder) {
-                        Column(
-                            modifier = Modifier.weight(0.88f),
-                            verticalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
-                            TaskSection(
-                                title = "Задачи на приёмке",
-                                subtitle = "Ожидают вашего решения",
-                                tasks = onReview,
-                                accent = Brand.Teal,
-                                glyph = ErpIconGlyph.CheckCircle,
-                                gradient = Gradients.Aurora,
-                                loading = state.isLoadingTasks,
-                                onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                                emptyText = "Нет задач, ожидающих вашей приёмки"
-                            )
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(modifier = Modifier.weight(1.25f)) {
+                        assistantBlock()
                     }
-                    Column(
-                        modifier = Modifier.weight(1.12f),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        TaskSection(
-                            title = "Просроченные задачи",
-                            subtitle = "Требуют внимания в первую очередь",
-                            tasks = overdue,
-                            accent = Brand.Rose,
-                            glyph = ErpIconGlyph.Alert,
-                            gradient = Gradients.Sunset,
-                            loading = state.isLoadingTasks,
-                            onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                            emptyText = "Просроченных задач нет."
-                        )
-                        TaskSection(
-                            title = "Ближайшие сроки",
-                            subtitle = "Держите фокус на этих задачах",
-                            tasks = upcoming,
-                            accent = Brand.Amber,
-                            glyph = ErpIconGlyph.Clock,
-                            gradient = Gradients.AmberGlow,
-                            loading = state.isLoadingTasks,
-                            onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                            emptyText = "Ближайших сроков нет."
-                        )
-                    }
-                    Column(
-                        modifier = Modifier.weight(0.88f),
-                        verticalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        TaskSection(
-                            title = "Задачи на приёмке",
-                            subtitle = "Ожидают вашего решения",
-                            tasks = onReview,
-                            accent = Brand.Teal,
-                            glyph = ErpIconGlyph.CheckCircle,
-                            gradient = Gradients.Aurora,
-                            loading = state.isLoadingTasks,
-                            onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                            emptyText = "На вашей приёмке ничего нет."
-                        )
-                        NotificationSection(
-                            notifications = unreadNotifications,
-                            loading = state.isLoadingNotifications,
-                            onClick = { notification ->
-                                viewModel.openNotificationEntity(
-                                    notification, onOpenTask, onOpenConversation, onOpenProjectChat
-                                )
-                            },
-                            onOpenAll = onOpenNotifications
-                        )
+                    Box(modifier = Modifier.weight(1f)) {
+                        operationsColumn()
                     }
                 }
             } else {
-                TaskSection(
-                    title = "Просроченные задачи",
-                    subtitle = "Требуют внимания в первую очередь",
-                    tasks = overdue,
-                    accent = Brand.Rose,
-                    glyph = ErpIconGlyph.Alert,
-                    gradient = Gradients.Sunset,
-                    loading = state.isLoadingTasks,
-                    onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                    emptyText = "Просроченных задач нет."
-                )
-                TaskSection(
-                    title = "Ближайшие сроки",
-                    subtitle = "Держите фокус на этих задачах",
-                    tasks = upcoming,
-                    accent = Brand.Amber,
-                    glyph = ErpIconGlyph.Clock,
-                    gradient = Gradients.AmberGlow,
-                    loading = state.isLoadingTasks,
-                    onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                    emptyText = "Ближайших сроков нет."
-                )
-                TaskSection(
-                    title = "Задачи на приёмке",
-                    subtitle = "Ожидают вашего решения",
-                    tasks = onReview,
-                    accent = Brand.Teal,
-                    glyph = ErpIconGlyph.CheckCircle,
-                    gradient = Gradients.Aurora,
-                    loading = state.isLoadingTasks,
-                    onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                    emptyText = "На вашей приёмке ничего нет."
-                )
-                NotificationSection(
-                    notifications = unreadNotifications,
-                    loading = state.isLoadingNotifications,
-                    onClick = { notification ->
-                        viewModel.openNotificationEntity(
-                            notification, onOpenTask, onOpenConversation, onOpenProjectChat
-                        )
-                    },
-                    onOpenAll = onOpenNotifications
-                )
+                assistantBlock()
+                operationsColumn()
             }
-
-            // Открытые задачи — компактным списком
-            TaskSection(
-                title = if (companyScope) "Открытые задачи компании" else "Мои открытые задачи",
-                subtitle = "Все активные назначения",
-                tasks = openAssigned,
-                accent = Brand.Blue,
-                glyph = ErpIconGlyph.Tasks,
-                gradient = Gradients.Primary,
-                loading = state.isLoadingTasks,
-                onTaskClick = { task -> viewModel.openTask(task.id, onOpenTask) },
-                emptyText = "Назначенных открытых задач нет.",
-                limit = 8
-            )
         }
     }
 }
@@ -349,10 +247,10 @@ private fun ActionQueueSection(
                 )
             }
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val itemModifier = if (maxWidth < 640.dp) {
+                val itemModifier = if (maxWidth < 600.dp) {
                     Modifier.fillMaxWidth()
                 } else {
-                    Modifier.widthIn(min = 260.dp, max = 420.dp)
+                    Modifier.widthIn(min = 210.dp, max = 320.dp)
                 }
                 androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -425,6 +323,7 @@ private fun HeroCard(
     companyOverdueCount: Int,
     openCount: Int,
     overdueCount: Int,
+    upcomingCount: Int,
     reviewCount: Int,
     unreadCount: Int,
     isLoading: Boolean,
@@ -433,28 +332,41 @@ private fun HeroCard(
 ) {
     val scheme = MaterialTheme.colorScheme
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val narrow = maxWidth < 640.dp
+        val narrow = maxWidth < 680.dp
         val summary: @Composable () -> Unit = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = if (companyScope) "Задачи компании" else "Мои задачи",
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = if (companyScope) "Пульт управления · Компания" else "Пульт управления · $userName",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                     color = scheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "$userName · ${homeTaskSummary(companyScope, companyOverdueCount, openCount, overdueCount, reviewCount)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (overdueCount > 0) readableAccent(Brand.Rose) else scheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    PillBadge(
+                        text = "В работе: $openCount",
+                        accent = Brand.Blue
+                    )
+                    if (overdueCount > 0) {
+                        PillBadge(text = "Просрочено: $overdueCount", accent = Brand.Rose, filled = true)
+                    } else {
+                        PillBadge(text = "Просрочек нет", accent = Brand.Mint)
+                    }
+                    if (upcomingCount > 0) {
+                        PillBadge(text = "Ближайшие: $upcomingCount", accent = Brand.Amber)
+                    }
+                    if (reviewCount > 0) {
+                        PillBadge(text = "На приёмке: $reviewCount", accent = Brand.Teal)
+                    }
+                }
             }
         }
         val actions: @Composable () -> Unit = {
-            // FlowRow переносит кнопки на новую строку на узком экране вместо обрезки справа.
             @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
             androidx.compose.foundation.layout.FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -463,17 +375,13 @@ private fun HeroCard(
                 SoftButton(
                     text = if (unreadCount > 0) "Уведомления: $unreadCount" else "Уведомления",
                     onClick = onOpenNotifications,
-                    leadingIcon = ErpIconGlyph.Bell
+                    leadingIcon = ErpIconGlyph.Bell,
+                    compact = true
                 )
                 SoftButton(
-                    text = if (companyScope) "Показать мои" else "Показать по компании",
-                    onClick = onToggleScope
-                )
-                ErpIconButton(
-                    glyph = ErpIconGlyph.Refresh,
-                    contentDescription = "Обновить",
-                    onClick = onRefresh,
-                    enabled = !isLoading
+                    text = if (companyScope) "Мои задачи" else "По компании",
+                    onClick = onToggleScope,
+                    compact = true
                 )
             }
         }
@@ -490,6 +398,123 @@ private fun HeroCard(
                 Box(Modifier.weight(1f)) { summary() }
                 Spacer(Modifier.width(16.dp))
                 actions()
+            }
+        }
+    }
+}
+
+private enum class HomeTasksTab(val label: String) {
+    OPEN("В работе"),
+    OVERDUE("Просрочено"),
+    REVIEW("На приёмке"),
+    NOTIFICATIONS("Уведомления")
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun TasksAndEventsCard(
+    companyScope: Boolean,
+    openTasks: List<TaskDto>,
+    overdueTasks: List<TaskDto>,
+    upcomingTasks: List<TaskDto>,
+    reviewTasks: List<TaskDto>,
+    notifications: List<NotificationDto>,
+    loadingTasks: Boolean,
+    loadingNotifications: Boolean,
+    onTaskClick: (TaskDto) -> Unit,
+    onNotificationClick: (NotificationDto) -> Unit,
+    onOpenAllNotifications: () -> Unit
+) {
+    var selectedTab by remember {
+        mutableStateOf(
+            when {
+                overdueTasks.isNotEmpty() -> HomeTasksTab.OVERDUE
+                openTasks.isNotEmpty() -> HomeTasksTab.OPEN
+                notifications.isNotEmpty() -> HomeTasksTab.NOTIFICATIONS
+                else -> HomeTasksTab.OPEN
+            }
+        )
+    }
+    GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 16.dp) {
+        SectionHeader(
+            title = if (companyScope) "Задачи компании и события" else "Мои задачи и события",
+            accent = Brand.Blue,
+            action = {
+                SoftButton(
+                    text = "Все уведомления",
+                    onClick = onOpenAllNotifications,
+                    leadingIcon = ErpIconGlyph.Bell,
+                    compact = true
+                )
+            }
+        )
+        Spacer(Modifier.height(10.dp))
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf(
+                HomeTasksTab.OPEN to openTasks.size,
+                HomeTasksTab.OVERDUE to overdueTasks.size,
+                HomeTasksTab.REVIEW to reviewTasks.size,
+                HomeTasksTab.NOTIFICATIONS to notifications.size
+            ).forEach { (tab, count) ->
+                org.example.project.ui.theme.ErpFilterChip(
+                    selected = selectedTab == tab,
+                    onClick = { selectedTab = tab },
+                    label = { Text("${tab.label} ($count)") }
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        when (selectedTab) {
+            HomeTasksTab.OPEN, HomeTasksTab.OVERDUE, HomeTasksTab.REVIEW -> {
+                val list = when (selectedTab) {
+                    HomeTasksTab.OVERDUE -> overdueTasks
+                    HomeTasksTab.REVIEW -> reviewTasks
+                    else -> openTasks
+                }
+                val accent = when (selectedTab) {
+                    HomeTasksTab.OVERDUE -> Brand.Rose
+                    HomeTasksTab.REVIEW -> Brand.Teal
+                    else -> Brand.Blue
+                }
+                when {
+                    loadingTasks && list.isEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(2) { SkeletonLine(height = 42.dp) }
+                    }
+                    list.isEmpty() -> Text(
+                        text = when (selectedTab) {
+                            HomeTasksTab.OVERDUE -> "Просроченных задач нет."
+                            HomeTasksTab.REVIEW -> "Задач на приёмке нет."
+                            else -> "Открытых задач нет."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        list.take(6).forEach { task ->
+                            TaskRow(task = task, accent = accent, onClick = { onTaskClick(task) })
+                        }
+                    }
+                }
+            }
+            HomeTasksTab.NOTIFICATIONS -> {
+                when {
+                    loadingNotifications && notifications.isEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(2) { SkeletonLine(height = 42.dp) }
+                    }
+                    notifications.isEmpty() -> Text(
+                        text = "Непрочитанных уведомлений нет.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        notifications.take(6).forEach { n ->
+                            NotificationRow(notification = n, onClick = { onNotificationClick(n) })
+                        }
+                    }
+                }
             }
         }
     }
@@ -860,5 +885,194 @@ private fun NotificationRow(notification: NotificationDto, onClick: () -> Unit) 
                 .clip(RoundedCornerShape(4.dp))
                 .background(accent)
         )
+    }
+}
+
+private enum class HomeDemandQuickFilter(val label: String) {
+    ALL("Все в работе"),
+    URGENT("Срочные / просрочены"),
+    NEED_ACTION("Ждут выбора / заказа")
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ActiveDemandsSection(
+    demands: List<org.example.project.dto.DemandHeaderDto>,
+    todayIso: String,
+    onOpenDemand: (Long) -> Unit,
+    onOpenAllDemands: () -> Unit,
+    onCreateDemand: (() -> Unit)?
+) {
+    var quickFilter by remember { mutableStateOf(HomeDemandQuickFilter.ALL) }
+    var showAll by remember { mutableStateOf(false) }
+
+    val filtered = remember(demands, quickFilter, todayIso) {
+        demands.filter { d ->
+            when (quickFilter) {
+                HomeDemandQuickFilter.ALL -> true
+                HomeDemandQuickFilter.URGENT -> {
+                    val overdue = d.requiredDate?.take(10)?.let { it < todayIso } == true
+                    overdue || d.priority.name == "CRITICAL" || d.priority.name == "HIGH"
+                }
+                HomeDemandQuickFilter.NEED_ACTION -> {
+                    !d.isPaid && (d.selectedSupplierName != null ||
+                        d.status == org.example.project.dto.DemandStatus.PENDING_APPROVAL ||
+                        d.status == org.example.project.dto.DemandStatus.APPROVED)
+                }
+            }
+        }
+    }
+    val visible = if (showAll) filtered else filtered.take(6)
+
+    GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = 16.dp) {
+        SectionHeader(
+            title = "Потребности в работе",
+            count = demands.size,
+            accent = Brand.Orange,
+            subtitle = "Нажмите на заявку, чтобы сразу перейти к её обработке",
+            action = {
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (onCreateDemand != null) {
+                        SoftButton(
+                            text = "Новая потребность",
+                            onClick = onCreateDemand,
+                            tint = Brand.Orange,
+                            leadingIcon = ErpIconGlyph.Plus
+                        )
+                    }
+                    SoftButton(
+                        text = "Все заявки →",
+                        onClick = onOpenAllDemands,
+                        tint = Brand.Blue
+                    )
+                }
+            }
+        )
+        Spacer(Modifier.height(10.dp))
+
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            HomeDemandQuickFilter.entries.forEach { f ->
+                org.example.project.ui.theme.ErpFilterChip(
+                    selected = quickFilter == f,
+                    onClick = { quickFilter = f },
+                    label = { Text(f.label) }
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (filtered.isEmpty()) {
+            Text(
+                text = "По выбранному фильтру активных потребностей нет.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                visible.forEach { d ->
+                    val isOverdue = d.requiredDate?.take(10)?.let { it < todayIso } == true
+                    val accent = when {
+                        isOverdue || d.priority.name == "CRITICAL" -> Brand.Rose
+                        d.isPaid -> Brand.Mint
+                        d.selectedSupplierName != null -> Brand.Amber
+                        else -> Brand.Blue
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f))
+                            .border(1.dp, accent.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                            .clickable(onClick = { onOpenDemand(d.id) })
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = d.number,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Brand.Blue
+                                )
+                                Text(
+                                    text = d.itemsSummary ?: "Состав не указан",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                            }
+                            androidx.compose.foundation.layout.FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                d.quantitySummary?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                d.requiredDate?.let { req ->
+                                    Text(
+                                        text = "Срок: ${org.example.project.ui.theme.ErpFormat.dateRu(req)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isOverdue) Brand.Rose else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                d.selectedSupplierName?.let { sup ->
+                                    val sum = d.selectedGrossTotal?.let { " · ${org.example.project.ui.theme.ErpFormat.money(it, "RUB")}" } ?: ""
+                                    Text(
+                                        text = "$sup$sum",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Brand.Teal
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isOverdue) {
+                                PillBadge(text = "Просрочена", accent = Brand.Rose)
+                            } else if (d.priority.name == "CRITICAL" || d.priority.name == "HIGH") {
+                                PillBadge(
+                                    text = if (d.priority.name == "CRITICAL") "Крит." else "Высокий",
+                                    accent = if (d.priority.name == "CRITICAL") Brand.Rose else Brand.Amber
+                                )
+                            }
+                            PillBadge(
+                                text = when {
+                                    d.isPaid -> "Оплачено ✓"
+                                    d.selectedSupplierName != null -> "К оплате"
+                                    d.status == org.example.project.dto.DemandStatus.PENDING_APPROVAL -> "На утверждении"
+                                    else -> "В работе"
+                                },
+                                accent = accent,
+                                filled = d.isPaid
+                            )
+                        }
+                    }
+                }
+                if (filtered.size > 6) {
+                    TextButton(onClick = { showAll = !showAll }) {
+                        Text(if (showAll) "Свернуть список" else "Показать все (${filtered.size})")
+                    }
+                }
+            }
+        }
     }
 }

@@ -19,7 +19,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import org.example.project.ui.theme.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
@@ -64,8 +64,24 @@ fun ApprovalsSection(
     }
     val state by viewModel.uiState.collectAsState()
 
+    val erpEventsClient: org.example.project.data.ErpEventsClient = koinInject()
+
     LaunchedEffect(targetType, targetId) {
         viewModel.load(targetType, targetId)
+    }
+    LaunchedEffect(erpEventsClient, targetType, targetId) {
+        erpEventsClient.observeEvents().collect { event ->
+            if (event.domain in setOf(
+                    org.example.project.dto.ErpEventDomain.APPROVAL,
+                    org.example.project.dto.ErpEventDomain.DOCUMENT,
+                    org.example.project.dto.ErpEventDomain.SUPPLIER,
+                    org.example.project.dto.ErpEventDomain.DEMAND,
+                    org.example.project.dto.ErpEventDomain.PROJECT
+                )
+            ) {
+                viewModel.reload()
+            }
+        }
     }
 
     if (state.readDenied) return
@@ -80,14 +96,7 @@ fun ApprovalsSection(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = "Согласование", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = viewModel::reload) { Text("Обновить") }
-            }
+            Text(text = "Согласование", style = MaterialTheme.typography.titleMedium)
 
             state.error?.let { ErrorMessageCard(error = it) }
 

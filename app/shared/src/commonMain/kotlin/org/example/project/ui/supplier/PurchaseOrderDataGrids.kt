@@ -25,16 +25,15 @@ fun PurchaseOrdersGrid(
         "Номер" to orders.map { it.number },
         "Поставщик" to orders.map { it.supplierName ?: "Поставщик #${it.supplierId}" },
         "Статус" to orders.map { it.status.localizedName() },
-        "Сумма с НДС" to orders.map { it.totals?.grossTotal.asMoney(it.currency) },
+        "Сумма" to orders.map { it.totals?.grossTotal.asMoney(it.currency) },
         "Поставлено" to orders.map {
-            "${ErpFormat.qty(it.totals?.deliveredQuantity)} из ${ErpFormat.qty(it.totals?.orderedQuantity)}"
-        },
-        "Ожидается" to orders.map { ErpFormat.dateRu(it.expectedAt) }
+            "${ErpFormat.qty(it.totals?.deliveredQuantity)} / ${ErpFormat.qty(it.totals?.orderedQuantity)}"
+        }
     )
     PersistentDataGrid(
         data = data,
         modifier = modifier,
-        tableKey = "purchase-orders-v2",
+        tableKey = "purchase-orders-v3",
         config = ordersGridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->
@@ -54,11 +53,11 @@ fun PurchaseDeliveriesGrid(
 ) {
     val ordersById = orders.associateBy { it.id }
     val data = linkedMapOf<String, List<String>>(
-        "Номер" to deliveries.map { it.number },
-        "Заказ" to deliveries.map { it.orderNumber ?: "Заказ №${it.orderId}" },
+        "Поставка" to deliveries.map { it.number },
+        "Заказ" to deliveries.map { it.orderNumber ?: "№${it.orderId}" },
         "Поставщик" to deliveries.map { ordersById[it.orderId]?.supplierName ?: "—" },
         "Дата" to deliveries.map { ErpFormat.dateRu(it.deliveredAt) },
-        "Что поставлено" to deliveries.map { delivery ->
+        "Состав" to deliveries.map { delivery ->
             val order = ordersById[delivery.orderId]
             delivery.lines.joinToString("; ") { line ->
                 val orderLine = order?.lines?.firstOrNull { it.id == line.orderLineId }
@@ -66,8 +65,7 @@ fun PurchaseDeliveriesGrid(
                 "$name — ${ErpFormat.qty(line.quantity)} ${orderLine?.unit.orEmpty()}".trim()
             }.ifEmpty { "—" }
         },
-        "Статус поставки" to deliveries.map { it.status.localizedName() },
-        "Статус заказа" to deliveries.map { statuses[it.orderId]?.localizedName() ?: "—" }
+        "Статус" to deliveries.map { it.status.localizedName() }
     )
     // Колонка «Основание» нужна, только если документ-основание указан хотя бы в одной поставке.
     if (deliveries.any { !it.sourceDocument.isNullOrBlank() }) {
@@ -76,7 +74,7 @@ fun PurchaseDeliveriesGrid(
     PersistentDataGrid(
         data = data,
         modifier = modifier,
-        tableKey = "purchase-deliveries-v2",
+        tableKey = "purchase-deliveries-v3",
         config = ordersGridConfig,
         onClick = { selected ->
             selected.firstOrNull()?.first?.let { idx ->

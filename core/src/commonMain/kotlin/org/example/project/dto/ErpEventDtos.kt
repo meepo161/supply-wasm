@@ -10,6 +10,10 @@ enum class ErpEventDomain {
     DEMAND,
     SUPPLIER,
     PRODUCTION,
+    BOM,
+    DOCUMENT,
+    APPROVAL,
+    ADMIN,
     PRESENCE
 }
 

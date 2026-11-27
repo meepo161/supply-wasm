@@ -1,12 +1,19 @@
 package org.example.project.repository
 
 import org.example.project.dto.ChatAuthorDto
+import org.example.project.dto.ConversationPollDto
+import org.example.project.dto.PinnedMessageDto
+import org.example.project.dto.PollOptionDto
 import org.example.project.dto.ReactionSummaryDto
 import org.example.project.generated.jooq.tables.ConversationEventLog.CONVERSATION_EVENT_LOG
 import org.example.project.generated.jooq.tables.ConversationMentions.CONVERSATION_MENTIONS
 import org.example.project.generated.jooq.tables.ConversationMessageRevisions.CONVERSATION_MESSAGE_REVISIONS
 import org.example.project.generated.jooq.tables.ConversationMessages.CONVERSATION_MESSAGES
 import org.example.project.generated.jooq.tables.ConversationParticipants.CONVERSATION_PARTICIPANTS
+import org.example.project.generated.jooq.tables.ConversationPinnedMessages.CONVERSATION_PINNED_MESSAGES
+import org.example.project.generated.jooq.tables.ConversationPollOptions.CONVERSATION_POLL_OPTIONS
+import org.example.project.generated.jooq.tables.ConversationPollVotes.CONVERSATION_POLL_VOTES
+import org.example.project.generated.jooq.tables.ConversationPolls.CONVERSATION_POLLS
 import org.example.project.generated.jooq.tables.ConversationReactions.CONVERSATION_REACTIONS
 import org.example.project.generated.jooq.tables.ConversationReadStates.CONVERSATION_READ_STATES
 import org.example.project.generated.jooq.tables.Conversations.CONVERSATIONS
@@ -26,7 +33,9 @@ class ConversationRepository(private val dsl: DSLContext) {
         val kind: String,
         val title: String?,
         val projectId: Long?,
-        val directKey: String?
+        val directKey: String?,
+        val isSavedMessages: Boolean = false,
+        val description: String? = null
     )
 
     data class MessageRow(
@@ -43,7 +52,11 @@ class ConversationRepository(private val dsl: DSLContext) {
         val sourceMessageId: Long? = null,
         val sourceAuthorId: Long? = null,
         val sourceCreatedAt: OffsetDateTime? = null,
-        val version: Long = 0
+        val version: Long = 0,
+        val threadRootId: Long? = null,
+        val isSilent: Boolean = false,
+        val scheduledAt: OffsetDateTime? = null,
+        val delivered: Boolean = true
     )
 
     data class EventRow(
@@ -76,7 +89,7 @@ class ConversationRepository(private val dsl: DSLContext) {
             .join(CONVERSATION_PARTICIPANTS)
             .on(CONVERSATION_PARTICIPANTS.CONVERSATION_ID.eq(CONVERSATIONS.ID))
             .where(CONVERSATION_PARTICIPANTS.USER_ID.eq(userId))
-            .and(CONVERSATIONS.KIND.`in`("DIRECT", "GROUP"))
+            .and(CONVERSATIONS.KIND.`in`("DIRECT", "GROUP", "CHANNEL"))
             .fetch { mapConversationRow(it) }
         val projectChats = dsl.select(CONVERSATIONS.fields().toList())
             .from(CONVERSATIONS)
@@ -198,7 +211,10 @@ class ConversationRepository(private val dsl: DSLContext) {
     }
 
     fun listMessages(conversationId: Long, after: Long?, before: Long?, limit: Int): List<MessageRow> {
-        val base = messageSelect().where(CONVERSATION_MESSAGES.CONVERSATION_ID.eq(conversationId))
+        val base = messageSelect()
+            .where(CONVERSATION_MESSAGES.CONVERSATION_ID.eq(conversationId))
+            .and(CONVERSATION_MESSAGES.DELIVERED.eq(true))
+            .and(CONVERSATION_MESSAGES.THREAD_ROOT_ID.isNull)
         return if (before != null) {
             base.and(CONVERSATION_MESSAGES.ID.lt(before))
                 .orderBy(CONVERSATION_MESSAGES.ID.desc())
@@ -463,7 +479,9 @@ class ConversationRepository(private val dsl: DSLContext) {
         kind = record.get(CONVERSATIONS.KIND)!!,
         title = record.get(CONVERSATIONS.TITLE),
         projectId = record.get(CONVERSATIONS.PROJECT_ID),
-        directKey = record.get(CONVERSATIONS.DIRECT_KEY)
+        directKey = record.get(CONVERSATIONS.DIRECT_KEY),
+        isSavedMessages = record.get(CONVERSATIONS.IS_SAVED_MESSAGES) ?: false,
+        description = record.get(CONVERSATIONS.DESCRIPTION)
     )
 
     private fun mapMessageRow(record: Record): MessageRow = MessageRow(
@@ -480,8 +498,106 @@ class ConversationRepository(private val dsl: DSLContext) {
         sourceMessageId = record.get(CONVERSATION_MESSAGES.SOURCE_MESSAGE_ID),
         sourceAuthorId = record.get(CONVERSATION_MESSAGES.SOURCE_AUTHOR_ID),
         sourceCreatedAt = record.get(CONVERSATION_MESSAGES.SOURCE_CREATED_AT),
-        version = record.get(CONVERSATION_MESSAGES.VERSION) ?: 0
+        version = record.get(CONVERSATION_MESSAGES.VERSION) ?: 0,
+        threadRootId = record.get(CONVERSATION_MESSAGES.THREAD_ROOT_ID),
+        isSilent = record.get(CONVERSATION_MESSAGES.IS_SILENT) ?: false,
+        scheduledAt = record.get(CONVERSATION_MESSAGES.SCHEDULED_AT),
+        delivered = record.get(CONVERSATION_MESSAGES.DELIVERED) ?: true
     )
+
+    fun isChannelWriter(conversationId: Long, userId: Long): Boolean {
+        val role = dsl.select(CONVERSATION_PARTICIPANTS.ROLE)
+            .from(CONVERSATION_PARTICIPANTS)
+            .where(CONVERSATION_PARTICIPANTS.CONVERSATION_ID.eq(conversationId))
+            .and(CONVERSATION_PARTICIPANTS.USER_ID.eq(userId))
+            .fetchOne(CONVERSATION_PARTICIPANTS.ROLE)
+        return role == "ADMIN"
+    }
+
+    fun setParticipantRole(conversationId: Long, userId: Long, role: String) {
+        dsl.update(CONVERSATION_PARTICIPANTS)
+            .set(CONVERSATION_PARTICIPANTS.ROLE, role)
+            .where(CONVERSATION_PARTICIPANTS.CONVERSATION_ID.eq(conversationId))
+            .and(CONVERSATION_PARTICIPANTS.USER_ID.eq(userId))
+            .execute()
+    }
+
+    fun pinnedMessagesFor(conversationId: Long): List<PinnedMessageDto> =
+        dsl.select(
+            CONVERSATION_PINNED_MESSAGES.MESSAGE_ID,
+            CONVERSATION_PINNED_MESSAGES.PINNED_AT,
+            CONVERSATION_MESSAGES.CONTENT,
+            USERS.FULL_NAME
+        )
+            .from(CONVERSATION_PINNED_MESSAGES)
+            .join(CONVERSATION_MESSAGES).on(CONVERSATION_MESSAGES.ID.eq(CONVERSATION_PINNED_MESSAGES.MESSAGE_ID))
+            .leftJoin(USERS).on(USERS.ID.eq(CONVERSATION_MESSAGES.AUTHOR_ID))
+            .where(CONVERSATION_PINNED_MESSAGES.CONVERSATION_ID.eq(conversationId))
+            .and(CONVERSATION_MESSAGES.REVOKED_AT.isNull)
+            .orderBy(CONVERSATION_PINNED_MESSAGES.PINNED_AT.desc())
+            .fetch {
+                PinnedMessageDto(
+                    messageId = it.get(CONVERSATION_PINNED_MESSAGES.MESSAGE_ID)!!,
+                    contentPreview = (it.get(CONVERSATION_MESSAGES.CONTENT) ?: "").take(140),
+                    authorName = it.get(USERS.FULL_NAME),
+                    pinnedAt = it.get(CONVERSATION_PINNED_MESSAGES.PINNED_AT)!!.toString()
+                )
+            }
+
+    fun threadReplyCountsForMessages(messageIds: Collection<Long>): Map<Long, Int> {
+        if (messageIds.isEmpty()) return emptyMap()
+        return dsl.select(CONVERSATION_MESSAGES.THREAD_ROOT_ID, DSL.count())
+            .from(CONVERSATION_MESSAGES)
+            .where(CONVERSATION_MESSAGES.THREAD_ROOT_ID.`in`(messageIds))
+            .and(CONVERSATION_MESSAGES.DELIVERED.eq(true))
+            .and(CONVERSATION_MESSAGES.REVOKED_AT.isNull)
+            .groupBy(CONVERSATION_MESSAGES.THREAD_ROOT_ID)
+            .fetch { it.get(CONVERSATION_MESSAGES.THREAD_ROOT_ID)!! to it.get(1, Int::class.java) }
+            .toMap()
+    }
+
+    fun pollsForMessages(messageIds: Collection<Long>, viewerId: Long): Map<Long, ConversationPollDto> {
+        if (messageIds.isEmpty()) return emptyMap()
+        val polls = dsl.selectFrom(CONVERSATION_POLLS)
+            .where(CONVERSATION_POLLS.MESSAGE_ID.`in`(messageIds))
+            .fetch()
+        if (polls.isEmpty()) return emptyMap()
+        val pollIds = polls.mapNotNull { it.id }
+        val options = dsl.selectFrom(CONVERSATION_POLL_OPTIONS)
+            .where(CONVERSATION_POLL_OPTIONS.POLL_ID.`in`(pollIds))
+            .orderBy(CONVERSATION_POLL_OPTIONS.SORT_ORDER.asc(), CONVERSATION_POLL_OPTIONS.ID.asc())
+            .fetch()
+            .groupBy { it.pollId!! }
+        val votes = dsl.selectFrom(CONVERSATION_POLL_VOTES)
+            .where(CONVERSATION_POLL_VOTES.POLL_ID.`in`(pollIds))
+            .fetch()
+        val votesByOption = votes.groupBy { it.optionId!! }
+        val votersByPoll = votes.groupBy { it.pollId!! }
+        return polls.associate { poll ->
+            val pollId = poll.id!!
+            val msgId = poll.messageId!!
+            val opts = (options[pollId] ?: emptyList()).map { opt ->
+                val optVotes = votesByOption[opt.id!!] ?: emptyList()
+                PollOptionDto(
+                    id = opt.id!!,
+                    label = opt.label!!,
+                    votesCount = optVotes.size,
+                    votedByMe = optVotes.any { it.userId == viewerId }
+                )
+            }
+            val totalVoters = (votersByPoll[pollId] ?: emptyList()).map { it.userId }.distinct().size
+            msgId to ConversationPollDto(
+                id = pollId,
+                messageId = msgId,
+                question = poll.question!!,
+                isAnonymous = poll.isAnonymous ?: false,
+                isMultiple = poll.isMultiple ?: false,
+                closed = poll.closedAt != null,
+                totalVotes = totalVoters,
+                options = opts
+            )
+        }
+    }
 
     fun listWorkspaceConversations(
         userId: Long,
@@ -497,7 +613,7 @@ class ConversationRepository(private val dsl: DSLContext) {
         val conditions = mutableListOf<String>()
         val parameters = mutableListOf<Any?>(userId, userId, userId, userId, userId, userId, userId)
         conditions += """(
-            (c.kind IN ('DIRECT', 'GROUP') AND EXISTS (
+            (c.kind IN ('DIRECT', 'GROUP', 'CHANNEL') AND EXISTS (
                 SELECT 1 FROM conversation_participants access_cp
                 WHERE access_cp.conversation_id = c.id AND access_cp.user_id = ?
             )) OR (c.kind = 'PROJECT' AND (
@@ -512,7 +628,7 @@ class ConversationRepository(private val dsl: DSLContext) {
             conditions += "c.kind = ?"
             parameters += kind
         } else {
-            conditions += "c.kind IN ('DIRECT', 'GROUP', 'PROJECT')"
+            conditions += "c.kind IN ('DIRECT', 'GROUP', 'PROJECT', 'CHANNEL')"
         }
         if (requiredId != null) {
             conditions += "c.id = ?"
@@ -578,7 +694,7 @@ class ConversationRepository(private val dsl: DSLContext) {
                         m.content AS search_content
                     FROM conversation_messages m
                     LEFT JOIN users author_u ON author_u.id = m.author_id
-                    WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1
+                    WHERE m.conversation_id = c.id AND m.delivered = TRUE AND m.thread_root_id IS NULL ORDER BY m.id DESC LIMIT 1
                 ) lm ON TRUE
             ), counters AS (
                 SELECT c.id,

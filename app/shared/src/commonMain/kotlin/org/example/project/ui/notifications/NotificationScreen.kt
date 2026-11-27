@@ -122,12 +122,6 @@ fun NotificationScreen(
                         leadingIcon = ErpIconGlyph.Bell
                     )
                 }
-                SoftButton(
-                    text = "Обновить",
-                    onClick = viewModel::loadNotifications,
-                    enabled = !state.isLoading,
-                    leadingIcon = ErpIconGlyph.Refresh
-                )
             }
         }
 

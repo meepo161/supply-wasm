@@ -23,7 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -801,10 +801,7 @@ private fun FilesTab(state: NomenclatureCardUiState, card: NomenclatureCardDto, 
             readOnly = card.item.archived
         )
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Hint("Первое изображение среди вложений показывается в шапке карточки.", modifier = Modifier.weight(1f))
-        TextButton(onClick = viewModel::refreshPhoto) { Text("Обновить фото и вложения") }
-    }
+    Hint("Первое изображение среди вложений показывается в шапке карточки.")
     CardSection("Документы DMS") {
         when (val data = state.documents) {
             is TabData.Ready -> {

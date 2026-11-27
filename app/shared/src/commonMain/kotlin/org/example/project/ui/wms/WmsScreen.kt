@@ -20,9 +20,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,7 +40,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import org.example.project.ui.theme.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import org.example.project.ui.theme.Tab
@@ -113,6 +115,9 @@ fun WmsScreen(
             onArchived = {
                 viewModel.selectNomenclature(null)
                 viewModel.loadNomenclature()
+            },
+            onQuickReserve = {
+                viewModel.openQuickReservation(openedNomenclature.id)
             },
             modifier = modifier
         )
@@ -292,7 +297,6 @@ internal fun TabHeader(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onCreate, enabled = createEnabled) { Text(createLabel) }
-            OutlinedButton(onClick = onRefresh) { Text("Обновить") }
         }
     }
 }
@@ -544,11 +548,28 @@ private fun StockTab(
         }
         }
 
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically
         ) {
+            SearchableDropdown(
+                items = state.warehouses,
+                selected = state.warehouses.find { it.id == state.stockFilters.warehouseId },
+                onSelect = {
+                    viewModel.updateStockFilters(state.stockFilters.copy(warehouseId = it.id))
+                    viewModel.loadStock()
+                },
+                onClear = {
+                    viewModel.updateStockFilters(state.stockFilters.copy(warehouseId = null))
+                    viewModel.loadStock()
+                },
+                clearText = "Все склады",
+                label = "Склад",
+                itemText = { "${it.code} · ${it.name}" },
+                modifier = Modifier.widthIn(min = 180.dp, max = 250.dp)
+            )
             FilterChip(
                 selected = filterOnlyAvailable,
                 onClick = { filterOnlyAvailable = !filterOnlyAvailable },
@@ -565,13 +586,14 @@ private fun StockTab(
                 }
             }
             Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = viewModel::loadStock) { Text("Обновить", softWrap = false) }
-            TextButton(onClick = {
-                filterOnlyAvailable = false
-                filterQuarantineOnly = false
-                viewModel.updateStockFilters(StockFilters())
-                viewModel.loadStock()
-            }) { Text("Сбросить", softWrap = false) }
+            if (filterOnlyAvailable || filterQuarantineOnly || state.stockFilters != StockFilters()) {
+                TextButton(onClick = {
+                    filterOnlyAvailable = false
+                    filterQuarantineOnly = false
+                    viewModel.updateStockFilters(StockFilters())
+                    viewModel.loadStock()
+                }) { Text("Сбросить", softWrap = false) }
+            }
         }
 
         state.operationError?.let { ErrorMessageCard(error = it) }
@@ -603,7 +625,7 @@ private fun StockKpiCard(
     // Нейтральная плитка: цвет появляется только у тревожного значения (карантин / брак).
     val alarming = accent == Brand.Rose
     Surface(
-        modifier = if (onClick != null) modifier.clickable { onClick() } else modifier,
+        modifier = (if (onClick != null) modifier.clickable { onClick() } else modifier).heightIn(min = 76.dp),
         shape = MaterialTheme.shapes.medium,
         color = if (alarming) accent.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(
@@ -611,19 +633,31 @@ private fun StockKpiCard(
             if (alarming) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (alarming) org.example.project.ui.theme.readableAccent(accent) else MaterialTheme.colorScheme.onSurface
+                color = if (alarming) org.example.project.ui.theme.readableAccent(accent) else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
             )
-            hint?.let { Text(text = it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            hint?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
 
-/** Подпись итога: «360 м · 33,5 шт» либо «разные единицы» с пояснением, если единиц больше двух. */
+/** Подпись итога: «360 м · 33,5 шт» либо «разные единицы» с краткой сводкой, если единиц больше двух. */
 private class UnitTotals(val text: String, val hint: String?)
 
 private fun totalsByUnit(
@@ -640,7 +674,10 @@ private fun totalsByUnit(
     return when {
         parts.isEmpty() -> UnitTotals("0", null)
         parts.size <= 2 -> UnitTotals(parts.joinToString(" · "), null)
-        else -> UnitTotals("разные единицы", "В остатках ${parts.size} единиц измерения, общий итог не имеет смысла: " + parts.joinToString("; "))
+        else -> UnitTotals(
+            "${parts.size} ед. изм.",
+            parts.take(3).joinToString(" · ") + if (parts.size > 3) " …" else ""
+        )
     }
 }
 
@@ -715,9 +752,10 @@ private fun ReceiptsTab(
                 }
             }
         }
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             SearchableDropdown(
                 items = state.warehouses,
@@ -727,12 +765,12 @@ private fun ReceiptsTab(
                 clearText = "Все склады",
                 label = "Склад",
                 itemText = { "${it.code} · ${it.name}" },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.widthIn(min = 200.dp, max = 280.dp)
             )
             ReceiptStatusDropdown(
                 selected = state.receiptFilters.status,
                 onSelect = viewModel::updateReceiptStatusFilter,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.widthIn(min = 200.dp, max = 260.dp)
             )
         }
         if (state.isLoading && state.receipts.isEmpty()) {
@@ -899,7 +937,8 @@ private fun ReceiptsTab(
                 onPost = viewModel::postReceipt,
                 onClose = viewModel::clearCurrentReceipt,
                 onAccept = viewModel::acceptReceiptLines,
-                onAcceptAndPost = viewModel::acceptAndPostReceipt
+                onAcceptAndPost = viewModel::acceptAndPostReceipt,
+                onCreateClaim = viewModel::createClaimFromReceipt
             )
         }
     }
@@ -1094,10 +1133,10 @@ private fun ExpectedOrderCard(
 
             if (canPost) {
                 HorizontalDivider()
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     WarehouseDropdown(
                         warehouses = activeWarehouses,
@@ -1107,7 +1146,7 @@ private fun ExpectedOrderCard(
                             selectedLocationId = null
                         },
                         label = "Склад",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.widthIn(min = 220.dp, max = 290.dp)
                     )
                     LocationDropdown(
                         locations = warehouseLocations,
@@ -1116,7 +1155,7 @@ private fun ExpectedOrderCard(
                         label = "Ячейка",
                         showWarehouse = false,
                         emptyText = if (selectedWarehouseId == null) "Сначала выберите склад" else "Нет активных ячеек",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.widthIn(min = 220.dp, max = 290.dp)
                     )
                 }
                 if (selectedWarehouseId != null && locationsByWarehouse.containsKey(selectedWarehouseId) && warehouseLocations.isEmpty()) {
@@ -1177,6 +1216,7 @@ private fun ReceiptDetailCard(
     onClose: () -> Unit,
     onAccept: (List<org.example.project.dto.AcceptReceiptLineInput>) -> Unit = {},
     onAcceptAndPost: ((List<org.example.project.dto.AcceptReceiptLineInput>) -> Unit)? = null,
+    onCreateClaim: ((ReceiptDto) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1282,6 +1322,16 @@ private fun ReceiptDetailCard(
                             }
                         }
                     }) { Text("Контроль ОТК") }
+                    val qcRejected = qcInfo?.status == org.example.project.dto.ReceiptQcStatus.FAILED ||
+                        qcInfo?.status == org.example.project.dto.ReceiptQcStatus.PARTIAL
+                    if ((receipt.hasDiscrepancies || qcRejected) && receipt.purchaseOrderId != null && onCreateClaim != null) {
+                        org.example.project.ui.theme.SoftButton(
+                            text = "Создать рекламацию",
+                            onClick = { onCreateClaim(receipt) },
+                            tint = Brand.Rose,
+                            enabled = !isBusy
+                        )
+                    }
                 }
                 TextButton(onClick = onClose) { Text("К списку") }
             }
@@ -1655,6 +1705,25 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
     }
 
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        state.successMessage?.let { msg ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Brand.Mint.copy(alpha = 0.14f))
+                    .border(1.dp, Brand.Mint.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Brand.Teal,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = viewModel::dismissSuccess) { Text("Ок") }
+            }
+        }
         state.operationError?.let { ErrorMessageCard(it) }
 
         // Верхняя строка KPI
@@ -1715,15 +1784,6 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedButton(onClick = viewModel::lookupBarcode) { Text("Определить") }
-                OutlinedButton(onClick = viewModel::loadMovementsAndLowStock) {
-                    ErpIcon(
-                        glyph = ErpIconGlyph.Refresh,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text("Обновить")
-                }
             }
             state.barcodeResult?.let { nom ->
                 Spacer(Modifier.height(8.dp))
@@ -1872,6 +1932,16 @@ private fun MovementsAndReportsTab(state: WmsUiState, viewModel: WmsViewModel) {
                             fontWeight = FontWeight.SemiBold,
                             color = alertColor,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (state.lowStock.isNotEmpty() && viewModel.canCreateDemand()) {
+                        org.example.project.ui.theme.SoftButton(
+                            text = "Заказать пополнение",
+                            onClick = viewModel::createDemandFromLowStock,
+                            tint = Brand.Orange,
+                            compact = true,
+                            enabled = !state.isLoading
                         )
                     }
                 }

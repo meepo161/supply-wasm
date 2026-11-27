@@ -7,8 +7,99 @@ enum class ConversationKind {
     DIRECT,
     GROUP,
     PROJECT,
-    TASK
+    TASK,
+    CHANNEL
 }
+
+@Serializable
+enum class UserPresenceStatus {
+    ONLINE,
+    AWAY,
+    DND,
+    OFFLINE
+}
+
+@Serializable
+data class UserPresenceDto(
+    val userId: Long,
+    val status: UserPresenceStatus = UserPresenceStatus.ONLINE,
+    val lastSeenAt: String? = null
+)
+
+@Serializable
+data class UpdatePresenceRequest(
+    val status: UserPresenceStatus
+)
+
+@Serializable
+data class PollOptionDto(
+    val id: Long,
+    val label: String,
+    val votesCount: Int = 0,
+    val votedByMe: Boolean = false
+)
+
+@Serializable
+data class ConversationPollDto(
+    val id: Long,
+    val messageId: Long,
+    val question: String,
+    val isAnonymous: Boolean = false,
+    val isMultiple: Boolean = false,
+    val closed: Boolean = false,
+    val totalVotes: Int = 0,
+    val options: List<PollOptionDto> = emptyList()
+)
+
+@Serializable
+data class CreatePollRequest(
+    val question: String,
+    val options: List<String>,
+    val isAnonymous: Boolean = false,
+    val isMultiple: Boolean = false
+)
+
+@Serializable
+data class VotePollRequest(
+    val optionIds: List<Long>
+)
+
+@Serializable
+data class PinnedMessageDto(
+    val messageId: Long,
+    val contentPreview: String,
+    val authorName: String? = null,
+    val pinnedAt: String
+)
+
+@Serializable
+data class UpdateConversationRequest(
+    val title: String? = null,
+    val description: String? = null
+)
+
+@Serializable
+data class UpdateConversationMembersRequest(
+    val addMemberIds: List<Long> = emptyList(),
+    val removeMemberIds: List<Long> = emptyList()
+)
+
+@Serializable
+data class ConversationAiSummaryDto(
+    val summary: String,
+    val actionItems: List<String> = emptyList(),
+    val messageCount: Int = 0
+)
+
+@Serializable
+data class ScheduledMessageRequest(
+    val content: String,
+    val scheduledAt: String? = null,
+    val isSilent: Boolean = false,
+    val replyToMessageId: Long? = null,
+    val threadRootId: Long? = null,
+    val idempotencyKey: String
+)
 
 @Serializable
 data class ConversationMemberDto(
@@ -24,7 +115,10 @@ data class ConversationDto(
     val projectId: Long? = null,
     val taskId: Long? = null,
     val canWrite: Boolean = true,
-    val members: List<ConversationMemberDto> = emptyList()
+    val isSavedMessages: Boolean = false,
+    val description: String? = null,
+    val members: List<ConversationMemberDto> = emptyList(),
+    val pinnedMessages: List<PinnedMessageDto> = emptyList()
 )
 
 @Serializable
@@ -44,7 +138,14 @@ data class ConversationMessageDto(
     val editedAt: String? = null,
     val revokedAt: String? = null,
     val source: MessageSourceDto? = null,
-    val version: Long = 0
+    val version: Long = 0,
+    val threadRootId: Long? = null,
+    val threadReplyCount: Int = 0,
+    val isSilent: Boolean = false,
+    val scheduledAt: String? = null,
+    val delivered: Boolean = true,
+    val poll: ConversationPollDto? = null,
+    val isPinned: Boolean = false
 )
 
 @Serializable
@@ -76,6 +177,7 @@ data class ConversationListItemDto(
     val projectId: Long? = null,
     val taskId: Long? = null,
     val canWrite: Boolean = true,
+    val isSavedMessages: Boolean = false,
     val members: List<ConversationMemberDto> = emptyList(),
     val lastMessagePreview: String? = null,
     val lastMessageAuthor: ChatAuthorDto? = null,

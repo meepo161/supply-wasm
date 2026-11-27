@@ -26,12 +26,13 @@ class ConversationService(
     private val conversationEventMutexes = Array(EVENT_LOCK_STRIPES) { Mutex() }
 
     fun list(currentUser: CurrentUser): List<ConversationDto> =
-        conversationRepository.listForUser(currentUser.userId).map { toDto(it) }
+        conversationRepository.listForUser(currentUser.userId).map { toDto(it, currentUser.userId) }
 
     fun create(request: CreateConversationRequest, currentUser: CurrentUser): Pair<ConversationDto, Boolean> =
         when (request.kind) {
             ConversationKind.DIRECT -> createDirect(request, currentUser)
             ConversationKind.GROUP -> createGroup(request, currentUser)
+            ConversationKind.CHANNEL -> createChannel(request, currentUser)
             ConversationKind.PROJECT, ConversationKind.TASK -> throw ValidationException(
                 "Project and task chats are managed via their own endpoints",
                 mapOf("kind" to "unsupported")
@@ -113,13 +114,45 @@ class ConversationService(
             )
             conversationRepository.findById(id)!!
         })
-        return toDto(row) to true
+        return toDto(row, currentUser.userId) to true
+    }
+
+    private fun createChannel(request: CreateConversationRequest, currentUser: CurrentUser): Pair<ConversationDto, Boolean> {
+        val title = request.title?.trim()
+        if (title.isNullOrEmpty()) {
+            throw ValidationException("Channel title is required", mapOf("title" to "required"))
+        }
+        val others = request.memberIds.distinct().filter { it != currentUser.userId }
+        if (others.any { !conversationRepository.isActiveUser(it) }) {
+            throw ValidationException("Member not found or inactive", mapOf("memberIds" to "invalid"))
+        }
+        val row = dsl.transactionResult(org.jooq.TransactionalCallable {
+            val id = conversationRepository.insertConversation(
+                kind = "CHANNEL",
+                title = title,
+                projectId = null,
+                directKey = null,
+                createdBy = currentUser.userId
+            )
+            conversationRepository.insertParticipant(id, currentUser.userId)
+            conversationRepository.setParticipantRole(id, currentUser.userId, "ADMIN")
+            others.forEach { conversationRepository.insertParticipant(id, it) }
+            auditService.log(
+                currentUser.userId,
+                "CONVERSATION_CHANNEL_CREATE",
+                "CONVERSATION",
+                id,
+                mapOf("kind" to "CHANNEL", "memberIds" to (listOf(currentUser.userId) + others))
+            )
+            conversationRepository.findById(id)!!
+        })
+        return toDto(row, currentUser.userId) to true
     }
 
     fun get(id: Long, currentUser: CurrentUser): ConversationDto {
         val row = conversationRepository.findById(id) ?: throw NotFoundException("conversation", id)
         requireAccess(row, currentUser)
-        return toDto(row)
+        return toDto(row, currentUser.userId)
     }
 
     fun listMessages(
@@ -600,6 +633,17 @@ class ConversationService(
         else -> conversationRepository.isParticipant(row.id, userId)
     }
 
+    fun canWrite(row: ConversationRepository.ConversationRow, userId: Long): Boolean = when (row.kind) {
+        "CHANNEL" -> conversationRepository.isChannelWriter(row.id, userId)
+        else -> canAccess(row, userId)
+    }
+
+    fun canWrite(row: ConversationRepository.ConversationRow, currentUser: CurrentUser): Boolean =
+        when (row.kind) {
+            "CHANNEL" -> currentUser.hasPermission("users", "manage") || conversationRepository.isChannelWriter(row.id, currentUser.userId)
+            else -> canAccess(row, currentUser.userId)
+        }
+
     private fun requireAccess(row: ConversationRepository.ConversationRow, currentUser: CurrentUser) {
         if (!canAccess(row, currentUser.userId)) {
             throw ForbiddenException("Access to conversation denied")
@@ -652,19 +696,29 @@ class ConversationService(
         return mentioned.toList()
     }
 
-    private fun toDto(row: ConversationRepository.ConversationRow): ConversationDto {
+    private fun toDto(row: ConversationRepository.ConversationRow, viewerId: Long? = null): ConversationDto {
         val members = when (row.kind) {
             "PROJECT" -> conversationRepository.listProjectMembersWithOwner(row.projectId!!)
             else -> conversationRepository.listParticipantMembers(row.id)
         }
+        val pins = conversationRepository.pinnedMessagesFor(row.id)
         return ConversationDto(
             id = row.id,
             kind = ConversationKind.valueOf(row.kind),
             title = row.title,
             projectId = row.projectId,
-            members = members.map { ConversationMemberDto(it.first, it.second) }
+            canWrite = if (viewerId != null) canWrite(row, viewerId) else true,
+            isSavedMessages = row.isSavedMessages,
+            description = row.description,
+            members = members.map { ConversationMemberDto(it.first, it.second) },
+            pinnedMessages = pins
         )
     }
+
+    internal fun hydrateMessagesForViewer(
+        rows: List<ConversationRepository.MessageRow>,
+        viewerId: Long
+    ): List<ConversationMessageDto> = buildMessageDtos(rows, viewerId)
 
     private fun buildMessageDtos(
         rows: List<ConversationRepository.MessageRow>,
@@ -672,14 +726,18 @@ class ConversationService(
     ): List<ConversationMessageDto> {
         if (rows.isEmpty()) return emptyList()
         val ids = rows.map { it.id }
+        val convId = rows.first().conversationId
         val attachmentMap = attachmentsFor(ids)
         val reactionsMap = conversationRepository.reactionsForMessages(ids, viewerId)
         val mentionsMap = conversationRepository.mentionedUserIdsForMessages(ids)
-        val cursors = conversationRepository.readCursors(rows.first().conversationId)
+        val cursors = conversationRepository.readCursors(convId)
         val readerNames = conversationRepository.userNames(cursors.map { it.first })
         val replyMap = conversationRepository.listMessageRowsByIds(rows.mapNotNull { it.replyToId }.distinct())
             .associateBy { it.id }
         val sourceAuthorNames = conversationRepository.userNames(rows.mapNotNull { it.sourceAuthorId }.distinct())
+        val pollMap = conversationRepository.pollsForMessages(ids, viewerId)
+        val threadReplyCounts = conversationRepository.threadReplyCountsForMessages(ids)
+        val pinnedIds = conversationRepository.pinnedMessagesFor(convId).map { it.messageId }.toSet()
         return rows.map { row ->
             ConversationMessageDto(
                 id = row.id,
@@ -714,7 +772,14 @@ class ConversationService(
                         createdAt = row.sourceCreatedAt?.toString()
                     )
                 },
-                version = row.version
+                version = row.version,
+                threadRootId = row.threadRootId,
+                threadReplyCount = threadReplyCounts[row.id] ?: 0,
+                isSilent = row.isSilent,
+                scheduledAt = row.scheduledAt?.toString(),
+                delivered = row.delivered,
+                poll = pollMap[row.id],
+                isPinned = row.id in pinnedIds
             )
         }
     }

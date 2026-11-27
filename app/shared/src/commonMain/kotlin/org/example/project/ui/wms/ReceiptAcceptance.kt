@@ -10,7 +10,7 @@ import org.example.project.ui.theme.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import org.example.project.ui.theme.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -161,6 +161,51 @@ fun ReceiptAcceptance(
         val selectableLocations = remember(locations) {
             locations.filter { it.active && it.code != TRANSIT_LOCATION_CODE }
         }
+        var scanCode by remember(receipt.id) { mutableStateOf("") }
+        var scanHint by remember(receipt.id) { mutableStateOf<String?>(null) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = scanCode,
+                onValueChange = { scanCode = it },
+                label = { Text("Штрихкод / код позиции (+1 к приёмке)") },
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedButton(
+                onClick = {
+                    val q = scanCode.trim()
+                    if (q.isNotEmpty()) {
+                        val matchIdx = receipt.lines.indexOfFirst { line ->
+                            val item = nomenclature.firstOrNull { it.id == line.nomenclatureId }
+                            line.nomenclatureCode.equals(q, ignoreCase = true) ||
+                                item?.code.equals(q, ignoreCase = true) ||
+                                item?.barcodes?.any { it.barcode.equals(q, ignoreCase = true) } == true
+                        }
+                        if (matchIdx >= 0) {
+                            val current = rows[matchIdx]
+                            val nextQty = (current.received.trim().replace(',', '.').toDoubleOrNull() ?: 0.0) + 1.0
+                            val rounded = kotlin.math.round(nextQty * 1000.0) / 1000.0
+                            rows[matchIdx] = current.copy(
+                                received = if (rounded % 1.0 == 0.0) rounded.toLong().toString() else rounded.toString()
+                            )
+                            val matchedLine = receipt.lines[matchIdx]
+                            scanHint = "Строка №${matchedLine.lineNo}: +1 (итого ${rows[matchIdx].received})"
+                            scanCode = ""
+                        } else {
+                            scanHint = "Позиция с кодом «$q» не найдена в приёмке"
+                        }
+                    }
+                },
+                enabled = scanCode.isNotBlank()
+            ) { Text("+1") }
+        }
+        scanHint?.let { hint ->
+            Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        }
         val commonLocationId = rows.map { it.locationId }.distinct().singleOrNull()
         val firstSelectedLocation = rows.firstNotNullOfOrNull { r ->
             selectableLocations.firstOrNull { it.id == r.locationId }
@@ -216,10 +261,11 @@ fun ReceiptAcceptance(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val unitSuffix = item?.unit?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
                     OutlinedTextField(
                         value = row.received,
                         onValueChange = { rows[index] = row.copy(received = it) },
-                        label = { Text("Принято *") },
+                        label = { Text("Принято$unitSuffix *") },
                         singleLine = true,
                         isError = row.received.isNotBlank() && parsedReceived == null,
                         modifier = Modifier.weight(1f)

@@ -1,5 +1,6 @@
 package org.example.project.ui.main
 
+import org.example.project.dto.hasPermission
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -134,8 +135,12 @@ fun MainScaffold(
     val destinations = NavigationDestination.entries.filter { it.isVisibleTo(user) }
     // Раздел берётся из адреса (#/wms), чтобы перезагрузка открывала тот же раздел (N-07).
     var selected by remember {
+        val preferredDest = runCatching {
+            NavigationDestination.valueOf(UserPreferencesStore.state.value.startDestination)
+        }.getOrNull()?.takeIf { it in destinations }
         mutableStateOf(
             parseAppRoute(BrowserHash.read())?.destination?.takeIf { it in destinations }
+                ?: preferredDest
                 ?: NavigationDestination.HOME
         )
     }
@@ -218,7 +223,7 @@ fun MainScaffold(
         }
     }
     val wmsViewModel = if (NavigationDestination.WMS in destinations) {
-        remember(user.id) { WmsViewModel(wmsRepository, user.id) }
+        remember(user.id) { WmsViewModel(wmsRepository, user.id, purchaseOrderRepository, supplierRepository, demandRepository) }
     } else {
         null
     }
@@ -234,13 +239,15 @@ fun MainScaffold(
                 projectRepository,
                 bomRepository,
                 userRepository,
-                user
+                user,
+                demandRepository
             )
         }
     } else {
         null
     }
-    val supplierViewModel = if (NavigationDestination.SUPPLIERS in destinations) {
+    val canReadSuppliers = user.hasPermission("suppliers", "read")
+    val supplierViewModel = if (NavigationDestination.DEMANDS in destinations && canReadSuppliers) {
         remember(user) {
             SupplierViewModel(
                 supplierRepository,
@@ -254,7 +261,7 @@ fun MainScaffold(
     } else {
         null
     }
-    val purchaseOrderViewModel = if (NavigationDestination.PURCHASE_ORDERS in destinations) {
+    val purchaseOrderViewModel = if (NavigationDestination.DEMANDS in destinations && canReadSuppliers) {
         remember(user) {
             PurchaseOrderViewModel(
                 purchaseOrderRepository,
@@ -267,7 +274,9 @@ fun MainScaffold(
         null
     }
     val supplierInvoiceRepository: org.example.project.data.SupplierInvoiceRepository = koinInject()
-    val supplierInvoiceViewModel = if (NavigationDestination.PURCHASE_ORDERS in destinations) {
+    val supplierInvoiceViewModel = if (NavigationDestination.DEMANDS in destinations &&
+        (canReadSuppliers || user.hasPermission("invoices", "read"))
+    ) {
         remember(user) {
             org.example.project.ui.supplier.SupplierInvoiceViewModel(
                 supplierInvoiceRepository,
@@ -298,37 +307,97 @@ fun MainScaffold(
     androidx.compose.runtime.LaunchedEffect(user.id) {
         onlineUserIds = erpEventsClient.fetchOnlineUserIds()
     }
-    androidx.compose.runtime.LaunchedEffect(user.id, wmsViewModel, demandViewModel, supplierViewModel, productionViewModel) {
+    val documentViewModel = remember(user) {
+        DocumentViewModel(documentRepository, projectRepository, userRepository, user)
+    }
+    val adminViewModel = if (NavigationDestination.ADMIN in destinations) {
+        remember(user.id) { AdminViewModel(adminRepository, user) }
+    } else {
+        null
+    }
+    androidx.compose.runtime.LaunchedEffect(
+        user.id,
+        wmsViewModel,
+        bomViewModel,
+        demandViewModel,
+        supplierViewModel,
+        purchaseOrderViewModel,
+        supplierInvoiceViewModel,
+        productionViewModel,
+        documentViewModel,
+        adminViewModel
+    ) {
         erpEventsClient.observeEvents().collect { event ->
             when (event.domain) {
                 ErpEventDomain.TASK -> {
                     homeViewModel.loadTasks()
                     taskViewModel.loadTasks()
+                    taskViewModel.uiState.value.selectedTask?.id?.let { taskViewModel.refreshSelectedTask(it) }
+                    homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.PROJECT -> {
                     projectViewModel.loadProjects()
+                    homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.WMS -> {
                     wmsViewModel?.loadWarehouses()
                     wmsViewModel?.loadNomenclature()
                     wmsViewModel?.loadStock()
                     wmsViewModel?.loadReservations()
+                    wmsViewModel?.loadReceipts()
+                    wmsViewModel?.loadExpectedReceipts()
+                    wmsViewModel?.loadMovementsAndLowStock()
                     demandViewModel?.loadDemands()
                     demandViewModel?.refreshSelectedDemandIfOpen()
+                    purchaseOrderViewModel?.refreshOnOpen()
                     homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.DEMAND -> {
                     demandViewModel?.loadDemands()
                     demandViewModel?.refreshSelectedDemandIfOpen()
+                    purchaseOrderViewModel?.refreshOnOpen()
+                    projectViewModel.loadProjects()
                     homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.SUPPLIER -> {
                     supplierViewModel?.loadSuppliers()
+                    supplierViewModel?.loadOffers()
+                    supplierViewModel?.loadClaims()
+                    supplierViewModel?.refreshComparison()
                     demandViewModel?.loadDemands()
                     demandViewModel?.refreshSelectedDemandIfOpen()
+                    purchaseOrderViewModel?.refreshOnOpen()
+                    wmsViewModel?.loadExpectedReceipts()
+                    wmsViewModel?.loadReceipts()
+                    if (supplierInvoiceViewModel?.canRead() == true) {
+                        supplierInvoiceViewModel.load()
+                    }
+                    homeViewModel.loadActionQueue()
                 }
                 ErpEventDomain.PRODUCTION -> {
                     productionViewModel?.loadOrders()
+                    productionViewModel?.refreshSelectedOrder()
+                    wmsViewModel?.loadStock()
+                    homeViewModel.loadActionQueue()
+                }
+                ErpEventDomain.BOM -> {
+                    bomViewModel?.loadModels()
+                    bomViewModel?.refreshCurrentRevision()
+                }
+                ErpEventDomain.DOCUMENT -> {
+                    documentViewModel.loadDocuments()
+                    documentViewModel.refreshSelectedDocument()
+                }
+                ErpEventDomain.APPROVAL -> {
+                    documentViewModel.loadDocuments()
+                    documentViewModel.refreshSelectedDocument()
+                    purchaseOrderViewModel?.refreshOnOpen()
+                    demandViewModel?.loadDemands()
+                    demandViewModel?.refreshSelectedDemandIfOpen()
+                    homeViewModel.loadActionQueue()
+                }
+                ErpEventDomain.ADMIN -> {
+                    adminViewModel?.loadAll()
                 }
                 ErpEventDomain.PRESENCE -> {
                     val uid = event.entityId
@@ -344,14 +413,6 @@ fun MainScaffold(
                 }
             }
         }
-    }
-    val documentViewModel = remember(user) {
-        DocumentViewModel(documentRepository, projectRepository, userRepository, user)
-    }
-    val adminViewModel = if (NavigationDestination.ADMIN in destinations) {
-        remember(user.id) { AdminViewModel(adminRepository, user) }
-    } else {
-        null
     }
 
     val onOpenTask: (Long) -> Unit = { taskId ->
@@ -380,8 +441,10 @@ fun MainScaffold(
         documentViewModel.selectDocument(documentId)
         selected = NavigationDestination.DOCUMENTS
     }
+    var supplyTab by remember(user.id) { mutableStateOf(org.example.project.ui.supplier.SupplyTab.DEMANDS) }
     val onOpenDemand: (Long) -> Unit = { demandId ->
         if (NavigationDestination.DEMANDS in destinations) {
+            supplyTab = org.example.project.ui.supplier.SupplyTab.DEMANDS
             demandViewModel?.selectDemand(demandId)
             selected = NavigationDestination.DEMANDS
         }
@@ -391,9 +454,11 @@ fun MainScaffold(
             wmsViewModel?.selectTab(org.example.project.ui.wms.WmsTab.RECEIPTS)
             wmsViewModel?.loadExpectedReceipts()
             selected = NavigationDestination.WMS
-        } else if (NavigationDestination.PURCHASE_ORDERS in destinations) {
-            purchaseOrderViewModel?.selectOrder(orderId)
-            selected = NavigationDestination.PURCHASE_ORDERS
+        } else if (NavigationDestination.DEMANDS in destinations && purchaseOrderViewModel != null) {
+            supplyTab = org.example.project.ui.supplier.SupplyTab.ORDERS
+            purchaseOrderViewModel.selectTab(org.example.project.ui.supplier.PurchaseOrderTab.ORDERS)
+            purchaseOrderViewModel.selectOrder(orderId)
+            selected = NavigationDestination.DEMANDS
         } else if (NavigationDestination.WMS in destinations) {
             wmsViewModel?.selectTab(org.example.project.ui.wms.WmsTab.RECEIPTS)
             wmsViewModel?.loadExpectedReceipts()
@@ -604,6 +669,8 @@ fun MainScaffold(
                         supplierViewModel = supplierViewModel,
                         purchaseOrderViewModel = purchaseOrderViewModel,
                         supplierInvoiceViewModel = supplierInvoiceViewModel,
+                        supplyTab = supplyTab,
+                        onSelectSupplyTab = { supplyTab = it },
                         documentViewModel = documentViewModel,
                         adminViewModel = adminViewModel,
                         onOpenTask = onOpenTask,
@@ -614,10 +681,25 @@ fun MainScaffold(
                         onOpenNotifications = onOpenNotifications,
                         onBackFromNotifications = onBackFromNotifications,
                         onNavigateDestination = { target ->
-                            runCatching { NavigationDestination.valueOf(target) }
-                                .getOrNull()
-                                ?.takeIf { it in destinations }
-                                ?.let { selected = it }
+                            when (target) {
+                                "PURCHASE_ORDERS" -> if (NavigationDestination.DEMANDS in destinations) {
+                                    supplyTab = org.example.project.ui.supplier.SupplyTab.ORDERS
+                                    purchaseOrderViewModel?.selectTab(org.example.project.ui.supplier.PurchaseOrderTab.ORDERS)
+                                    selected = NavigationDestination.DEMANDS
+                                }
+                                "SUPPLIERS" -> if (NavigationDestination.DEMANDS in destinations) {
+                                    supplyTab = org.example.project.ui.supplier.SupplyTab.SUPPLIERS
+                                    selected = NavigationDestination.DEMANDS
+                                }
+                                "DEMANDS" -> if (NavigationDestination.DEMANDS in destinations) {
+                                    supplyTab = org.example.project.ui.supplier.SupplyTab.DEMANDS
+                                    selected = NavigationDestination.DEMANDS
+                                }
+                                else -> runCatching { NavigationDestination.valueOf(target) }
+                                    .getOrNull()
+                                    ?.takeIf { it in destinations }
+                                    ?.let { selected = it }
+                            }
                         }
                     )
                 }
@@ -895,6 +977,7 @@ private fun RoundIconButton(
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(6.dp)
+    val accent = tint ?: scheme.primary
     Box(contentAlignment = Alignment.TopEnd) {
         Row(
             modifier = modifier
@@ -903,12 +986,12 @@ private fun RoundIconButton(
                 .clip(shape)
                 .background(
                     when {
-                        pressed -> scheme.surfaceContainerHighest
-                        hovered -> scheme.surfaceContainerHigh
-                        else -> palette.glassOverlay
+                        pressed -> accent.copy(alpha = 0.24f)
+                        hovered -> accent.copy(alpha = 0.17f)
+                        else -> accent.copy(alpha = 0.11f)
                     }
                 )
-                .border(1.dp, palette.glassBorder.first(), shape)
+                .border(1.dp, accent.copy(alpha = 0.30f), shape)
                 .erpInteractive(interaction, shape)
                 .clickable(interactionSource = interaction, indication = null, onClick = onClick)
                 .padding(horizontal = if (label == null) 0.dp else 12.dp)
@@ -1374,6 +1457,8 @@ private fun MainContent(
     supplierViewModel: SupplierViewModel?,
     purchaseOrderViewModel: PurchaseOrderViewModel?,
     supplierInvoiceViewModel: org.example.project.ui.supplier.SupplierInvoiceViewModel? = null,
+    supplyTab: org.example.project.ui.supplier.SupplyTab = org.example.project.ui.supplier.SupplyTab.DEMANDS,
+    onSelectSupplyTab: (org.example.project.ui.supplier.SupplyTab) -> Unit = {},
     documentViewModel: DocumentViewModel,
     adminViewModel: AdminViewModel?,
     onOpenTask: (Long) -> Unit,
@@ -1392,6 +1477,15 @@ private fun MainContent(
             onOpenConversation = onOpenConversation,
             onOpenProjectChat = onOpenProjectChat,
             onOpenNotifications = onOpenNotifications,
+            onOpenDemand = onOpenDemand,
+            onCreateDemand = if (demandViewModel?.canCreate() == true) {
+                {
+                    onSelectSupplyTab(org.example.project.ui.supplier.SupplyTab.DEMANDS)
+                    demandViewModel.navigateTo(org.example.project.ui.demand.DemandPage.LIST)
+                    demandViewModel.showDialog(org.example.project.ui.demand.DemandDialog.CreateDemand)
+                    onNavigateDestination("DEMANDS")
+                }
+            } else null,
             onNavigateDestination = onNavigateDestination
         )
 
@@ -1429,17 +1523,16 @@ private fun MainContent(
             ProductionScreen(viewModel = it)
         }
 
-        NavigationDestination.SUPPLIERS -> supplierViewModel?.let {
-            SupplierScreen(viewModel = it)
-        }
-
-        NavigationDestination.PURCHASE_ORDERS -> purchaseOrderViewModel?.let {
-            PurchaseOrderScreen(viewModel = it, invoiceViewModel = supplierInvoiceViewModel)
-        }
-
-        NavigationDestination.DEMANDS -> demandViewModel?.let {
-            DemandScreen(viewModel = it, currentUser = user)
-        }
+        NavigationDestination.DEMANDS -> org.example.project.ui.supplier.SupplyHubScreen(
+            activeTab = supplyTab,
+            onSelectTab = onSelectSupplyTab,
+            currentUser = user,
+            demandViewModel = demandViewModel,
+            purchaseOrderViewModel = purchaseOrderViewModel,
+            supplierInvoiceViewModel = supplierInvoiceViewModel,
+            supplierViewModel = supplierViewModel,
+            onOpenPurchaseOrder = { orderId -> onOpenPurchaseOrder(orderId, "") }
+        )
 
         NavigationDestination.DOCUMENTS -> DocumentsScreen(viewModel = documentViewModel)
 

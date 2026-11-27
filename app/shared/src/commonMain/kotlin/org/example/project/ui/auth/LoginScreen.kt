@@ -25,7 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -383,14 +383,7 @@ private fun AppTextField(
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         shape = RoundedCornerShape(8.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = scheme.primary,
-            unfocusedBorderColor = scheme.outline.copy(alpha = 0.7f),
-            focusedContainerColor = if (palette.isDark) scheme.surfaceContainerHigh else scheme.surfaceContainerLow,
-            unfocusedContainerColor = if (palette.isDark) scheme.surfaceContainer.copy(alpha = 0.6f) else scheme.surfaceContainerLow.copy(alpha = 0.7f),
-            focusedLabelColor = scheme.primary,
-            unfocusedLabelColor = scheme.onSurfaceVariant
-        ),
+        colors = org.example.project.ui.theme.erpTextFieldColors(),
         modifier = Modifier.fillMaxWidth()
     )
 }

@@ -14,7 +14,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +42,7 @@ fun ConversationCreateDialog(
     error: ApiError?,
     onCreateDirect: (Long) -> Unit,
     onCreateGroup: (String, List<Long>) -> Unit,
+    onCreateChannel: (String, List<Long>) -> Unit = { _, _ -> },
     onRetryDirectory: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -57,6 +58,7 @@ fun ConversationCreateDialog(
     val canCreate = !isCreating && when (kind) {
         ConversationKind.DIRECT -> selectedMembers.size == 1
         ConversationKind.GROUP -> title.isNotBlank() && selectedMembers.isNotEmpty()
+        ConversationKind.CHANNEL -> title.isNotBlank()
         else -> false
     }
 
@@ -70,6 +72,7 @@ fun ConversationCreateDialog(
             when (kind) {
                 ConversationKind.DIRECT -> selectedMembers.firstOrNull()?.let(onCreateDirect)
                 ConversationKind.GROUP -> onCreateGroup(title.trim(), selectedMembers.toList())
+                ConversationKind.CHANNEL -> onCreateChannel(title.trim(), selectedMembers.toList())
                 else -> Unit
             }
         },
@@ -93,13 +96,19 @@ fun ConversationCreateDialog(
                         enabled = !isCreating,
                         label = { Text("Групповой") }
                     )
+                    FilterChip(
+                        selected = kind == ConversationKind.CHANNEL,
+                        onClick = { kind = ConversationKind.CHANNEL },
+                        enabled = !isCreating,
+                        label = { Text("Канал") }
+                    )
                 }
 
-                if (kind == ConversationKind.GROUP) {
+                if (kind == ConversationKind.GROUP || kind == ConversationKind.CHANNEL) {
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
-                        label = { Text("Название чата *") },
+                        label = { Text(if (kind == ConversationKind.CHANNEL) "Название канала *" else "Название чата *") },
                         singleLine = true,
                         enabled = !isCreating,
                         modifier = Modifier.fillMaxWidth()

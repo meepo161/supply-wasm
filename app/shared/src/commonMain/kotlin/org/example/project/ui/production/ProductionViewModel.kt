@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.example.project.data.ApiResult
 import org.example.project.data.BomRepository
+import org.example.project.data.DemandRepository
 import org.example.project.data.ProjectRepository
 import org.example.project.data.ProductionRepository
 import org.example.project.data.UserRepository
@@ -16,8 +17,12 @@ import org.example.project.dto.ApiError
 import org.example.project.dto.BomRevisionStatus
 import org.example.project.dto.CancelProductionOrderRequest
 import org.example.project.dto.CompleteProductionOrderRequest
+import org.example.project.dto.CreateDemandRequest
 import org.example.project.dto.CreateProductionOrderRequest
 import org.example.project.dto.CreateProductionStageInput
+import org.example.project.dto.DemandLineInput
+import org.example.project.dto.DemandPriority
+import org.example.project.dto.DemandSourceType
 import org.example.project.dto.ProductionOrderActionRequest
 import org.example.project.dto.ProductionOrderDto
 import org.example.project.dto.ProductionOrderStatus
@@ -34,7 +39,8 @@ class ProductionViewModel(
     private val projectRepository: ProjectRepository,
     private val bomRepository: BomRepository,
     private val userRepository: UserRepository,
-    private val currentUser: UserDto
+    private val currentUser: UserDto,
+    private val demandRepository: DemandRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProductionUiState())
@@ -57,6 +63,61 @@ class ProductionViewModel(
 
     /** Резерв и списание материалов двигают складской остаток: сервер требует ещё и wms:post. */
     fun canMoveStock(): Boolean = hasPermission() && currentUser.hasPermission("wms", "post")
+
+    fun canCreateDemand(): Boolean = demandRepository != null && currentUser.hasPermission("demands", "create")
+
+    fun createDemandForShortage() {
+        val order = _uiState.value.selectedOrder ?: return
+        val repo = demandRepository ?: return
+        val shortageLines = _uiState.value.materials.mapNotNull { m ->
+            val planned = m.plannedQty.toDoubleOrNull() ?: 0.0
+            val covered = maxOf(
+                m.allocatedQty.toDoubleOrNull() ?: 0.0,
+                m.consumedQty.toDoubleOrNull() ?: 0.0
+            )
+            val deficit = planned - covered
+            if (deficit > 0.0001) m to deficit else null
+        }
+        if (shortageLines.isEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("VALIDATION_ERROR", "Нет недостающих материалов для заказа")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null, successMessage = null)
+        viewModelScope.launch {
+            val lineInputs = shortageLines.mapIndexed { idx, (m, deficit) ->
+                val rounded = kotlin.math.round(deficit * 1000.0) / 1000.0
+                val qtyText = if (rounded % 1.0 == 0.0) rounded.toLong().toString() else rounded.toString()
+                DemandLineInput(
+                    lineNo = idx + 1,
+                    nomenclatureId = m.nomenclatureId,
+                    quantity = qtyText,
+                    unit = m.unit
+                )
+            }
+            when (val res = repo.createDemand(
+                CreateDemandRequest(
+                    sourceType = DemandSourceType.PROJECT,
+                    projectId = order.projectId,
+                    stockpileNote = null,
+                    requiredDate = order.plannedEndAt?.take(10),
+                    priority = DemandPriority.HIGH,
+                    idempotencyKey = "prod-shortage-${order.id}-${kotlin.random.Random.nextInt(100000, 999999)}",
+                    lines = lineInputs
+                )
+            )) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    successMessage = "Создана заявка ${res.data.header.number} на недостающие материалы (${lineInputs.size} поз.)"
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = res.error
+                )
+            }
+        }
+    }
 
     fun dismissError() {
         _uiState.value = _uiState.value.copy(operationError = null)

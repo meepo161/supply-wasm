@@ -143,7 +143,12 @@ class SupplierInvoiceViewModel(
         update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             when (val r = repository.list(status = _uiState.value.statusFilter)) {
-                is ApiResult.Success -> update { it.copy(invoices = r.data, isLoading = false) }
+                is ApiResult.Success -> {
+                    update { it.copy(invoices = r.data, isLoading = false) }
+                    if (_uiState.value.selected == null && r.data.isNotEmpty()) {
+                        select(r.data.first().id)
+                    }
+                }
                 is ApiResult.Error -> update { it.copy(isLoading = false, error = r.error) }
             }
         }
@@ -534,6 +539,53 @@ class SupplierInvoiceViewModel(
                     refreshSelected(invoice.id)
                 }
                 is ApiResult.Error -> update { it.copy(isBusy = false, error = r.error) }
+            }
+        }
+    }
+
+    /** В 1 клик передаёт сверенный счёт на склад (или открывает выбор склада, если активных несколько). */
+    fun sendToWarehouse(invoice: SupplierInvoiceDto) {
+        update { it.copy(selected = invoice, isBusy = true, error = null, message = null) }
+        viewModelScope.launch {
+            when (val wRes = wmsRepository.listWarehouses()) {
+                is ApiResult.Error -> update { it.copy(isBusy = false, error = wRes.error) }
+                is ApiResult.Success -> {
+                    val active = wRes.data.filter { it.active }
+                    when {
+                        active.isEmpty() -> update {
+                            it.copy(isBusy = false, error = ApiError("VALIDATION_ERROR", "Нет активных складов для приёмки"))
+                        }
+                        active.size == 1 -> {
+                            val warehouse = active.first()
+                            when (val r = repository.createReceipt(
+                                invoice.id,
+                                CreateReceiptFromInvoiceRequest(warehouse.id, invoice.version)
+                            )) {
+                                is ApiResult.Success -> {
+                                    update {
+                                        it.copy(
+                                            isBusy = false,
+                                            dialog = null,
+                                            warehouses = active,
+                                            receiptWarehouseId = warehouse.id,
+                                            message = "Поступление ${r.data.number} передано на склад «${warehouse.name}»"
+                                        )
+                                    }
+                                    refreshSelected(invoice.id)
+                                }
+                                is ApiResult.Error -> update { it.copy(isBusy = false, error = r.error) }
+                            }
+                        }
+                        else -> update {
+                            it.copy(
+                                isBusy = false,
+                                warehouses = active,
+                                receiptWarehouseId = it.receiptWarehouseId ?: active.first().id,
+                                dialog = SupplierInvoiceDialog.Receipt
+                            )
+                        }
+                    }
+                }
             }
         }
     }

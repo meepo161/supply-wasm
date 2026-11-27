@@ -12,7 +12,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import org.example.project.ui.theme.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
 import androidx.compose.runtime.Composable
@@ -33,6 +33,10 @@ import org.example.project.dto.TaskWorkType
 import org.example.project.dto.UserDto
 import org.example.project.ui.projects.ErrorMessageCard
 import org.example.project.ui.projects.UserDropdown
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpDialog
+import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.SoftButton
 
 /**
  * Действия над задачей. Видимость каждого действия повторяет серверные
@@ -184,29 +188,12 @@ fun TaskActionsSection(
                 }
             }
 
-            if (canBlock) {
-                OutlinedTextField(
-                    value = state.blockReason,
-                    onValueChange = viewModel::updateBlockReason,
-                    label = { Text("Причина блокировки *") },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (users.isNotEmpty()) {
-                    UserDropdown(
-                        users = users,
-                        selected = users.find { it.id == state.unblockResponsibleId },
-                        onSelect = { viewModel.updateUnblockResponsible(it.id) },
-                        label = "Ответственный за снятие блокировки *",
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                OutlinedButton(
-                    onClick = { viewModel.block(task) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Заблокировать")
-                }
+            var showBlockDialog by remember(task.id) { mutableStateOf(false) }
+            var showCancelDialog by remember(task.id) { mutableStateOf(false) }
+
+            LaunchedEffect(task.status) {
+                if (task.status == TaskStatus.BLOCKED) showBlockDialog = false
+                if (task.status == TaskStatus.CANCELLED) showCancelDialog = false
             }
 
             if (canReopen) {
@@ -225,19 +212,78 @@ fun TaskActionsSection(
                 }
             }
 
-            if (canCancel) {
-                OutlinedTextField(
-                    value = state.cancelReason,
-                    onValueChange = viewModel::updateCancelReason,
-                    label = { Text("Причина отмены *") },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedButton(
-                    onClick = { viewModel.cancel(task) },
-                    modifier = Modifier.fillMaxWidth()
+            if (canBlock || canCancel) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Отменить задачу")
+                    if (canBlock) {
+                        SoftButton(
+                            text = "Заблокировать",
+                            onClick = { showBlockDialog = true },
+                            tint = Brand.Amber,
+                            leadingIcon = ErpIconGlyph.Alert,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (canCancel) {
+                        SoftButton(
+                            text = "Отменить задачу",
+                            onClick = { showCancelDialog = true },
+                            tint = Brand.Rose,
+                            leadingIcon = ErpIconGlyph.Close,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            if (showBlockDialog) {
+                ErpDialog(
+                    title = "Заблокировать задачу",
+                    onDismiss = { showBlockDialog = false },
+                    confirmText = "Заблокировать",
+                    onConfirm = { viewModel.block(task) },
+                    confirmEnabled = state.blockReason.isNotBlank(),
+                    dismissText = "Отмена"
+                ) {
+                    state.actionError?.let { ErrorMessageCard(error = it) }
+                    OutlinedTextField(
+                        value = state.blockReason,
+                        onValueChange = viewModel::updateBlockReason,
+                        label = { Text("Причина блокировки *") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (users.isNotEmpty()) {
+                        UserDropdown(
+                            users = users,
+                            selected = users.find { it.id == state.unblockResponsibleId },
+                            onSelect = { viewModel.updateUnblockResponsible(it.id) },
+                            label = "Ответственный за снятие блокировки *",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
+            if (showCancelDialog) {
+                ErpDialog(
+                    title = "Отменить задачу",
+                    onDismiss = { showCancelDialog = false },
+                    confirmText = "Отменить задачу",
+                    onConfirm = { viewModel.cancel(task) },
+                    confirmEnabled = state.cancelReason.isNotBlank(),
+                    dismissText = "Назад"
+                ) {
+                    state.actionError?.let { ErrorMessageCard(error = it) }
+                    OutlinedTextField(
+                        value = state.cancelReason,
+                        onValueChange = viewModel::updateCancelReason,
+                        label = { Text("Причина отмены *") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
@@ -277,21 +323,49 @@ fun TaskActionsSection(
                     }) { Text("Удалить") }
                 }
             }
+            var selectedPredTask by remember(task.id) { mutableStateOf<TaskDto?>(null) }
+            var predMenuOpen by remember(task.id) { mutableStateOf(false) }
+            val availablePredTasks = remember(state.tasks, task.id, deps) {
+                val linkedIds = deps.map { it.predecessorTaskId }.toSet()
+                state.tasks.filter { it.id != task.id && it.id !in linkedIds }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = predIdInput,
-                    onValueChange = { predIdInput = it },
-                    label = { Text("ID задачи-предшественника") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                Button(onClick = {
-                    val predId = predIdInput.trim().toLongOrNull()
-                    if (predId != null) {
+                androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
+                    SoftButton(
+                        text = selectedPredTask?.let { "${it.number} · ${it.title}" } ?: "Выбрать задачу-предшественника…",
+                        onClick = { predMenuOpen = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = predMenuOpen,
+                        onDismissRequest = { predMenuOpen = false }
+                    ) {
+                        if (availablePredTasks.isEmpty()) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Нет доступных задач") },
+                                onClick = { predMenuOpen = false }
+                            )
+                        } else {
+                            availablePredTasks.take(20).forEach { candidate ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("${candidate.number} · ${candidate.title}") },
+                                    onClick = {
+                                        selectedPredTask = candidate
+                                        predMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                Button(
+                    enabled = selectedPredTask != null,
+                    onClick = {
+                        val predId = selectedPredTask?.id ?: return@Button
                         depScope.launch {
                             when (val res = extrasRepo.addTaskDependency(
                                 org.example.project.dto.CreateTaskDependencyRequest(
@@ -301,14 +375,14 @@ fun TaskActionsSection(
                             )) {
                                 is org.example.project.data.ApiResult.Success -> {
                                     deps = deps + res.data
-                                    predIdInput = ""
+                                    selectedPredTask = null
                                     depError = null
                                 }
                                 is org.example.project.data.ApiResult.Error -> depError = res.error.userText()
                             }
                         }
                     }
-                }) { Text("Связать") }
+                ) { Text("Связать") }
             }
 
             // TASK-33: Связи задачи с объектами ERP

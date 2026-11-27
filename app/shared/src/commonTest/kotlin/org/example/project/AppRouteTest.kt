@@ -12,7 +12,8 @@ class AppRouteTest {
     fun parsesSectionWithAndWithoutHash() {
         assertEquals(AppRoute(NavigationDestination.WMS), parseAppRoute("#/wms"))
         assertEquals(AppRoute(NavigationDestination.WMS), parseAppRoute("/wms"))
-        assertEquals(AppRoute(NavigationDestination.PURCHASE_ORDERS), parseAppRoute("#/purchase-orders"))
+        assertEquals(AppRoute(NavigationDestination.DEMANDS), parseAppRoute("#/purchase-orders"))
+        assertEquals(AppRoute(NavigationDestination.DEMANDS), parseAppRoute("#/suppliers"))
     }
 
     @Test

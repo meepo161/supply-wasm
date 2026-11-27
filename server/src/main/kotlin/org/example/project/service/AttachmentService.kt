@@ -328,7 +328,12 @@ class AttachmentService(
             "jpeg" to "image/jpeg",
             "png" to "image/png",
             "zip" to "application/zip",
-            "txt" to "text/plain"
+            "txt" to "text/plain",
+            "webm" to "audio/webm",
+            "ogg" to "audio/ogg",
+            "wav" to "audio/wav",
+            "mp3" to "audio/mpeg",
+            "m4a" to "audio/mp4"
         )
 
         fun validateFileName(originalFileName: String): String {

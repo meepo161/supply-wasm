@@ -165,8 +165,7 @@ private fun OrdersPane(
             title = "Заказы",
             count = state.orders.size,
             subtitle = "Всего в выборке",
-            accent = Brand.Teal,
-            action = { SoftButton(text = "Обновить", onClick = viewModel::loadOrders) }
+            accent = Brand.Teal
         )
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -268,7 +267,7 @@ private fun OrderDetailPane(
                     ProductionStagesGrid(
                         stages = order.stages,
                         onClick = { },
-                        modifier = Modifier.fillMaxWidth().height(220.dp)
+                        modifier = Modifier.fillMaxWidth().height(250.dp)
                     )
                     Spacer(Modifier.height(8.dp))
                     StageActions(order = order, viewModel = viewModel, canManage = canManage, state = state)
@@ -296,13 +295,35 @@ private fun OrderDetailPane(
                     )
                 }
                 Spacer(Modifier.height(14.dp))
+                val hasDeficit = state.materials.any { m ->
+                    val planned = m.plannedQty.toDoubleOrNull() ?: 0.0
+                    val covered = maxOf(
+                        m.allocatedQty.toDoubleOrNull() ?: 0.0,
+                        m.consumedQty.toDoubleOrNull() ?: 0.0
+                    )
+                    planned - covered > 0.0001
+                }
                 SectionHeader(
                     title = "Материалы заказа (BOM)",
                     count = state.materials.size,
                     accent = Brand.Blue,
                     subtitle = "План, резерв и факт списания",
-                    action = if (canManage && state.materials.isEmpty()) {
-                        { SoftButton(text = "Сформировать из BOM", onClick = viewModel::initMaterialsFromBom) }
+                    action = if ((canManage && state.materials.isEmpty()) || (hasDeficit && viewModel.canCreateDemand())) {
+                        {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (canManage && state.materials.isEmpty()) {
+                                    SoftButton(text = "Сформировать из BOM", onClick = viewModel::initMaterialsFromBom)
+                                }
+                                if (hasDeficit && viewModel.canCreateDemand()) {
+                                    SoftButton(
+                                        text = if (state.isActionRunning) "Создание…" else "Заказать недостающие материалы",
+                                        onClick = viewModel::createDemandForShortage,
+                                        tint = Brand.Orange,
+                                        enabled = !state.isActionRunning
+                                    )
+                                }
+                            }
+                        }
                     } else null
                 )
                 Spacer(Modifier.height(6.dp))
@@ -467,13 +488,56 @@ private fun OrderFacts(order: ProductionOrderDto, state: ProductionUiState) {
     val project = state.projects.firstOrNull { it.id == order.projectId }
     val model = state.models.firstOrNull { it.id == order.productModelId }
     val responsible = state.users.firstOrNull { it.id == order.responsibleId }
-    DetailRow("Проект", project?.let { "${it.number} · ${it.name}" } ?: "Проект #${order.projectId}")
-    DetailRow("Изделие", model?.let { "${it.code} · ${it.name}" } ?: "Изделие #${order.productModelId}")
-    DetailRow("Ревизия BOM", state.orderRevisionLabel ?: "загрузка…")
-    DetailRow("Ответственный", responsible?.fullName ?: "Сотрудник #${order.responsibleId}")
-    DetailRow("Приоритет", order.priority.priorityLabel())
-    DetailRow("План: начало", org.example.project.ui.theme.ErpFormat.dateRu(order.plannedStartAt))
-    DetailRow("План: окончание", org.example.project.ui.theme.ErpFormat.dateRu(order.plannedEndAt))
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CompactFactItem(
+                label = "Проект",
+                value = project?.let { "${it.number} · ${it.name}" } ?: "Проект #${order.projectId}",
+                modifier = Modifier.weight(1f)
+            )
+            CompactFactItem(
+                label = "Изделие · BOM",
+                value = (model?.let { "${it.code} · ${it.name}" } ?: "Изделие #${order.productModelId}") +
+                    " · ${state.orderRevisionLabel ?: "…"}",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CompactFactItem(
+                label = "Ответственный · Приоритет",
+                value = "${responsible?.fullName ?: "Сотрудник #${order.responsibleId}"} · ${order.priority.priorityLabel()}",
+                modifier = Modifier.weight(1f)
+            )
+            CompactFactItem(
+                label = "Плановые сроки",
+                value = "${org.example.project.ui.theme.ErpFormat.dateRu(order.plannedStartAt)} — ${org.example.project.ui.theme.ErpFormat.dateRu(order.plannedEndAt)}",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactFactItem(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
 }
 
 @Composable

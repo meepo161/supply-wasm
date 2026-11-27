@@ -39,7 +39,12 @@ fun Button(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = ErpButtonShape,
-    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    colors: ButtonColors = ButtonDefaults.buttonColors(
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = androidx.compose.ui.graphics.Color.White,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    ),
     elevation: ButtonElevation? = null,
     border: BorderStroke? = null,
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
@@ -64,11 +69,16 @@ fun OutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = ErpButtonShape,
-    colors: ButtonColors = ButtonDefaults.outlinedButtonColors(),
+    colors: ButtonColors = ButtonDefaults.outlinedButtonColors(
+        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+        contentColor = MaterialTheme.colorScheme.primary,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    ),
     elevation: ButtonElevation? = null,
     border: BorderStroke? = BorderStroke(
         1.dp,
-        if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+        if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.42f)
         else MaterialTheme.colorScheme.outlineVariant
     ),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
@@ -130,10 +140,19 @@ fun TextButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = ErpButtonShape,
-    colors: ButtonColors = ButtonDefaults.textButtonColors(),
+    colors: ButtonColors = ButtonDefaults.textButtonColors(
+        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.11f),
+        contentColor = MaterialTheme.colorScheme.primary,
+        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    ),
     elevation: ButtonElevation? = null,
-    border: BorderStroke? = null,
-    contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
+    border: BorderStroke? = BorderStroke(
+        1.dp,
+        if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+        else MaterialTheme.colorScheme.outlineVariant
+    ),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
     interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit
 ) = androidx.compose.material3.TextButton(

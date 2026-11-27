@@ -201,22 +201,27 @@ fun GradientButton(
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(6.dp)
-    // Главное действие везде одного цвета, чтобы его узнавали в любом разделе.
-    // Цвета модулей на кнопки не переносятся; красной бывает только опасная кнопка (Gradients.Danger).
-    val base = if (gradient == Gradients.Danger) gradient.first() else Gradients.Primary.first()
+    // Главное действие (Primary), успех (Emerald/Aurora) или необратимое удаление (Danger).
+    val base = when {
+        gradient == Gradients.Danger -> gradient.first()
+        gradient == Gradients.Emerald || gradient == Gradients.Aurora -> gradient.first()
+        else -> Gradients.Primary.first()
+    }
     val fill = when {
-        !enabled -> scheme.surfaceContainerHighest
-        pressed -> base.shade(0.78f)
+        !enabled -> scheme.surfaceContainerHigh
+        pressed -> base.shade(0.76f)
         hovered -> base.shade(0.88f)
         else -> base
     }
-    val contentColor = if (enabled) Color.White else scheme.onSurfaceVariant
+    val contentColor = if (enabled) Color.White else scheme.onSurfaceVariant.copy(alpha = 0.72f)
+    val borderColor = if (enabled) Color.Transparent else scheme.outlineVariant
 
     Box(
         modifier = modifier
             .heightIn(min = if (compact) 34.dp else 40.dp)
             .clip(shape)
             .background(fill, shape)
+            .then(if (!enabled) Modifier.border(1.dp, borderColor, shape) else Modifier)
             .erpInteractive(interaction, shape, enabled, focusColor = scheme.onBackground)
             .clickable(
                 enabled = enabled,
@@ -265,35 +270,43 @@ fun SoftButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     leadingIcon: ErpIconGlyph? = null,
-    tint: Color? = null
+    tint: Color? = null,
+    compact: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
+    val palette = LocalBrandPalette.current
     val accent = tint ?: scheme.primary
     val textColor = if (tint != null) readableAccent(accent) else accent
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(6.dp)
+    val baseAlpha = if (palette.isDark) 0.22f else 0.14f
+    val hoverAlpha = if (palette.isDark) 0.30f else 0.22f
+    val pressAlpha = if (palette.isDark) 0.38f else 0.30f
     val fill = when {
-        !enabled -> Color.Transparent
-        pressed -> accent.copy(alpha = 0.16f)
-        hovered -> accent.copy(alpha = 0.08f)
-        else -> scheme.surface
+        !enabled -> scheme.surfaceContainerHigh
+        pressed -> accent.copy(alpha = pressAlpha)
+        hovered -> accent.copy(alpha = hoverAlpha)
+        else -> accent.copy(alpha = baseAlpha)
     }
     Box(
         modifier = modifier
-            .heightIn(min = 36.dp)
+            .heightIn(min = if (compact) 30.dp else 36.dp)
             .clip(shape)
             .background(fill, shape)
-            .border(1.dp, if (enabled) accent.copy(alpha = 0.45f) else scheme.outlineVariant, shape)
-            .erpInteractive(interaction, shape, enabled)
+            .border(1.dp, if (enabled) accent.copy(alpha = 0.42f) else scheme.outlineVariant, shape)
+            .erpInteractive(interaction, shape, enabled, focusColor = accent)
             .clickable(
                 enabled = enabled,
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(
+                horizontal = if (compact) 10.dp else 14.dp,
+                vertical = if (compact) 5.dp else 8.dp
+            ),
         contentAlignment = Alignment.Center
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -301,13 +314,13 @@ fun SoftButton(
                 ErpIcon(
                     glyph = leadingIcon,
                     tint = if (enabled) textColor else scheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(15.dp)
+                    modifier = Modifier.size(if (compact) 13.dp else 15.dp)
                 )
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(if (compact) 5.dp else 7.dp))
             }
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelLarge,
+                style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,
                 color = if (enabled) textColor else scheme.onSurfaceVariant.copy(alpha = 0.6f),
                 maxLines = 1
             )
@@ -1032,6 +1045,7 @@ fun ErpTextField(
     modifier: Modifier = Modifier,
     glyph: ErpIconGlyph? = null,
     enabled: Boolean = true,
+    readOnly: Boolean = false,
     singleLine: Boolean = true,
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else 5,
@@ -1040,12 +1054,12 @@ fun ErpTextField(
     supportingText: String? = null
 ) {
     val scheme = MaterialTheme.colorScheme
-    val palette = LocalBrandPalette.current
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         enabled = enabled,
+        readOnly = readOnly,
         singleLine = singleLine,
         minLines = minLines,
         maxLines = maxLines,
@@ -1057,14 +1071,7 @@ fun ErpTextField(
         visualTransformation = if (isPassword) androidx.compose.ui.text.input.PasswordVisualTransformation()
         else androidx.compose.ui.text.input.VisualTransformation.None,
         shape = RoundedCornerShape(6.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = scheme.primary,
-            unfocusedBorderColor = scheme.outline,
-            focusedContainerColor = if (palette.isDark) scheme.surfaceContainerHigh else scheme.surface,
-            unfocusedContainerColor = if (palette.isDark) scheme.surfaceContainer else scheme.surface,
-            focusedLabelColor = scheme.primary,
-            unfocusedLabelColor = scheme.onSurfaceVariant
-        ),
+        colors = erpTextFieldColors(readOnlyDisplay = readOnly),
         modifier = modifier.fillMaxWidth()
     )
 }
@@ -1121,6 +1128,7 @@ fun ErpDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(scheme.surfaceContainerLow)
                         .padding(start = 20.dp, end = 12.dp, top = 14.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1166,6 +1174,7 @@ fun ErpDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(scheme.surfaceContainerLow)
                         .padding(horizontal = 20.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
@@ -1203,26 +1212,26 @@ fun ErpIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    tint: Color = MaterialTheme.colorScheme.primary
 ) {
     val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val pressed by interaction.collectIsPressedAsState()
     val shape = RoundedCornerShape(6.dp)
+    val fill = when {
+        !enabled -> scheme.surfaceContainerHigh
+        pressed -> tint.copy(alpha = 0.24f)
+        hovered -> tint.copy(alpha = 0.17f)
+        else -> tint.copy(alpha = 0.10f)
+    }
     Box(
         modifier = modifier
             .size(36.dp)
             .clip(shape)
-            .background(
-                when {
-                    !enabled -> Color.Transparent
-                    pressed -> scheme.surfaceContainerHighest
-                    hovered -> scheme.surfaceContainerHigh
-                    else -> Color.Transparent
-                }
-            )
-            .erpInteractive(interaction, shape, enabled)
+            .background(fill, shape)
+            .border(1.dp, if (enabled) tint.copy(alpha = 0.28f) else scheme.outlineVariant, shape)
+            .erpInteractive(interaction, shape, enabled, focusColor = tint)
             .clickable(
                 enabled = enabled,
                 interactionSource = interaction,
@@ -1234,7 +1243,7 @@ fun ErpIconButton(
     ) {
         ErpIcon(
             glyph = glyph,
-            tint = if (enabled) tint else tint.copy(alpha = 0.4f),
+            tint = if (enabled) tint else scheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier.size(18.dp)
         )
     }

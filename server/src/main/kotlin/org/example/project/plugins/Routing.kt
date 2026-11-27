@@ -51,6 +51,7 @@ fun Application.configureRouting() {
     val documentService: DocumentService by inject()
     val demandService: DemandService by inject()
     val approvalService: ApprovalService by inject()
+    val conversationMessengerService: ConversationMessengerService by inject()
     val chatEventBus: ChatEventBus by inject()
     val notificationEventBus: NotificationEventBus by inject()
     val conversationEventBus: ConversationEventBus by inject()
@@ -64,6 +65,10 @@ fun Application.configureRouting() {
     val assistantService: AssistantService by inject()
     val dsl: org.jooq.DSLContext by inject()
     val config: AppConfig by inject()
+
+    install(org.example.project.realtime.ErpMutationEventPlugin) {
+        bus = erpEventBus
+    }
 
     routing {
         healthRoutes(dsl)
@@ -84,6 +89,7 @@ fun Application.configureRouting() {
         notificationWebSocketRoutes(notificationService, sessionService, notificationEventBus, config.cookieName, config.allowedOrigins)
         erpEventWebSocketRoutes(sessionService, erpEventBus, config.cookieName, config.allowedOrigins)
         conversationRoutes(conversationService)
+        conversationMessengerRoutes(conversationMessengerService)
         unifiedChatRoutes(unifiedChatListService)
         conversationWebSocketRoutes(conversationService, conversationRepository, sessionService, conversationEventBus, config.cookieName, config.allowedOrigins)
         wmsRoutes(wmsService)

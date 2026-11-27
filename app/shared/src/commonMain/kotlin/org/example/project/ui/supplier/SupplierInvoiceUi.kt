@@ -122,8 +122,7 @@ fun SupplierInvoicesPane(viewModel: SupplierInvoiceViewModel) {
                     title = "Счета поставщиков",
                     count = state.invoices.size,
                     accent = Brand.Violet,
-                    subtitle = state.statusFilter?.localizedName() ?: "Все статусы",
-                    action = { SoftButton(text = "Обновить", onClick = viewModel::load) }
+                    subtitle = state.statusFilter?.localizedName() ?: "Все статусы"
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -246,10 +245,15 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
                 org.example.project.ui.theme.ErpFormat.deadlineLabel(invoice.validUntil, org.example.project.ui.home.currentIsoDate()),
                 valueColor = if (invoice.expired) Brand.Rose else MaterialTheme.colorScheme.onSurface
             )
-            DetailRow("Условия оплаты", listOfNotNull(invoice.paymentTerms, invoice.prepaymentPct?.let { "предоплата ${org.example.project.ui.theme.ErpFormat.percent(it)}" }).joinToString(", ").ifEmpty { "—" })
-            DetailRow("Срок изготовления", invoice.leadTimeDays?.let { "$it ${if (invoice.leadTimeKind == org.example.project.dto.LeadTimeKind.CALENDAR) "календ." else "рабочих"} дн." } ?: "—")
-            DetailRow("Доставка", invoice.deliveryTerms ?: "—")
-            DetailRow("Назначение платежа", invoice.paymentPurpose ?: "—")
+            listOfNotNull(invoice.paymentTerms, invoice.prepaymentPct?.let { "предоплата ${org.example.project.ui.theme.ErpFormat.percent(it)}" })
+                .joinToString(", ")
+                .takeIf { it.isNotEmpty() }
+                ?.let { DetailRow("Условия оплаты", it) }
+            invoice.leadTimeDays?.let {
+                DetailRow("Срок изготовления", "$it ${if (invoice.leadTimeKind == org.example.project.dto.LeadTimeKind.CALENDAR) "календ." else "рабочих"} дн.")
+            }
+            invoice.deliveryTerms?.takeIf { it.isNotBlank() }?.let { DetailRow("Доставка", it) }
+            invoice.paymentPurpose?.takeIf { it.isNotBlank() }?.let { DetailRow("Назначение платежа", it) }
             invoice.supplierManager?.let { DetailRow("Менеджер поставщика", it) }
             invoice.acceptedDiscrepancyReason?.let { DetailRow("Принятые расхождения", it, valueColor = Brand.Amber) }
             invoice.cancelReason?.let { DetailRow("Причина отмены", it, valueColor = Brand.Rose) }
@@ -304,9 +308,22 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
                 subtitle = when {
                     state.check == null -> "не выполнена"
                     issues.isEmpty() -> "расхождений нет"
-                    state.check.canConfirm -> "ошибок нет"
+                    state.check.canConfirm -> "есть предупреждения (проверьте суммы)"
                     else -> "есть ошибки, счёт нужно исправить"
-                }
+                },
+                action = if (invoice.status == SupplierInvoiceStatus.DRAFT &&
+                    state.check?.canConfirm == true && issues.isNotEmpty() && viewModel.canManage()
+                ) {
+                    {
+                        SoftButton(
+                            text = "Подтвердить с обоснованием",
+                            onClick = viewModel::openConfirm,
+                            tint = Brand.Teal,
+                            compact = true,
+                            enabled = !state.isBusy
+                        )
+                    }
+                } else null
             )
             issues.forEach { issue ->
                 Row(
@@ -343,12 +360,16 @@ private fun InvoiceCard(state: SupplierInvoiceUiState, viewModel: SupplierInvoic
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun InvoiceActions(invoice: SupplierInvoiceDto, state: SupplierInvoiceUiState, viewModel: SupplierInvoiceViewModel) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         SoftButton(text = "Открыть файл", onClick = { viewModel.downloadFile(invoice) }, leadingIcon = ErpIconGlyph.Documents)
         SoftButton(text = "Предпросмотр HTML", onClick = { viewModel.previewHtml(invoice) }, leadingIcon = ErpIconGlyph.Documents)
-        if (!viewModel.canManage()) return@Row
+        if (!viewModel.canManage()) return@FlowRow
         when (invoice.status) {
             SupplierInvoiceStatus.DRAFT -> {
                 SoftButton(text = "Править", onClick = viewModel::openEdit, enabled = !state.isBusy)
@@ -423,9 +444,19 @@ fun OrderInvoicesSection(
         )
     } else {
         invoices.forEach { invoice ->
-            InvoiceRow(invoice, selected = false) {
-                viewModel.select(invoice.id)
-                onOpenInvoices()
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                InvoiceRow(invoice, selected = false) {
+                    viewModel.select(invoice.id)
+                    onOpenInvoices()
+                }
+                if (invoice.status == SupplierInvoiceStatus.CHECKED && invoice.receiptId == null && viewModel.canManage()) {
+                    SoftButton(
+                        text = if (state.isBusy) "Передача…" else "Передать на склад",
+                        onClick = { viewModel.sendToWarehouse(invoice) },
+                        tint = Brand.Mint,
+                        enabled = !state.isBusy
+                    )
+                }
             }
         }
     }

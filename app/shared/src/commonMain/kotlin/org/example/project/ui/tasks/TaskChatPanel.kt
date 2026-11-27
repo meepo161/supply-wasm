@@ -21,7 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
@@ -177,12 +177,6 @@ private fun ChatHeader(
                     )
                     Spacer(Modifier.width(4.dp))
                 }
-                ChatIconButton(
-                    glyph = ErpIconGlyph.Refresh,
-                    contentDescription = "Обновить обсуждение",
-                    enabled = !chat.isLoading,
-                    onClick = onRefresh
-                )
             }
         }
 
@@ -263,24 +257,13 @@ private fun ChatIconButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .size(34.dp)
-            .background(
-                color = scheme.surfaceContainerLow,
-                shape = RoundedCornerShape(6.dp)
-            )
-            .semantics { this.contentDescription = contentDescription }
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        ErpIcon(
-            glyph = glyph,
-            tint = if (enabled) scheme.onSurfaceVariant else scheme.onSurfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.size(17.dp)
-        )
-    }
+    org.example.project.ui.theme.ErpIconButton(
+        glyph = glyph,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(34.dp)
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +388,7 @@ private fun DateDivider(date: String, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
         Text(
-            text = date,
+            text = org.example.project.ui.theme.ErpFormat.dateRu(date),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -619,10 +602,9 @@ private fun ChatComposer(
                 )
             }
         }
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             OutlinedTextField(
                 value = chat.draft,
@@ -637,28 +619,37 @@ private fun ChatComposer(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.6f)
                 ),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth()
             )
-            SoftButton(
-                text = "Файл",
-                onClick = onPickFile,
-                enabled = !chat.isSending,
-                leadingIcon = ErpIconGlyph.Attachment
-            )
-            SoftButton(
-                text = if (chat.isSending) "Отправка…" else "Отправить",
-                onClick = onSend,
-                enabled = canSend,
-                leadingIcon = ErpIconGlyph.Send
-            )
-        }
-        if (chat.draft.isNotEmpty()) {
-            Text(
-                text = "${chat.draft.length} симв.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                modifier = Modifier.padding(top = 4.dp, start = 4.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (chat.draft.isNotEmpty()) "${chat.draft.length} симв." else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SoftButton(
+                        text = "Файл",
+                        onClick = onPickFile,
+                        enabled = !chat.isSending,
+                        leadingIcon = ErpIconGlyph.Attachment
+                    )
+                    SoftButton(
+                        text = if (chat.isSending) "Отправка…" else "Отправить",
+                        onClick = onSend,
+                        enabled = canSend,
+                        leadingIcon = ErpIconGlyph.Send
+                    )
+                }
+            }
         }
     }
 }

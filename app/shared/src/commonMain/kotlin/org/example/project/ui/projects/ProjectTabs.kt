@@ -119,17 +119,10 @@ fun ProjectTabsSection(
     if (!canSeeTabs) return
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = state.selectedTab.title,
-                style = MaterialTheme.typography.titleMedium
-            )
-            TextButton(onClick = onRefresh, enabled = !state.tabLoading) { Text("Обновить") }
-        }
+        Text(
+            text = state.selectedTab.title,
+            style = MaterialTheme.typography.titleMedium
+        )
 
         if (state.tabLoading) {
             Box(
@@ -179,7 +172,10 @@ fun ProjectTabsSection(
                 onStatusFilter = onTaskStatusFilter,
                 onTaskClick = onTaskClick
             )
-            ProjectTab.DEMANDS -> DemandsTab(state.demands)
+            ProjectTab.DEMANDS -> DemandsTab(
+                demands = state.demands,
+                supplyOverview = state.supplyOverview
+            )
             ProjectTab.DOCUMENTS -> DocumentsTab(state.documents)
             ProjectTab.HISTORY -> HistoryTab(state.history, state.users)
         }
@@ -459,50 +455,156 @@ internal fun FilterChipButton(
     }
 }
 
+private data class AggregatedSupplyRow(
+    val nomenclatureCode: String,
+    val nomenclatureName: String,
+    val unit: String,
+    val required: Double,
+    val reserved: Double,
+    val ordered: Double,
+    val received: Double,
+    val remaining: Double,
+    val demandNumbers: List<String>
+)
+
 @Composable
-private fun DemandsTab(demands: List<DemandHeaderDto>, modifier: Modifier = Modifier) {
-    if (demands.isEmpty()) {
+private fun DemandsTab(
+    demands: List<DemandHeaderDto>,
+    supplyOverview: org.example.project.dto.ProjectSupplyOverviewDto? = null,
+    modifier: Modifier = Modifier
+) {
+    val supplyLines = supplyOverview?.lines.orEmpty()
+    if (demands.isEmpty() && supplyLines.isEmpty()) {
         EmptyState(
             title = "Потребностей нет",
             text = "Потребности оформляются в разделе «Потребности» с привязкой к проекту."
         )
         return
     }
-    Surface(
+    Column(
         modifier = modifier.fillMaxWidth(),
-
-        shape = RoundedCornerShape(8.dp),
-
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            demands.forEachIndexed { index, demand ->
-                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = demand.number,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = "требуется к ${demand.requiredDate.toShortDate()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    PillBadge(
-                        text = demand.status.demandLocalizedName(),
-                        accent = Brand.Amber
+        if (supplyLines.isNotEmpty()) {
+            val groupedByNomenclature = androidx.compose.runtime.remember(supplyLines) {
+                supplyLines.groupBy { "${it.nomenclatureId}:${it.unit}" }.values.map { group ->
+                    val first = group.first()
+                    AggregatedSupplyRow(
+                        nomenclatureCode = first.nomenclatureCode,
+                        nomenclatureName = first.nomenclatureName,
+                        unit = first.unit,
+                        required = group.sumOf { it.requiredQuantity.toDoubleOrNull() ?: 0.0 },
+                        reserved = group.sumOf { it.reservedQuantity.toDoubleOrNull() ?: 0.0 },
+                        ordered = group.sumOf { it.orderedQuantity.toDoubleOrNull() ?: 0.0 },
+                        received = group.sumOf { it.receivedQuantity.toDoubleOrNull() ?: 0.0 },
+                        remaining = group.sumOf { it.remainingToEnsureQuantity.toDoubleOrNull() ?: 0.0 },
+                        demandNumbers = group.mapNotNull { it.demandNumber }.distinct()
                     )
+                }
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Общая потребность по товарам (${groupedByNomenclature.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    groupedByNomenclature.forEachIndexed { idx, row ->
+                        if (idx > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = "${row.nomenclatureCode} · ${row.nomenclatureName}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "Требуется: ${org.example.project.ui.theme.ErpFormat.qty(row.required.toString())} ${row.unit}" +
+                                        " · Резерв: ${org.example.project.ui.theme.ErpFormat.qty(row.reserved.toString())}" +
+                                        " · Заказано: ${org.example.project.ui.theme.ErpFormat.qty(row.ordered.toString())}" +
+                                        " · Поступило: ${org.example.project.ui.theme.ErpFormat.qty(row.received.toString())}" +
+                                        if (row.demandNumbers.isNotEmpty()) " · Заявки: ${row.demandNumbers.joinToString(", ")}" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            PillBadge(
+                                text = if (row.remaining <= 0.0) "Обеспечено" else "Ещё: ${org.example.project.ui.theme.ErpFormat.qty(row.remaining.toString())} ${row.unit}",
+                                accent = if (row.remaining <= 0.0) Brand.Mint else Brand.Orange
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (demands.isNotEmpty()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Заявки на потребность (${demands.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    demands.forEachIndexed { index, demand ->
+                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                        val demandLines = supplyLines.filter { it.demandId == demand.id }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = demand.number,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = listOfNotNull(
+                                            "требуется к ${demand.requiredDate.toShortDate()}",
+                                            demand.itemsSummary?.takeIf { it.isNotBlank() },
+                                            demand.quantitySummary?.takeIf { it.isNotBlank() }
+                                        ).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                PillBadge(
+                                    text = demand.status.demandLocalizedName(),
+                                    accent = Brand.Amber
+                                )
+                            }
+                            demandLines.forEach { line ->
+                                Text(
+                                    text = "• ${line.nomenclatureCode} · ${line.nomenclatureName} — ${line.requiredQuantity} ${line.unit} (${line.stageLabel})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 10.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

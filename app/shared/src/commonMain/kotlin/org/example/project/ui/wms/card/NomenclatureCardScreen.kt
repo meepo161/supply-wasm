@@ -81,6 +81,7 @@ fun NomenclatureCardScreen(
     currentUser: UserDto?,
     onBack: () -> Unit,
     onArchived: () -> Unit,
+    onQuickReserve: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val repository: NomenclatureCardRepository = koinInject()
@@ -89,11 +90,26 @@ fun NomenclatureCardScreen(
     val bom: BomRepository = koinInject()
     val wms: WmsRepository = koinInject()
     val documentRegistry: org.example.project.data.DocumentRepository = koinInject()
+    val erpEventsClient: org.example.project.data.ErpEventsClient = koinInject()
     val viewModel = remember(nomenclatureId) {
         NomenclatureCardViewModel(nomenclatureId, repository, attachments, demands, bom, wms, documentRegistry)
     }
     // ViewModel создаётся вне ViewModelStore: корутины отменяются при уходе с карточки.
     DisposableEffect(viewModel) { onDispose { viewModel.dispose() } }
+    LaunchedEffect(erpEventsClient, nomenclatureId) {
+        erpEventsClient.observeEvents().collect { event ->
+            if (event.domain in setOf(
+                    org.example.project.dto.ErpEventDomain.WMS,
+                    org.example.project.dto.ErpEventDomain.SUPPLIER,
+                    org.example.project.dto.ErpEventDomain.PRODUCTION,
+                    org.example.project.dto.ErpEventDomain.BOM,
+                    org.example.project.dto.ErpEventDomain.DOCUMENT
+                )
+            ) {
+                viewModel.reload()
+            }
+        }
+    }
     val state by viewModel.state.collectAsState()
 
     val canManage = currentUser?.hasPermission("wms", "manage") == true
@@ -136,6 +152,7 @@ fun NomenclatureCardScreen(
                     onRefresh = viewModel::reload,
                     onEdit = { dialog = CardDialog.Edit },
                     onDemand = { dialog = CardDialog.Demand },
+                    onQuickReserve = onQuickReserve,
                     onArchive = { dialog = CardDialog.Archive }
                 )
                 StockStrip(card)
@@ -204,6 +221,7 @@ private fun CardHeader(
     onRefresh: () -> Unit,
     onEdit: () -> Unit,
     onDemand: () -> Unit,
+    onQuickReserve: (() -> Unit)?,
     onArchive: () -> Unit
 ) {
     val item = card.item
@@ -215,11 +233,10 @@ private fun CardHeader(
         border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.6f))
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Start, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
                     Text("← Назад")
                 }
-                ErpIconButton(glyph = ErpIconGlyph.Refresh, contentDescription = "Обновить карточку", onClick = onRefresh, enabled = !busy)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
                 Box(
@@ -274,6 +291,15 @@ private fun CardHeader(
                     } else {
                         SoftButton(text = "Сформировать потребность", onClick = onDemand, enabled = !busy, leadingIcon = ErpIconGlyph.Cart)
                     }
+                }
+                if (onQuickReserve != null && !item.archived) {
+                    SoftButton(
+                        text = "Зарезервировать",
+                        onClick = onQuickReserve,
+                        tint = Brand.Teal,
+                        enabled = !busy,
+                        leadingIcon = ErpIconGlyph.Warehouse
+                    )
                 }
                 if (canManage && !item.archived) {
                     SoftButton(text = "Редактировать", onClick = onEdit, enabled = !busy)

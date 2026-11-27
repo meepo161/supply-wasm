@@ -7,6 +7,14 @@ import org.example.project.exception.ConflictException
 import org.example.project.exception.ForbiddenException
 import org.example.project.exception.NotFoundException
 import org.example.project.exception.ValidationException
+import org.example.project.generated.jooq.tables.Nomenclature.NOMENCLATURE
+import org.example.project.generated.jooq.tables.PurchaseOrderLines.PURCHASE_ORDER_LINES
+import org.example.project.generated.jooq.tables.ReceiptLines.RECEIPT_LINES
+import org.example.project.generated.jooq.tables.Receipts.RECEIPTS
+import org.example.project.generated.jooq.tables.SupplierInvoiceHistory.SUPPLIER_INVOICE_HISTORY
+import org.example.project.generated.jooq.tables.SupplierInvoiceLines.SUPPLIER_INVOICE_LINES
+import org.example.project.generated.jooq.tables.SupplierInvoices.SUPPLIER_INVOICES
+import org.example.project.generated.jooq.tables.Warehouses.WAREHOUSES
 import org.example.project.generated.jooq.tables.records.PurchaseOrdersRecord
 import org.example.project.generated.jooq.tables.records.SupplierOffersRecord
 import org.example.project.model.CurrentUser
@@ -48,6 +56,255 @@ class PurchaseOrderService(
     data class CommandResponse(val status: HttpStatusCode, val body: String)
 
     private val json = Json { encodeDefaults = true }
+
+    /**
+     * Если к выбранному предложению прикреплён документ счёта (`invoice_document_id`),
+     * автоматически регистрирует счёт в реестре `supplier_invoices`, чтобы он сразу
+     * появился на вкладке «Счета» с привязкой к заказу и строкам заказа.
+     */
+    private fun ensureInvoiceFromOffer(
+        order: PurchaseOrdersRecord,
+        offer: SupplierOffersRecord,
+        userId: Long
+    ) {
+        val docId = offer.invoiceDocumentId ?: return
+        val alreadyForOrder = dsl.fetchExists(
+            SUPPLIER_INVOICES,
+            SUPPLIER_INVOICES.PURCHASE_ORDER_ID.eq(order.id)
+                .and(SUPPLIER_INVOICES.STATUS.ne("CANCELLED"))
+        )
+        if (alreadyForOrder) return
+
+        val invoiceNo = offer.invoiceNumber?.trim()?.takeIf { it.isNotEmpty() }
+            ?: order.invoiceNo?.trim()?.takeIf { it.isNotEmpty() }
+            ?: order.number
+        val duplicateNumber = dsl.fetchExists(
+            SUPPLIER_INVOICES,
+            SUPPLIER_INVOICES.SUPPLIER_ID.eq(order.supplierId)
+                .and(SUPPLIER_INVOICES.NUMBER.eq(invoiceNo))
+        )
+        if (duplicateNumber) return
+
+        val orderLines = dsl.selectFrom(PURCHASE_ORDER_LINES)
+            .where(PURCHASE_ORDER_LINES.ORDER_ID.eq(order.id))
+            .orderBy(PURCHASE_ORDER_LINES.LINE_NO.asc())
+            .fetch()
+        if (orderLines.isEmpty()) return
+
+        val nomIds = orderLines.map { it.nomenclatureId }.distinct()
+        val nomsById = dsl.selectFrom(NOMENCLATURE)
+            .where(NOMENCLATURE.ID.`in`(nomIds))
+            .fetch()
+            .associateBy { it.id!! }
+        val supplier = purchaseRepository.findSupplierById(order.supplierId)
+
+        var netTotal = BigDecimal.ZERO
+        var vatTotal = BigDecimal.ZERO
+        var grossTotal = BigDecimal.ZERO
+
+        data class PreparedInvoiceLine(
+            val lineNo: Int,
+            val code: String?,
+            val name: String,
+            val nomenclatureId: Long,
+            val orderLineId: Long,
+            val qty: BigDecimal,
+            val unit: String,
+            val unitPrice: BigDecimal,
+            val vatRate: BigDecimal,
+            val vatAmount: BigDecimal,
+            val lineTotal: BigDecimal
+        )
+
+        val preparedLines = orderLines.map { line ->
+            val nom = nomsById[line.nomenclatureId]
+            val lineNet = line.quantity.multiply(line.unitPrice).setScale(2, RoundingMode.HALF_UP)
+            val lineVat = lineNet.multiply(line.vatRate).divide(BigDecimal(100), 2, RoundingMode.HALF_UP)
+            val lineGross = lineNet.add(lineVat).setScale(2, RoundingMode.HALF_UP)
+            netTotal = netTotal.add(lineNet)
+            vatTotal = vatTotal.add(lineVat)
+            grossTotal = grossTotal.add(lineGross)
+            PreparedInvoiceLine(
+                lineNo = line.lineNo,
+                code = nom?.code,
+                name = nom?.name ?: "Позиция ${line.lineNo}",
+                nomenclatureId = line.nomenclatureId,
+                orderLineId = line.id!!,
+                qty = line.quantity,
+                unit = line.unit,
+                unitPrice = line.unitPrice,
+                vatRate = line.vatRate,
+                vatAmount = lineVat,
+                lineTotal = lineNet
+            )
+        }
+
+        val invoiceId = dsl.insertInto(SUPPLIER_INVOICES)
+            .set(SUPPLIER_INVOICES.NUMBER, invoiceNo)
+            .set(SUPPLIER_INVOICES.INVOICE_DATE, offer.invoiceDate ?: LocalDate.now())
+            .set(SUPPLIER_INVOICES.SUPPLIER_ID, order.supplierId)
+            .set(SUPPLIER_INVOICES.PURCHASE_ORDER_ID, order.id)
+            .set(SUPPLIER_INVOICES.DOCUMENT_ID, docId)
+            .set(SUPPLIER_INVOICES.SUPPLIER_INN, supplier?.inn)
+            .set(SUPPLIER_INVOICES.SUPPLIER_KPP, supplier?.kpp)
+            .set(SUPPLIER_INVOICES.CURRENCY, order.currency)
+            .set(SUPPLIER_INVOICES.PRICES_INCLUDE_VAT, false)
+            .set(SUPPLIER_INVOICES.NET_TOTAL, netTotal.setScale(2, RoundingMode.HALF_UP))
+            .set(SUPPLIER_INVOICES.VAT_TOTAL, vatTotal.setScale(2, RoundingMode.HALF_UP))
+            .set(SUPPLIER_INVOICES.GROSS_TOTAL, grossTotal.setScale(2, RoundingMode.HALF_UP))
+            .set(SUPPLIER_INVOICES.VALID_UNTIL, offer.validUntil)
+            .set(SUPPLIER_INVOICES.PAYMENT_TERMS, offer.paymentTerms)
+            .set(SUPPLIER_INVOICES.LEAD_TIME_DAYS, offer.deliveryDays)
+            .set(SUPPLIER_INVOICES.LEAD_TIME_KIND, "CALENDAR")
+            .set(SUPPLIER_INVOICES.NOTE, offer.note)
+            .set(SUPPLIER_INVOICES.CREATED_BY, userId)
+            .returningResult(SUPPLIER_INVOICES.ID)
+            .fetchOne()!!
+            .get(SUPPLIER_INVOICES.ID)!!
+
+        preparedLines.forEach { l ->
+            dsl.insertInto(SUPPLIER_INVOICE_LINES)
+                .set(SUPPLIER_INVOICE_LINES.INVOICE_ID, invoiceId)
+                .set(SUPPLIER_INVOICE_LINES.LINE_NO, l.lineNo)
+                .set(SUPPLIER_INVOICE_LINES.SUPPLIER_ITEM_CODE, l.code)
+                .set(SUPPLIER_INVOICE_LINES.SUPPLIER_ITEM_NAME, l.name)
+                .set(SUPPLIER_INVOICE_LINES.NOMENCLATURE_ID, l.nomenclatureId)
+                .set(SUPPLIER_INVOICE_LINES.PURCHASE_ORDER_LINE_ID, l.orderLineId)
+                .set(SUPPLIER_INVOICE_LINES.QUANTITY, l.qty)
+                .set(SUPPLIER_INVOICE_LINES.UNIT, l.unit)
+                .set(SUPPLIER_INVOICE_LINES.UNIT_PRICE, l.unitPrice)
+                .set(SUPPLIER_INVOICE_LINES.VAT_RATE, l.vatRate)
+                .set(SUPPLIER_INVOICE_LINES.VAT_AMOUNT, l.vatAmount)
+                .set(SUPPLIER_INVOICE_LINES.LINE_TOTAL, l.lineTotal)
+                .execute()
+        }
+
+        dsl.insertInto(SUPPLIER_INVOICE_HISTORY)
+            .set(SUPPLIER_INVOICE_HISTORY.INVOICE_ID, invoiceId)
+            .set(SUPPLIER_INVOICE_HISTORY.ACTION, "CREATED")
+            .set(SUPPLIER_INVOICE_HISTORY.FROM_STATUS, null as String?)
+            .set(SUPPLIER_INVOICE_HISTORY.TO_STATUS, "DRAFT")
+            .set(SUPPLIER_INVOICE_HISTORY.REASON, "Автоматически из заказа ${order.number} по предложению ${offer.number}")
+            .set(SUPPLIER_INVOICE_HISTORY.CHANGED_BY, userId)
+            .execute()
+
+        val notExpired = offer.validUntil == null || !offer.validUntil.isBefore(LocalDate.now())
+        val hasInn = !supplier?.inn.isNullOrBlank()
+        if (notExpired && hasInn) {
+            dsl.update(SUPPLIER_INVOICES)
+                .set(SUPPLIER_INVOICES.STATUS, "CHECKED")
+                .set(SUPPLIER_INVOICES.CHECKED_BY, userId)
+                .set(SUPPLIER_INVOICES.CHECKED_AT, OffsetDateTime.now())
+                .set(SUPPLIER_INVOICES.VERSION, SUPPLIER_INVOICES.VERSION.plus(1))
+                .where(SUPPLIER_INVOICES.ID.eq(invoiceId))
+                .execute()
+            dsl.insertInto(SUPPLIER_INVOICE_HISTORY)
+                .set(SUPPLIER_INVOICE_HISTORY.INVOICE_ID, invoiceId)
+                .set(SUPPLIER_INVOICE_HISTORY.ACTION, "CHECKED")
+                .set(SUPPLIER_INVOICE_HISTORY.FROM_STATUS, "DRAFT")
+                .set(SUPPLIER_INVOICE_HISTORY.TO_STATUS, "CHECKED")
+                .set(SUPPLIER_INVOICE_HISTORY.REASON, "Автоматическая сверка при оформлении заказа")
+                .set(SUPPLIER_INVOICE_HISTORY.CHANGED_BY, userId)
+                .execute()
+        }
+
+        auditService.log(
+            userId,
+            "SUPPLIER_INVOICE_CREATE",
+            "SUPPLIER_INVOICE",
+            invoiceId,
+            mapOf("number" to invoiceNo, "purchaseOrderId" to order.id, "offerId" to offer.id)
+        )
+    }
+
+    /**
+     * Связывает поставку с существующим черновиком приёмки по заказу или создаёт
+     * новый черновик приёмки на основной склад, чтобы не дублировать приход вручную.
+     */
+    private fun syncReceiptDraftForDelivery(
+        orderId: Long,
+        deliveryId: Long,
+        deliveryNumber: String,
+        sourceDocument: String?,
+        deliveryLines: List<PurchaseOrderRepository.NewDeliveryLine>,
+        orderLinesById: Map<Long, org.example.project.generated.jooq.tables.records.PurchaseOrderLinesRecord>,
+        userId: Long
+    ) {
+        val unlinkedDraft = dsl.selectFrom(RECEIPTS)
+            .where(RECEIPTS.PURCHASE_ORDER_ID.eq(orderId))
+            .and(RECEIPTS.STATUS.eq("DRAFT"))
+            .and(RECEIPTS.PURCHASE_DELIVERY_ID.isNull)
+            .orderBy(RECEIPTS.ID.desc())
+            .limit(1)
+            .fetchOne()
+        if (unlinkedDraft != null) {
+            dsl.update(RECEIPTS)
+                .set(RECEIPTS.PURCHASE_DELIVERY_ID, deliveryId)
+                .set(RECEIPTS.VERSION, RECEIPTS.VERSION.plus(1))
+                .where(RECEIPTS.ID.eq(unlinkedDraft.id))
+                .execute()
+            return
+        }
+
+        val hasActiveReceiptForDelivery = dsl.fetchExists(
+            RECEIPTS,
+            RECEIPTS.PURCHASE_DELIVERY_ID.eq(deliveryId).and(RECEIPTS.STATUS.ne("CANCELLED"))
+        )
+        if (hasActiveReceiptForDelivery) return
+
+        val warehouseId = dsl.select(WAREHOUSES.ID)
+            .from(WAREHOUSES)
+            .where(WAREHOUSES.ACTIVE.isTrue)
+            .orderBy(WAREHOUSES.ID.asc())
+            .limit(1)
+            .fetchOne(WAREHOUSES.ID) ?: return
+
+        val docNo = sourceDocument?.trim()?.takeIf { it.isNotEmpty() } ?: deliveryNumber
+        val docExists = dsl.fetchExists(
+            RECEIPTS,
+            RECEIPTS.SOURCE_TYPE.eq("PURCHASE_ORDER")
+                .and(RECEIPTS.SOURCE_DOCUMENT_NO.eq(docNo))
+                .and(RECEIPTS.STATUS.ne("CANCELLED"))
+        )
+        val resolvedDocNo = if (docExists) deliveryNumber else docNo
+        if (dsl.fetchExists(
+                RECEIPTS,
+                RECEIPTS.SOURCE_TYPE.eq("PURCHASE_ORDER")
+                    .and(RECEIPTS.SOURCE_DOCUMENT_NO.eq(resolvedDocNo))
+                    .and(RECEIPTS.STATUS.ne("CANCELLED"))
+            )
+        ) return
+
+        dsl.execute("SELECT pg_advisory_xact_lock(?)", 20_000_000L + 11)
+        val year = LocalDate.now().year
+        val count = dsl.fetchCount(RECEIPTS, RECEIPTS.NUMBER.like("RCP-$year-%"))
+        val receiptNumber = "RCP-$year-${(count + 1).toString().padStart(5, '0')}"
+
+        val receiptId = dsl.insertInto(RECEIPTS)
+            .set(RECEIPTS.NUMBER, receiptNumber)
+            .set(RECEIPTS.SOURCE_TYPE, "PURCHASE_ORDER")
+            .set(RECEIPTS.SOURCE_DOCUMENT_NO, resolvedDocNo)
+            .set(RECEIPTS.PURCHASE_ORDER_ID, orderId)
+            .set(RECEIPTS.PURCHASE_DELIVERY_ID, deliveryId)
+            .set(RECEIPTS.WAREHOUSE_ID, warehouseId)
+            .set(RECEIPTS.NOTE, "Ожидается по поставке $deliveryNumber")
+            .set(RECEIPTS.CREATED_BY, userId)
+            .returningResult(RECEIPTS.ID)
+            .fetchOne()!!
+            .get(RECEIPTS.ID)!!
+
+        deliveryLines.forEachIndexed { idx, line ->
+            val orderLine = orderLinesById[line.orderLineId] ?: return@forEachIndexed
+            dsl.insertInto(RECEIPT_LINES)
+                .set(RECEIPT_LINES.RECEIPT_ID, receiptId)
+                .set(RECEIPT_LINES.LINE_NO, idx + 1)
+                .set(RECEIPT_LINES.NOMENCLATURE_ID, orderLine.nomenclatureId)
+                .set(RECEIPT_LINES.PURCHASE_ORDER_LINE_ID, orderLine.id)
+                .set(RECEIPT_LINES.EXPECTED_QUANTITY, line.quantity)
+                .set(RECEIPT_LINES.RECEIVED_QUANTITY, line.quantity)
+                .execute()
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Чтение
@@ -484,6 +741,7 @@ class PurchaseOrderService(
                     currentUser.userId
                 )
                 purchaseRepository.linkDemands(created.id, listOf(demandId), currentUser.userId)
+                ensureInvoiceFromOffer(created, lockedOffer, currentUser.userId)
                 purchaseRepository.insertOrderHistory(
                     created.id, "PAID", null, "SENT", note ?: "Оплачено по заявке $demandNumber", currentUser.userId
                 )
@@ -612,6 +870,7 @@ class PurchaseOrderService(
                     currentUser.userId
                 )
                 purchaseRepository.linkDemands(created.id, listOf(demandId), currentUser.userId)
+                ensureInvoiceFromOffer(created, lockedOffer, currentUser.userId)
                 purchaseRepository.insertOrderHistory(
                     created.id,
                     if (request.markPaid) "PAID" else "SEND",
@@ -816,6 +1075,7 @@ class PurchaseOrderService(
                     orderId, "DELIVERY_REGISTERED", order.status, updatedOrder.status,
                     "Поставка $number", currentUser.userId
                 )
+                syncReceiptDraftForDelivery(orderId, delivery.id, number, request.sourceDocument, normalized, orderLines, currentUser.userId)
                 auditService.log(
                     currentUser.userId, "REGISTER_DELIVERY", "PURCHASE_ORDER", orderId,
                     mapOf(

@@ -28,6 +28,7 @@ fun ConversationKind.localizedName(): String = when (this) {
     ConversationKind.GROUP -> "Групповые"
     ConversationKind.PROJECT -> "Проекты"
     ConversationKind.TASK -> "Задачи"
+    ConversationKind.CHANNEL -> "Каналы"
 }
 
 fun ConversationListFilter.localizedName(): String = when (this) {
@@ -87,9 +88,9 @@ fun ConversationDto.displayTitle(currentUserId: Long): String {
         ConversationKind.PROJECT -> "Обсуждение проекта"
         ConversationKind.GROUP -> "Групповой чат"
         ConversationKind.TASK -> "Обсуждение задачи"
+        ConversationKind.CHANNEL -> "Канал"
     }
 }
-
 
 fun ConversationListItemDto.toConversationDto(): ConversationDto = ConversationDto(
     id = if (kind == ConversationKind.TASK) -id else id,
@@ -98,6 +99,7 @@ fun ConversationListItemDto.toConversationDto(): ConversationDto = ConversationD
     projectId = projectId ?: if (kind == ConversationKind.PROJECT) id else null,
     taskId = taskId ?: if (kind == ConversationKind.TASK) id else null,
     canWrite = canWrite,
+    isSavedMessages = isSavedMessages,
     members = members
 )
 

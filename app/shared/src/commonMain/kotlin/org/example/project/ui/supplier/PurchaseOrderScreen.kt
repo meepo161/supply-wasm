@@ -58,41 +58,53 @@ import org.koin.compose.koinInject
 fun PurchaseOrderScreen(
     viewModel: PurchaseOrderViewModel,
     modifier: Modifier = Modifier,
-    invoiceViewModel: SupplierInvoiceViewModel? = null
+    invoiceViewModel: SupplierInvoiceViewModel? = null,
+    embedded: Boolean = false,
+    onOpenOrdersTab: () -> Unit = {},
+    onOpenInvoicesTab: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val tabs = PurchaseOrderTab.entries.filter { it != PurchaseOrderTab.INVOICES || invoiceViewModel?.canRead() == true }
 
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.refreshOnOpen()
+        if (invoiceViewModel?.canRead() == true) {
+            invoiceViewModel.load()
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
-        PageHeader(
-            title = "Заказы поставщикам",
-            glyph = ErpIconGlyph.Documents,
-            gradient = Gradients.Berry,
-            subtitle = when (state.activeTab) {
-                PurchaseOrderTab.ORDERS -> "Заказ из выбранного предложения, согласование и отправка поставщику"
-                PurchaseOrderTab.DELIVERIES -> "Журнал поставок: что, от кого и в каком количестве пришло по заказам"
-                PurchaseOrderTab.INVOICES -> "Счета поставщиков: сверка с заказом и передача поступления на склад"
-            },
-            actions = {
-                if (state.activeTab == PurchaseOrderTab.ORDERS && viewModel.canOrder()) {
-                    GradientButton(
-                        text = "Новый заказ",
-                        onClick = { viewModel.openCreate() },
-                        gradient = Gradients.Berry,
-                        leadingIcon = ErpIconGlyph.Plus,
-                        compact = true
+        if (!embedded) {
+            PageHeader(
+                title = "Заказы поставщикам",
+                glyph = ErpIconGlyph.Documents,
+                gradient = Gradients.Berry,
+                subtitle = when (state.activeTab) {
+                    PurchaseOrderTab.ORDERS -> "Реестр заказов из «Снабжения (Заявки)» и по выбранным предложениям"
+                    PurchaseOrderTab.DELIVERIES -> "Журнал поставок: что, от кого и в каком количестве пришло по заказам"
+                    PurchaseOrderTab.INVOICES -> "Счета поставщиков: сверка с заказом и передача поступления на склад"
+                },
+                actions = {
+                    if (state.activeTab == PurchaseOrderTab.ORDERS && viewModel.canOrder()) {
+                        GradientButton(
+                            text = "Новый заказ",
+                            onClick = { viewModel.openCreate() },
+                            gradient = Gradients.Berry,
+                            leadingIcon = ErpIconGlyph.Plus,
+                            compact = true
+                        )
+                    }
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+            ScrollableTabRow(selectedTabIndex = tabs.indexOf(state.activeTab).coerceAtLeast(0)) {
+                tabs.forEach { tab ->
+                    Tab(
+                        selected = state.activeTab == tab,
+                        onClick = { viewModel.selectTab(tab) },
+                        text = { Text(tab.title) }
                     )
                 }
-            }
-        )
-        Spacer(Modifier.height(8.dp))
-        ScrollableTabRow(selectedTabIndex = tabs.indexOf(state.activeTab).coerceAtLeast(0)) {
-            tabs.forEach { tab ->
-                Tab(
-                    selected = state.activeTab == tab,
-                    onClick = { viewModel.selectTab(tab) },
-                    text = { Text(tab.title) }
-                )
             }
         }
         state.successMessage?.let { message ->
@@ -111,8 +123,8 @@ fun PurchaseOrderScreen(
                 .padding(horizontal = 24.dp, vertical = 12.dp)
         ) {
             when (state.activeTab) {
-                PurchaseOrderTab.ORDERS -> OrdersPane(state, viewModel, invoiceViewModel)
-                PurchaseOrderTab.DELIVERIES -> DeliveriesPane(state, viewModel)
+                PurchaseOrderTab.ORDERS -> OrdersPane(state, viewModel, invoiceViewModel, onOpenInvoicesTab)
+                PurchaseOrderTab.DELIVERIES -> DeliveriesPane(state, viewModel, onOpenOrdersTab)
                 PurchaseOrderTab.INVOICES -> invoiceViewModel?.let { SupplierInvoicesPane(it) }
             }
         }
@@ -126,7 +138,8 @@ fun PurchaseOrderScreen(
 private fun OrdersPane(
     state: PurchaseOrderUiState,
     viewModel: PurchaseOrderViewModel,
-    invoiceViewModel: SupplierInvoiceViewModel?
+    invoiceViewModel: SupplierInvoiceViewModel?,
+    onOpenInvoicesTab: () -> Unit = {}
 ) {
     ErpSplitRow {
         GlassCard(modifier = Modifier.pane(0.5f), contentPadding = 14.dp) {
@@ -134,8 +147,7 @@ private fun OrdersPane(
                 title = "Заказы",
                 count = state.orders.size,
                 accent = Brand.Violet,
-                subtitle = state.statusFilter?.localizedName() ?: "Все статусы",
-                action = { SoftButton(text = "Обновить", onClick = viewModel::loadOrders) }
+                subtitle = state.statusFilter?.localizedName() ?: "Все статусы"
             )
             Spacer(Modifier.height(8.dp))
             PurchaseOrderStatusFilterDropdown(
@@ -150,8 +162,8 @@ private fun OrdersPane(
                     contentAlignment = Alignment.Center
                 ) { GradientSpinner() }
                 state.orders.isEmpty() -> EmptyState(
-                    title = "Заказов нет",
-                    text = "Заказ оформляется по предложению, выбранному инициатором",
+                    title = "Заказов пока нет",
+                    text = "Заказ появляется здесь автоматически после оформления или оплаты в «Снабжение (Заявки)», либо создаётся кнопкой «Новый заказ» по выбранному предложению",
                     glyph = ErpIconGlyph.Documents,
                     accent = Brand.Violet
                 )
@@ -162,7 +174,7 @@ private fun OrdersPane(
                 )
             }
         }
-        OrderCardPane(state, viewModel, invoiceViewModel, Modifier.pane(0.5f, narrowHeight = 640.dp))
+        OrderCardPane(state, viewModel, invoiceViewModel, onOpenInvoicesTab, Modifier.pane(0.5f, narrowHeight = 640.dp))
     }
 }
 
@@ -171,6 +183,7 @@ private fun OrderCardPane(
     state: PurchaseOrderUiState,
     viewModel: PurchaseOrderViewModel,
     invoiceViewModel: SupplierInvoiceViewModel?,
+    onOpenInvoicesTab: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val order = state.selectedOrder
@@ -234,43 +247,56 @@ private fun OrderCardPane(
             SectionHeader(title = "Условия", accent = Brand.Violet)
             DetailRow("Поставщик", order.supplierName ?: order.supplierId.toString())
             DetailRow("Предложение", order.offerNumber ?: order.offerId.toString())
-            DetailRow("Ответственный", viewModel.userName(order.responsibleId))
-            DetailRow(
-                "Оплата",
-                if (order.paidAt != null) {
-                    "Оплачено ${ErpFormat.dateTimeRu(order.paidAt)}" +
-                        (order.paidByName?.let { " ($it)" } ?: "")
-                } else {
-                    "Не оплачен"
-                },
-                valueColor = if (order.paidAt != null) Brand.Teal else Brand.Amber
-            )
-            DetailRow("Дата заказа", order.orderedAt.asDate())
-            DetailRow("Ожидаемая поставка", order.expectedAt.asDate())
-            DetailRow("Адрес доставки", order.deliveryAddress ?: "—")
-            DetailRow("Условия оплаты", order.paymentTerms ?: "—")
-            DetailRow("Договор", order.contractNo ?: "—")
             val linkedInvoiceNo = invoiceViewModel?.uiState?.value?.invoices
                 ?.firstOrNull { it.purchaseOrderId == order.id }?.number
-            DetailRow("Счёт", order.invoiceNo ?: linkedInvoiceNo ?: "—")
-            DetailRow("Согласовал", order.approvedBy?.let(viewModel::userName) ?: "—")
-            DetailRow("Согласовано", order.approvedAt.asDate())
-            if (order.reapprovalRequired) {
-                DetailRow(
-                    "Требуется согласование",
-                    order.reapprovalReason ?: "существенные условия изменены",
-                    valueColor = Brand.Amber
-                )
+            val demandsText = when {
+                order.demandNumbers.isNotEmpty() -> order.demandNumbers.joinToString(", ")
+                order.demandIds.isNotEmpty() -> order.demandIds.joinToString(", ") { "№$it" }
+                else -> null
             }
-            order.note?.takeIf { it.isNotBlank() }?.let { DetailRow("Примечание", it) }
-            DetailRow(
-                "Потребности",
-                when {
-                    order.demandNumbers.isNotEmpty() -> order.demandNumbers.joinToString(", ")
-                    order.demandIds.isNotEmpty() -> order.demandIds.joinToString(", ") { "№$it" }
-                    else -> "—"
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    OrderCompactFact("Ответственный", viewModel.userName(order.responsibleId), Modifier.weight(1f))
+                    OrderCompactFact(
+                        "Оплата",
+                        if (order.paidAt != null) {
+                            "Оплачено ${ErpFormat.dateTimeRu(order.paidAt)}" + (order.paidByName?.let { " ($it)" } ?: "")
+                        } else {
+                            "Не оплачен"
+                        },
+                        Modifier.weight(1f),
+                        valueColor = if (order.paidAt != null) Brand.Teal else Brand.Amber
+                    )
                 }
-            )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    OrderCompactFact("Дата заказа", order.orderedAt.asDate(), Modifier.weight(1f))
+                    OrderCompactFact("Ожидаемая поставка", order.expectedAt.asDate(), Modifier.weight(1f))
+                }
+                val invoiceText = order.invoiceNo ?: linkedInvoiceNo
+                if (invoiceText != null || demandsText != null) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        OrderCompactFact("Счёт", invoiceText ?: "—", Modifier.weight(1f))
+                        OrderCompactFact("Потребности", demandsText ?: "—", Modifier.weight(1f))
+                    }
+                }
+                if (order.approvedBy != null || order.approvedAt != null) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        OrderCompactFact("Согласовал", order.approvedBy?.let(viewModel::userName) ?: "—", Modifier.weight(1f))
+                        OrderCompactFact("Согласовано", order.approvedAt.asDate(), Modifier.weight(1f))
+                    }
+                }
+                order.deliveryAddress?.takeIf { it.isNotBlank() }?.let { DetailRow("Адрес доставки", it) }
+                order.paymentTerms?.takeIf { it.isNotBlank() }?.let { DetailRow("Условия оплаты", it) }
+                order.contractNo?.takeIf { it.isNotBlank() }?.let { DetailRow("Договор", it) }
+                if (order.reapprovalRequired) {
+                    DetailRow(
+                        "Требуется согласование",
+                        order.reapprovalReason ?: "существенные условия изменены",
+                        valueColor = Brand.Amber
+                    )
+                }
+                order.note?.takeIf { it.isNotBlank() }?.let { DetailRow("Примечание", it) }
+            }
 
             Spacer(Modifier.height(12.dp))
             SectionHeader(
@@ -293,7 +319,10 @@ private fun OrderCardPane(
 
             invoiceViewModel?.let { invoices ->
                 Spacer(Modifier.height(12.dp))
-                OrderInvoicesSection(order, invoices, onOpenInvoices = { viewModel.selectTab(PurchaseOrderTab.INVOICES) })
+                OrderInvoicesSection(order, invoices, onOpenInvoices = {
+                    onOpenInvoicesTab()
+                    viewModel.selectTab(PurchaseOrderTab.INVOICES)
+                })
             }
 
             Spacer(Modifier.height(12.dp))
@@ -552,22 +581,49 @@ private fun PurchaseOrderSuccessNote(text: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun DeliveriesPane(state: PurchaseOrderUiState, viewModel: PurchaseOrderViewModel) {
+private fun DeliveriesPane(
+    state: PurchaseOrderUiState,
+    viewModel: PurchaseOrderViewModel,
+    onOpenOrdersTab: () -> Unit = {}
+) {
+    var filterMode by remember { mutableStateOf(0) } // 0 = все, 1 = в пути, 2 = поставлены
+    val orderById = remember(state.orders) { state.orders.associateBy { it.id } }
+    val filteredDeliveries = remember(state.deliveries, orderById, filterMode) {
+        state.deliveries.filter { d ->
+            val st = orderById[d.orderId]?.status
+            when (filterMode) {
+                1 -> st == org.example.project.dto.PurchaseOrderStatus.SENT ||
+                    st == org.example.project.dto.PurchaseOrderStatus.PARTIALLY_DELIVERED
+                2 -> st == org.example.project.dto.PurchaseOrderStatus.DELIVERED ||
+                    st == org.example.project.dto.PurchaseOrderStatus.CLOSED
+                else -> true
+            }
+        }
+    }
     GlassCard(modifier = Modifier.fillMaxSize(), contentPadding = 16.dp) {
         SectionHeader(
             title = "Все поставки",
-            count = state.deliveries.size,
+            count = filteredDeliveries.size,
             accent = Brand.Mint,
-            subtitle = "Поставки по всем загруженным заказам",
-            action = { SoftButton(text = "Обновить", onClick = viewModel::loadDeliveries) }
+            subtitle = "Поставки по всем загруженным заказам"
         )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(0 to "Все (${state.deliveries.size})", 1 to "В пути", 2 to "Поставлены").forEach { (idx, label) ->
+                org.example.project.ui.theme.ErpFilterChip(
+                    selected = filterMode == idx,
+                    onClick = { filterMode = idx },
+                    label = { Text(label) }
+                )
+            }
+        }
         Spacer(Modifier.height(8.dp))
         when {
             state.isOrdersLoading -> Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { GradientSpinner() }
-            state.deliveries.isEmpty() -> EmptyState(
+            filteredDeliveries.isEmpty() -> EmptyState(
                 title = "Поставок нет",
                 text = "Поставка регистрируется по отправленному заказу и может быть частичной",
                 glyph = ErpIconGlyph.Warehouse,
@@ -575,10 +631,11 @@ private fun DeliveriesPane(state: PurchaseOrderUiState, viewModel: PurchaseOrder
             )
             else -> Column {
                 PurchaseDeliveriesGrid(
-                    deliveries = state.deliveries,
+                    deliveries = filteredDeliveries,
                     orders = state.orders,
                     statuses = state.orders.associate { it.id to it.status },
                     onClick = { delivery ->
+                        onOpenOrdersTab()
                         viewModel.selectTab(PurchaseOrderTab.ORDERS)
                         viewModel.selectOrder(delivery.orderId)
                     },
@@ -673,4 +730,26 @@ private fun deliveryItemsText(
     val orderLine = order.lines.firstOrNull { it.id == line.orderLineId }
     val name = line.nomenclatureName ?: orderLine?.nomenclatureName ?: "Позиция"
     "$name — ${org.example.project.ui.theme.ErpFormat.qty(line.quantity)} ${orderLine?.unit.orEmpty()}".trim()
+}
+
+@Composable
+private fun OrderCompactFact(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = valueColor
+        )
+    }
 }

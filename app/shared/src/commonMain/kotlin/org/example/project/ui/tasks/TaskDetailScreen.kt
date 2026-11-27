@@ -38,7 +38,12 @@ import org.example.project.dto.TaskStatus
 import org.example.project.dto.UserDto
 import org.example.project.dto.hasPermission
 import org.example.project.ui.attachments.AttachmentsSection
+import org.example.project.ui.home.currentIsoDate
+import org.example.project.ui.home.isOverdue
+import org.example.project.ui.theme.Brand
+import org.example.project.ui.theme.ErpFormat
 import org.example.project.ui.theme.ErpIconGlyph
+import org.example.project.ui.theme.GradientButton
 import org.example.project.ui.theme.Gradients
 import org.example.project.ui.theme.PageHeader
 import org.example.project.ui.theme.PillBadge
@@ -160,14 +165,29 @@ private fun TaskDescription(
     TaskSummary(task, state.users)
 
     val waitingHint = when (task.status) {
-        TaskStatus.ASSIGNED -> "Ожидает исполнителя: ${task.assigneeId?.let { userName(state.users, it) } ?: "не назначен"}. Взять в работу"
+        TaskStatus.ASSIGNED -> "Ожидает исполнителя: ${task.assigneeId?.let { userName(state.users, it) } ?: "не назначен"}"
         TaskStatus.ON_REVIEW -> "Ожидает проверки: ${task.reviewerId?.let { userName(state.users, it) } ?: "инициатор"}. Принять или вернуть на доработку"
         TaskStatus.NEW -> "Новая задача: требуется назначить исполнителя"
         TaskStatus.BLOCKED -> "Заблокирована${task.unblockResponsibleId?.let { " · снимает ${userName(state.users, it)}" } ?: ""}"
         else -> null
     }
+    val canQuickAccept = task.status == TaskStatus.ASSIGNED &&
+        (task.assigneeId == currentUser.id || (task.assigneeId == null && currentUser.hasPermission("tasks", "accept")))
     if (waitingHint != null) {
-        PillBadge(text = waitingHint, accent = task.status.accentColor())
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PillBadge(text = waitingHint, accent = task.status.accentColor())
+            if (canQuickAccept) {
+                GradientButton(
+                    text = "Взять в работу",
+                    onClick = { viewModel.accept(task) },
+                    gradient = Gradients.Ocean
+                )
+            }
+        }
     }
 
     task.description?.takeIf { it.isNotBlank() }?.let {
@@ -186,54 +206,117 @@ private fun TaskDescription(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
         )
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("Детали задачи", style = MaterialTheme.typography.titleMedium)
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            val twoColumns = maxWidth >= 560.dp
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Детали задачи", style = MaterialTheme.typography.titleMedium)
+                if (twoColumns) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TaskSectionLabel("Контекст")
+                            TaskDetailRow("Область", task.area.localizedName())
+                            task.projectId?.let { projectId ->
+                                val projectName = state.projects.find { it.id == projectId }
+                                    ?.let { "${it.number} ${it.name}" } ?: "ID $projectId"
+                                TaskDetailRow("Проект", projectName)
+                            }
+                            task.departmentId?.let { TaskDetailRow("Подразделение", "ID $it") }
+                            TaskDetailRow("Тип работы", task.type.localizedName())
 
-            TaskSectionLabel("Контекст")
-            TaskDetailRow("Область", task.area.localizedName())
-            task.projectId?.let { projectId ->
-                val projectName = state.projects.find { it.id == projectId }
-                    ?.let { "${it.number} ${it.name}" } ?: "ID $projectId"
-                TaskDetailRow("Проект", projectName)
-            }
-            task.departmentId?.let { TaskDetailRow("Подразделение", "ID $it") }
-            TaskDetailRow("Тип работы", task.type.localizedName())
+                            TaskSectionLabel("Сроки и история")
+                            task.plannedStartAt?.takeIf { it.isNotBlank() }?.let {
+                                TaskDetailRow("Плановое начало", ErpFormat.dateRu(it))
+                            }
+                            TaskDetailRow("Срок выполнения", ErpFormat.dateRu(task.dueDate))
+                            TaskDetailRow("Создана", ErpFormat.dateTimeRu(task.createdAt))
+                            task.closedAt?.let { TaskDetailRow("Завершена", ErpFormat.dateTimeRu(it)) }
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TaskSectionLabel("Участники")
+                            TaskDetailRow("Инициатор", userName(state.users, task.initiatorId))
+                            TaskDetailRow("Исполнитель", task.assigneeId?.let { userName(state.users, it) } ?: "Не назначен")
+                            if (task.coexecutorIds.isNotEmpty()) {
+                                TaskDetailRow(
+                                    "Соисполнители",
+                                    task.coexecutorIds.joinToString(", ") { userName(state.users, it) }
+                                )
+                            }
+                            if (task.observerIds.isNotEmpty()) {
+                                TaskDetailRow(
+                                    "Наблюдатели",
+                                    task.observerIds.joinToString(", ") { userName(state.users, it) }
+                                )
+                            }
+                            task.reviewerId?.let { TaskDetailRow("Проверяющий", userName(state.users, it)) }
 
-            TaskSectionLabel("Участники")
-            TaskDetailRow("Инициатор", userName(state.users, task.initiatorId))
-            TaskDetailRow("Исполнитель", task.assigneeId?.let { userName(state.users, it) } ?: "Не назначен")
-            if (task.coexecutorIds.isNotEmpty()) {
-                TaskDetailRow(
-                    "Соисполнители",
-                    task.coexecutorIds.joinToString(", ") { userName(state.users, it) }
-                )
-            }
-            if (task.observerIds.isNotEmpty()) {
-                TaskDetailRow(
-                    "Наблюдатели",
-                    task.observerIds.joinToString(", ") { userName(state.users, it) }
-                )
-            }
-            task.reviewerId?.let { TaskDetailRow("Проверяющий", userName(state.users, it)) }
+                            if (task.status == TaskStatus.BLOCKED) {
+                                TaskSectionLabel("Блокировка")
+                                task.blockedReason?.let { TaskDetailRow("Причина", it) }
+                                task.blockedBy?.let { TaskDetailRow("Заблокировал", userName(state.users, it)) }
+                                task.blockedAt?.let { TaskDetailRow("Время", it.toShortDateTime()) }
+                                task.unblockResponsibleId?.let {
+                                    TaskDetailRow("Ответственный за снятие", userName(state.users, it))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    TaskSectionLabel("Контекст")
+                    TaskDetailRow("Область", task.area.localizedName())
+                    task.projectId?.let { projectId ->
+                        val projectName = state.projects.find { it.id == projectId }
+                            ?.let { "${it.number} ${it.name}" } ?: "ID $projectId"
+                        TaskDetailRow("Проект", projectName)
+                    }
+                    task.departmentId?.let { TaskDetailRow("Подразделение", "ID $it") }
+                    TaskDetailRow("Тип работы", task.type.localizedName())
 
-            if (task.status == TaskStatus.BLOCKED) {
-                TaskSectionLabel("Блокировка")
-                task.blockedReason?.let { TaskDetailRow("Причина", it) }
-                task.blockedBy?.let { TaskDetailRow("Заблокировал", userName(state.users, it)) }
-                task.blockedAt?.let { TaskDetailRow("Время", it.toShortDateTime()) }
-                task.unblockResponsibleId?.let {
-                    TaskDetailRow("Ответственный за снятие", userName(state.users, it))
+                    TaskSectionLabel("Участники")
+                    TaskDetailRow("Инициатор", userName(state.users, task.initiatorId))
+                    TaskDetailRow("Исполнитель", task.assigneeId?.let { userName(state.users, it) } ?: "Не назначен")
+                    if (task.coexecutorIds.isNotEmpty()) {
+                        TaskDetailRow(
+                            "Соисполнители",
+                            task.coexecutorIds.joinToString(", ") { userName(state.users, it) }
+                        )
+                    }
+                    if (task.observerIds.isNotEmpty()) {
+                        TaskDetailRow(
+                            "Наблюдатели",
+                            task.observerIds.joinToString(", ") { userName(state.users, it) }
+                        )
+                    }
+                    task.reviewerId?.let { TaskDetailRow("Проверяющий", userName(state.users, it)) }
+
+                    if (task.status == TaskStatus.BLOCKED) {
+                        TaskSectionLabel("Блокировка")
+                        task.blockedReason?.let { TaskDetailRow("Причина", it) }
+                        task.blockedBy?.let { TaskDetailRow("Заблокировал", userName(state.users, it)) }
+                        task.blockedAt?.let { TaskDetailRow("Время", it.toShortDateTime()) }
+                        task.unblockResponsibleId?.let {
+                            TaskDetailRow("Ответственный за снятие", userName(state.users, it))
+                        }
+                    }
+
+                    TaskSectionLabel("Сроки и история")
+                    task.plannedStartAt?.takeIf { it.isNotBlank() }?.let {
+                        TaskDetailRow("Плановое начало", ErpFormat.dateRu(it))
+                    }
+                    TaskDetailRow("Срок выполнения", ErpFormat.dateRu(task.dueDate))
+                    TaskDetailRow("Создана", ErpFormat.dateTimeRu(task.createdAt))
+                    task.closedAt?.let { TaskDetailRow("Завершена", ErpFormat.dateTimeRu(it)) }
                 }
             }
-
-            TaskSectionLabel("Сроки и история")
-            TaskDetailRow("Плановое начало", org.example.project.ui.theme.ErpFormat.dateRu(task.plannedStartAt))
-            TaskDetailRow("Срок выполнения", org.example.project.ui.theme.ErpFormat.dateRu(task.dueDate))
-            TaskDetailRow("Создана", org.example.project.ui.theme.ErpFormat.dateTimeRu(task.createdAt))
-            task.closedAt?.let { TaskDetailRow("Завершена", org.example.project.ui.theme.ErpFormat.dateTimeRu(it)) }
         }
     }
 
@@ -282,7 +365,16 @@ private fun TaskSummary(task: TaskDto, users: List<UserDto>) {
                             SummaryPerson(task.assigneeId?.let { userName(users, it) } ?: "Не назначен")
                         }
                         TaskSummaryItem("Срок выполнения", Modifier.weight(1f)) {
-                            SummaryValue(task.dueDate.toShortDate())
+                            val overdue = !task.isClosedLike() && task.isOverdue(currentIsoDate())
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SummaryValue(ErpFormat.dateRu(task.dueDate))
+                                if (overdue) {
+                                    PillBadge(text = "Просрочена", accent = Brand.Rose, filled = true)
+                                }
+                            }
                         }
                     }
                 }
@@ -292,7 +384,16 @@ private fun TaskSummary(task: TaskDto, users: List<UserDto>) {
                             SummaryPerson(task.assigneeId?.let { userName(users, it) } ?: "Не назначен")
                         }
                         TaskSummaryItem("Срок выполнения", Modifier.weight(1f)) {
-                            SummaryValue(task.dueDate.toShortDate())
+                            val overdue = !task.isClosedLike() && task.isOverdue(currentIsoDate())
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SummaryValue(ErpFormat.dateRu(task.dueDate))
+                                if (overdue) {
+                                    PillBadge(text = "Просрочена", accent = Brand.Rose, filled = true)
+                                }
+                            }
                         }
                     }
                 }

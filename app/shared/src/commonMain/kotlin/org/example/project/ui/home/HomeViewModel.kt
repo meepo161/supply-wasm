@@ -76,6 +76,10 @@ class HomeViewModel(
             if (hasPerm("demands", "read") || hasPerm("demands", "read_any")) {
                 val res = demandRepository?.listDemands()
                 if (res is ApiResult.Success) {
+                    val activeDemands = res.data.filter {
+                        it.status != DemandStatus.COVERED && it.status != DemandStatus.CANCELLED
+                    }
+                    _uiState.value = _uiState.value.copy(activeDemands = activeDemands)
                     val submitted = res.data.count { it.status == DemandStatus.PENDING_APPROVAL }
                     if (submitted > 0) {
                         items.add(

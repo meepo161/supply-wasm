@@ -104,6 +104,7 @@ fun appModule(config: AppConfig, pushTransport: PushTransport? = null) = module 
     single { ConversationRepository(get()) }
     single { ConversationEventBus() }
     single { ConversationService(get(), get(), get(), get(), get(), get(), get()) }
+    single { ConversationMessengerService(get(), get(), get(), get(), get()) }
     single { ChatService(get(), get(), get(), get(), get(), get(), get()) }
     single { UnifiedChatListService(get(), get(), get(), get(), get()) }
     single { SearchService(get(), get()) }

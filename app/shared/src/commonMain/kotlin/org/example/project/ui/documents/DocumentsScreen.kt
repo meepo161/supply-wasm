@@ -152,7 +152,6 @@ private fun DocumentListPage(
                         }
                     }
                 })
-                SoftButton(text = "Обновить", onClick = viewModel::loadDocuments)
             }
 
             if (showTemplates) {

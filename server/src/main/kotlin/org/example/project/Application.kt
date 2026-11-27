@@ -53,7 +53,14 @@ fun Application.module(pushTransport: org.example.project.service.PushTransport?
 
     val notificationEventBus = getKoin().get<org.example.project.realtime.NotificationEventBus>()
     val pushService = getKoin().get<org.example.project.service.PushService>()
+    val messengerService = getKoin().get<org.example.project.service.ConversationMessengerService>()
     launch {
         notificationEventBus.notifications.collect { event -> pushService.send(event) }
+    }
+    launch {
+        while (true) {
+            runCatching { messengerService.deliverDueScheduledMessages() }
+            kotlinx.coroutines.delay(15_000)
+        }
     }
 }

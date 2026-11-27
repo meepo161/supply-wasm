@@ -98,13 +98,6 @@ fun ProjectListScreen(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SoftButton(
-                    text = "Обновить",
-                    onClick = onRefresh,
-                    enabled = !isLoading,
-                    leadingIcon = ErpIconGlyph.Refresh
-                )
-                Spacer(Modifier.width(10.dp))
                 GradientButton(
                     text = "Новый проект",
                     onClick = onCreateClick,
@@ -196,7 +189,16 @@ fun ProjectListScreen(
                         config = Un7KCMPDataGridConfig(
                             isUsableHaptic = false,
                             pageSizeList = listOf("20", "50", "100"),
-                            defaultPageSizeListIndex = 1
+                            defaultPageSizeListIndex = 1,
+                            initialColumnWeights = mapOf(
+                                "Номер" to 150f,
+                                "Название" to 280f,
+                                "Статус" to 190f,
+                                "Руководитель" to 180f,
+                                "Приоритет" to 120f,
+                                "Заказчик" to 180f,
+                                "Сроки" to 180f
+                            )
                         ),
                         onClick = { selected ->
                             selected.firstOrNull()?.first?.let { idx ->

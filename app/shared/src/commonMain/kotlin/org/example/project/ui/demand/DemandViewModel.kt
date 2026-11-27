@@ -94,6 +94,8 @@ class DemandViewModel(
     }
 
     fun hasPermission(action: String): Boolean = currentUser.hasPermission("demands", action)
+    fun canCreate(): Boolean = currentUser.hasPermission("demands", "create")
+
     fun canOffer(): Boolean = currentUser.hasPermission("suppliers", "offer")
     fun canOrder(): Boolean = currentUser.hasPermission("suppliers", "order")
     fun canManageSuppliers(): Boolean = currentUser.hasPermission("suppliers", "create")
@@ -105,6 +107,28 @@ class DemandViewModel(
 
     fun updateStageFilter(filter: DemandStageFilter) {
         _uiState.value = _uiState.value.copy(stageFilter = filter)
+    }
+
+    fun updateProjectFilter(projectId: Long?) {
+        _uiState.value = _uiState.value.copy(projectFilterId = projectId)
+    }
+
+    fun updatePriorityFilter(filter: DemandPriorityFilter) {
+        _uiState.value = _uiState.value.copy(priorityFilter = filter)
+    }
+
+    fun updateSortMode(mode: DemandSortMode) {
+        _uiState.value = _uiState.value.copy(sortMode = mode)
+    }
+
+    fun resetFilters() {
+        _uiState.value = _uiState.value.copy(
+            stageFilter = DemandStageFilter.ALL,
+            projectFilterId = null,
+            priorityFilter = DemandPriorityFilter.ALL,
+            sortMode = DemandSortMode.NEWEST,
+            searchQuery = ""
+        )
     }
 
     fun updateSearchQuery(query: String) {
@@ -462,7 +486,7 @@ class DemandViewModel(
 
     // --- Предложения со счётом (прямо внутри пульта потребности) ---
 
-    fun openCreateOfferDialog() {
+    fun openCreateOfferDialog(preselectedSupplierId: Long? = null) {
         if (!canOffer()) {
             _uiState.value = _uiState.value.copy(
                 operationError = ApiError("FORBIDDEN", "Нет права вносить предложения поставщиков")
@@ -505,6 +529,7 @@ class DemandViewModel(
             createOfferForm = DemandCreateOfferForm(
                 demandId = demand.header.id,
                 demandNumber = demand.header.number,
+                supplierId = preselectedSupplierId,
                 validUntil = defaultValidUntil,
                 lines = lines.ifEmpty {
                     demand.lines.map { line ->
@@ -1022,6 +1047,178 @@ class DemandViewModel(
 
     fun updateCancelReason(reason: String) {
         _uiState.value = _uiState.value.copy(cancelReason = reason)
+    }
+
+    /** Открывает диалог внесения предложения со счётом прямо из списка заявок. */
+    fun openCreateOfferForDemand(demandId: Long) {
+        if (_uiState.value.selectedDemand?.header?.id == demandId) {
+            openCreateOfferDialog()
+            return
+        }
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = demandRepository.getDemand(demandId)) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        isActionRunning = false,
+                        selectedDemand = result.data
+                    )
+                    openCreateOfferDialog()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    /** Открывает диалог отмены заявки прямо из списка заявок. */
+    fun openCancelForDemand(demandId: Long) {
+        if (_uiState.value.selectedDemand?.header?.id == demandId) {
+            showDialog(DemandDialog.CancelDemand)
+            return
+        }
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = demandRepository.getDemand(demandId)) {
+                is ApiResult.Success -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    selectedDemand = result.data,
+                    activeDialog = DemandDialog.CancelDemand,
+                    cancelReason = ""
+                )
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    /** Отмечает оплату и оформляет заказ по заявке прямо из списка. */
+    fun markDemandPaidById(demandId: Long) {
+        if (!canOrder()) {
+            _uiState.value = _uiState.value.copy(
+                operationError = ApiError("FORBIDDEN", "Нет права отмечать оплату заказов")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null, successMessage = null)
+        viewModelScope.launch {
+            when (val result = demandRepository.markDemandPaid(
+                demandId,
+                MarkDemandPaidRequest(idempotencyKey = newKey("demand-paid"))
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        isActionRunning = false,
+                        selectedDemand = if (_uiState.value.selectedDemand?.header?.id == demandId) result.data else _uiState.value.selectedDemand,
+                        successMessage = "Оплата по ${result.data.header.number} отмечена · заказ отправлен поставщику"
+                    )
+                    loadDemands()
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    /** Дублирует состав существующей заявки в форму создания новой потребности. */
+    fun duplicateDemandToForm(demandId: Long) {
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null)
+        viewModelScope.launch {
+            when (val result = demandRepository.getDemand(demandId)) {
+                is ApiResult.Success -> {
+                    val d = result.data
+                    val lines = d.lines.mapIndexed { idx, line ->
+                        CreateDemandLineForm(
+                            lineNo = idx + 1,
+                            nomenclatureId = line.nomenclatureId,
+                            quantity = line.quantity.plainDecimalString(),
+                            unit = line.unit
+                        )
+                    }.ifEmpty { listOf(CreateDemandLineForm(lineNo = 1)) }
+                    _uiState.value = _uiState.value.copy(
+                        isActionRunning = false,
+                        activeDialog = DemandDialog.CreateDemand,
+                        createDemandForm = CreateDemandForm(
+                            sourceType = d.header.sourceType,
+                            projectId = d.header.projectId,
+                            stockpileNote = d.header.stockpileNote ?: "Повтор заявки ${d.header.number}",
+                            requiredDate = "",
+                            priority = d.header.priority,
+                            lines = lines
+                        )
+                    )
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = result.error
+                )
+            }
+        }
+    }
+
+    /** Выносит незакупленные позиции (не покрытые складом и не включённые в заказы) в новую заявку и открывает её. */
+    fun splitRemainingIntoNewDemand() {
+        val demand = _uiState.value.selectedDemand ?: return
+        val orderedByNom = mutableMapOf<Long, Double>()
+        demand.orders
+            .filter { it.status != org.example.project.dto.PurchaseOrderStatus.CANCELLED }
+            .forEach { order ->
+                order.lines.forEach { ol ->
+                    orderedByNom[ol.nomenclatureId] = (orderedByNom[ol.nomenclatureId] ?: 0.0) + ol.quantity.toDoubleSafe()
+                }
+            }
+        val remainingLines = demand.lines.mapNotNull { line ->
+            val covered = line.coveredQuantity.toDoubleSafe()
+            val ordered = orderedByNom[line.nomenclatureId] ?: 0.0
+            val remaining = (line.quantity.toDoubleSafe() - maxOf(covered, ordered)).coerceAtLeast(0.0)
+            if (remaining > 0.0001) line to remaining else null
+        }
+        if (remainingLines.isEmpty()) return
+
+        _uiState.value = _uiState.value.copy(isActionRunning = true, operationError = null, successMessage = null)
+        viewModelScope.launch {
+            val lineInputs = remainingLines.mapIndexed { idx, (line, deficit) ->
+                val rounded = kotlin.math.round(deficit * 1000.0) / 1000.0
+                val qtyText = if (rounded % 1.0 == 0.0) rounded.toLong().toString() else rounded.toString()
+                DemandLineInput(
+                    lineNo = idx + 1,
+                    nomenclatureId = line.nomenclatureId,
+                    quantity = qtyText,
+                    unit = line.unit
+                )
+            }
+            when (val result = demandRepository.createDemand(
+                CreateDemandRequest(
+                    sourceType = demand.header.sourceType,
+                    projectId = demand.header.projectId,
+                    stockpileNote = demand.header.stockpileNote?.takeIf { it.isNotBlank() }
+                        ?: "Остаток по заявке ${demand.header.number}",
+                    requiredDate = demand.header.requiredDate,
+                    priority = demand.header.priority,
+                    idempotencyKey = newKey("demand-split-${demand.header.id}"),
+                    lines = lineInputs
+                )
+            )) {
+                is ApiResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        isActionRunning = false,
+                        successMessage = "Создана заявка ${result.data.header.number} на остаток (${lineInputs.size} поз.)"
+                    )
+                    loadDemands()
+                    selectDemand(result.data.header.id)
+                }
+                is ApiResult.Error -> _uiState.value = _uiState.value.copy(
+                    isActionRunning = false,
+                    operationError = result.error
+                )
+            }
+        }
     }
 
     private fun newKey(prefix: String): String =

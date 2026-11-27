@@ -19,9 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -251,13 +252,19 @@ fun ProfileScreen(
                 val extrasRepo: org.example.project.data.ErpExtrasRepository = org.koin.compose.koinInject()
                 val delScope = rememberCoroutineScope()
                 var delegations by remember { mutableStateOf<List<org.example.project.dto.DelegationDto>>(emptyList()) }
-                var delegateIdInput by remember { mutableStateOf("") }
+                var userOptions by remember { mutableStateOf<List<org.example.project.dto.UserOptionDto>>(emptyList()) }
+                var selectedDelegate by remember { mutableStateOf<org.example.project.dto.UserOptionDto?>(null) }
+                var delegateMenuOpen by remember { mutableStateOf(false) }
                 var endsAtInput by remember { mutableStateOf("2026-12-31T23:59:59Z") }
                 var delReason by remember { mutableStateOf("") }
                 var delMsg by remember { mutableStateOf<String?>(null) }
                 androidx.compose.runtime.LaunchedEffect(Unit) {
                     val res = extrasRepo.listDelegations()
                     if (res is ApiResult.Success) delegations = res.data
+                    val usersRes = userRepository.listOptions()
+                    if (usersRes is ApiResult.Success) {
+                        userOptions = usersRes.data.filter { it.id != user.id }
+                    }
                 }
                 SectionTitle("Делегирование полномочий", ErpIconGlyph.User)
                 Spacer(Modifier.height(8.dp))
@@ -269,7 +276,7 @@ fun ProfileScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "${d.delegatorName} → ${d.delegateName} (до ${d.endsAt}, ${if (d.active) "активно" else "отозвано"})",
+                            "${d.delegatorName} → ${d.delegateName} (до ${org.example.project.ui.theme.ErpFormat.dateTimeRu(d.endsAt)}, ${if (d.active) "активно" else "отозвано"})",
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.weight(1f)
                         )
@@ -285,22 +292,38 @@ fun ProfileScreen(
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = delegateIdInput,
-                        onValueChange = { delegateIdInput = it },
-                        label = { Text("ID заместителя") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        SoftButton(
+                            text = selectedDelegate?.fullName ?: "Выбрать заместителя…",
+                            onClick = { delegateMenuOpen = true },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = delegateMenuOpen,
+                            onDismissRequest = { delegateMenuOpen = false }
+                        ) {
+                            userOptions.forEach { opt ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(opt.fullName) },
+                                    onClick = {
+                                        selectedDelegate = opt
+                                        delegateMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                     org.example.project.ui.theme.ErpDateField(
                         value = endsAtInput.substringBefore('T'),
                         onValueChange = { endsAtInput = it },
                         label = "Действует до",
-                        modifier = Modifier.weight(1.4f)
+                        modifier = Modifier.weight(1.2f)
                     )
-                    SoftButton(text = "Назначить", onClick = {
-                        val targetId = delegateIdInput.trim().toLongOrNull()
-                        if (targetId != null) {
+                    SoftButton(
+                        text = "Назначить",
+                        enabled = selectedDelegate != null,
+                        onClick = {
+                            val targetId = selectedDelegate?.id ?: return@SoftButton
                             val rawDate = endsAtInput.trim()
                             val isoEndsAt = if (rawDate.length == 10 && !rawDate.contains('T')) "${rawDate}T23:59:59Z" else rawDate
                             delScope.launch {
@@ -313,54 +336,117 @@ fun ProfileScreen(
                                 )) {
                                     is ApiResult.Success -> {
                                         delegations = listOf(res.data) + delegations
-                                        delegateIdInput = ""
+                                        selectedDelegate = null
                                         delMsg = "Делегирование создано"
                                     }
                                     is ApiResult.Error -> delMsg = res.error.userText()
                                 }
                             }
                         }
-                    })
+                    )
                 }
             }
 
             GlassCard(modifier = Modifier.fillMaxWidth()) {
+                val prefs by UserPreferencesStore.state.collectAsState()
                 var browserNotifyEnabled by remember { mutableStateOf(true) }
-                var soundNotifyEnabled by remember { mutableStateOf(false) }
-                var mentionOnlyNotify by remember { mutableStateOf(false) }
-                SectionTitle("Настройки уведомлений", ErpIconGlyph.Bell)
+                SectionTitle("Настройки уведомлений и звука", ErpIconGlyph.Bell)
                 Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                SettingSwitchRow(
+                    title = "Браузерные push-уведомления (нейтральный текст)",
+                    checked = browserNotifyEnabled,
+                    onCheckedChange = { browserNotifyEnabled = it }
+                )
+                SettingSwitchRow(
+                    title = "Звуковое оповещение при новых сообщениях",
+                    checked = prefs.soundNotifications,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(soundNotifications = v) } }
+                )
+                SettingSwitchRow(
+                    title = "Уведомлять только об @упоминаниях",
+                    checked = prefs.mentionOnlyNotifications,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(mentionOnlyNotifications = v) } }
+                )
+            }
+
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                val prefs by UserPreferencesStore.state.collectAsState()
+                SectionTitle("Настройки мессенджера (Чат)", ErpIconGlyph.Send)
+                Spacer(Modifier.height(8.dp))
+                SettingSwitchRow(
+                    title = "Отправлять сообщение по клавише Enter (Shift+Enter — новая строка)",
+                    checked = prefs.sendMessageOnEnter,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(sendMessageOnEnter = v) } }
+                )
+                SettingSwitchRow(
+                    title = "Группировать подряд идущие сообщения одного автора",
+                    checked = prefs.groupChatMessages,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(groupChatMessages = v) } }
+                )
+                SettingSwitchRow(
+                    title = "Показывать статус присутствия (Онлайн / Не беспокоить) на аватарах",
+                    checked = prefs.showOnlinePresence,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(showOnlinePresence = v) } }
+                )
+                SettingSwitchRow(
+                    title = "Автоматически открывать первый активный чат на широком экране",
+                    checked = prefs.autoOpenFirstChat,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(autoOpenFirstChat = v) } }
+                )
+            }
+
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                val prefs by UserPreferencesStore.state.collectAsState()
+                SectionTitle("Интерфейс, задачи и таблицы", ErpIconGlyph.Grid)
+                Spacer(Modifier.height(8.dp))
+                SettingSwitchRow(
+                    title = "Фильтр «Мои задачи» включён по умолчанию",
+                    checked = prefs.tasksMineOnlyByDefault,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(tasksMineOnlyByDefault = v) } }
+                )
+                SettingSwitchRow(
+                    title = "Показывать просроченные задачи вверху списка",
+                    checked = prefs.tasksOverdueFirst,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(tasksOverdueFirst = v) } }
+                )
+                SettingSwitchRow(
+                    title = "Компактная плотность таблиц",
+                    checked = prefs.compactTables,
+                    onCheckedChange = { v -> UserPreferencesStore.update { it.copy(compactTables = v) } }
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Стартовый раздел при открытии",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(6.dp))
+                @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text("Браузерные push-уведомления (нейтральный текст)", style = MaterialTheme.typography.bodyMedium)
-                    androidx.compose.material3.Switch(
-                        checked = browserNotifyEnabled,
-                        onCheckedChange = { browserNotifyEnabled = it }
-                    )
+                    listOf(
+                        "HOME" to "Главная",
+                        "TASKS" to "Задачи",
+                        "PROJECTS" to "Проекты",
+                        "CHAT" to "Чат",
+                        "WMS" to "Склад",
+                        "DEMANDS" to "Снабжение"
+                    ).forEach { (key, label) ->
+                        androidx.compose.material3.FilterChip(
+                            selected = prefs.startDestination == key,
+                            onClick = { UserPreferencesStore.update { it.copy(startDestination = key) } },
+                            label = { Text(label) }
+                        )
+                    }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Звуковое оповещение при новых сообщениях", style = MaterialTheme.typography.bodyMedium)
-                    androidx.compose.material3.Switch(
-                        checked = soundNotifyEnabled,
-                        onCheckedChange = { soundNotifyEnabled = it }
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Уведомлять только об @упоминаниях", style = MaterialTheme.typography.bodyMedium)
-                    androidx.compose.material3.Switch(
-                        checked = mentionOnlyNotify,
-                        onCheckedChange = { mentionOnlyNotify = it }
+                Spacer(Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    SoftButton(
+                        text = "Сбросить настройки по умолчанию",
+                        onClick = { UserPreferencesStore.reset() },
+                        leadingIcon = ErpIconGlyph.Refresh
                     )
                 }
             }
@@ -453,6 +539,25 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        androidx.compose.material3.Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
     }
 }
 

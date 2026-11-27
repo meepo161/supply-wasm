@@ -26,7 +26,7 @@ import org.example.project.ui.theme.Button
 import androidx.compose.material3.CircularProgressIndicator
 import org.example.project.ui.theme.ErpFilterChip as FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import org.example.project.ui.theme.TextButton
@@ -74,6 +74,7 @@ fun TaskChatWorkspaceScreen(
     conversationViewModel: ConversationViewModel,
     showChatList: Boolean = true,
     unifiedForwardTargets: List<ConversationListItemDto> = emptyList(),
+    onOpenFullCard: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -103,6 +104,7 @@ fun TaskChatWorkspaceScreen(
                 unifiedForwardTargets = unifiedForwardTargets,
                 contextOpen = contextOpen,
                 onToggleContext = { contextOpen = !contextOpen },
+                onOpenFullCard = onOpenFullCard,
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             if (contextOpen) {
@@ -269,6 +271,7 @@ private fun TaskChatCenterColumn(
     unifiedForwardTargets: List<ConversationListItemDto>,
     contextOpen: Boolean,
     onToggleContext: () -> Unit,
+    onOpenFullCard: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val canWrite = conversationState.selectedConversation?.canWrite == true && !task.isClosedLike()
@@ -310,15 +313,15 @@ private fun TaskChatCenterColumn(
         }
         // Действия задачи отдельной строкой: в узкой колонке они не вытесняют название.
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TaskShareAction(task, state, viewModel)
             TextButton(onClick = onToggleContext) {
                 Text(if (contextOpen) "Скрыть сведения" else "Сведения")
             }
-            TextButton(onClick = viewModel::openFullCard) {
+            TextButton(onClick = { onOpenFullCard?.invoke() ?: viewModel.openFullCard() }) {
                 Text("Карточка")
             }
         }

@@ -24,8 +24,10 @@ fun NavigationDestination.routeSegment(): String = name.lowercase().replace('_',
 fun parseAppRoute(hash: String): AppRoute? {
     val parts = hash.removePrefix("#").trim('/').split('/').filter { it.isNotEmpty() }
     val segment = parts.firstOrNull() ?: return null
-    val destination = NavigationDestination.entries.firstOrNull { it.routeSegment() == segment.lowercase() }
-        ?: return null
+    val destination = when (segment.lowercase()) {
+        "purchase-orders", "suppliers" -> NavigationDestination.DEMANDS
+        else -> NavigationDestination.entries.firstOrNull { it.routeSegment() == segment.lowercase() }
+    } ?: return null
     val nomenclatureId = if (destination == NavigationDestination.WMS && parts.size == 3 && parts[1] == "nomenclature") {
         parts[2].toLongOrNull()?.takeIf { it > 0 }
     } else {

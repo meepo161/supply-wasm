@@ -3,10 +3,14 @@ package org.example.project.ui.conversations
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,9 +23,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import org.example.project.ui.theme.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,7 +41,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import org.example.project.ui.theme.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +52,7 @@ import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +68,7 @@ import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -121,7 +132,10 @@ fun ConversationPanel(
     participants: List<ConversationMemberDto> = emptyList(),
     forwardTargets: List<ConversationListItemDto> = emptyList(),
     typingUsers: List<String> = emptyList(),
-    viewModel: ConversationViewModel? = null
+    viewModel: ConversationViewModel? = null,
+    headerContent: (@Composable RowScope.() -> Unit)? = null,
+    pinnedMessages: List<org.example.project.dto.PinnedMessageDto> = emptyList(),
+    onCreateTaskFromMessage: ((String) -> Unit)? = null
 ) {
     var searchOpen by rememberSaveable(conversationKey) { mutableStateOf(false) }
     var dragActive by remember(conversationKey) { mutableStateOf(false) }
@@ -169,12 +183,34 @@ fun ConversationPanel(
                 }
             }
     ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-            if (viewModel != null) TextButton(onClick = { searchOpen = !searchOpen }) { Text("Поиск") }
-            TextButton(onClick = onRefresh, enabled = !messages.isLoading) { Text("Обновить") }
+        if (headerContent != null || viewModel != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (headerContent != null) Arrangement.SpaceBetween else Arrangement.End
+            ) {
+                headerContent?.invoke(this)
+                if (headerContent != null && viewModel != null) {
+                    Spacer(Modifier.width(8.dp))
+                }
+                if (viewModel != null) {
+                    TextButton(onClick = { searchOpen = !searchOpen }) {
+                        Text(if (searchOpen) "Скрыть поиск" else "Поиск")
+                    }
+                }
+            }
         }
         if (searchOpen && viewModel != null) {
             ConversationMessageSearch(messages, viewModel)
+        }
+        var requestedJumpId by remember(conversationKey) { mutableStateOf<Long?>(null) }
+        if (pinnedMessages.isNotEmpty()) {
+            PinnedMessagesBanner(
+                pins = pinnedMessages,
+                canUnpin = canWrite,
+                onJump = { requestedJumpId = it },
+                onUnpin = { viewModel?.unpinMessage(it) }
+            )
         }
         messages.error?.let { ErrorMessageCard(it, Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
         messages.actionError?.let { ErrorMessageCard(it, Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
@@ -235,11 +271,43 @@ fun ConversationPanel(
                 }
             }
             val scrollScope = rememberCoroutineScope()
-            Box(Modifier.fillMaxWidth().weight(1f)) {
+            var localHighlightId by remember(conversationKey) { mutableStateOf<Long?>(null) }
+            LaunchedEffect(localHighlightId) {
+                if (localHighlightId != null) {
+                    kotlinx.coroutines.delay(2_200)
+                    localHighlightId = null
+                }
+            }
+            val isAwayFromBottom by remember {
+                derivedStateOf {
+                    val info = listState.layoutInfo
+                    val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                    info.totalItemsCount > 0 && lastVisible < info.totalItemsCount - 2
+                }
+            }
+            val jumpToMessage: (Long) -> Unit = { targetId ->
+                val targetIdx = messages.messages.indexOfFirst { it.id == targetId }
+                if (targetIdx >= 0) {
+                    val headerOffset = if (messages.hasMoreNewer) 1 else 0
+                    scrollScope.launch {
+                        listState.animateScrollToItem(targetIdx + headerOffset)
+                        localHighlightId = targetId
+                    }
+                } else {
+                    viewModel?.scrollToSearchResult(targetId)
+                }
+            }
+            LaunchedEffect(requestedJumpId) {
+                val targetId = requestedJumpId ?: return@LaunchedEffect
+                jumpToMessage(targetId)
+                requestedJumpId = null
+            }
+            Box(Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 12.dp, bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     if (messages.hasMoreNewer) {
                         item(key = "load-more") {
@@ -253,19 +321,34 @@ fun ConversationPanel(
                     items(messages.messages, key = { it.id }) { message ->
                         val index = messages.messages.indexOfFirst { it.id == message.id }
                         val previous = messages.messages.getOrNull(index - 1)
-                        if (previous?.createdAt?.substringBefore('T') != message.createdAt.substringBefore('T')) {
+                        val sameDay = previous?.createdAt?.substringBefore('T') == message.createdAt.substringBefore('T')
+                        val groupEnabled = org.example.project.ui.main.UserPreferencesStore.state.collectAsState().value.groupChatMessages
+                        val grouped = groupEnabled &&
+                            sameDay &&
+                            previous?.type == ChatMessageType.USER &&
+                            message.type == ChatMessageType.USER &&
+                            previous.author?.userId != null &&
+                            previous.author?.userId == message.author?.userId
+                        if (!sameDay) {
                             MessageDateSeparator(message.createdAt.substringBefore('T'))
                         }
                         if (messages.firstUnreadMessageId == message.id) FirstUnreadDivider()
+                        if (!grouped && sameDay && previous != null) {
+                            Spacer(Modifier.size(6.dp))
+                        }
                         when (message.type) {
                             ChatMessageType.SYSTEM -> ConversationSystemEvent(message)
                             ChatMessageType.USER -> ConversationMessageItem(
                                 message = message,
                                 currentUserId = currentUserId,
                                 canWrite = canWrite,
+                                grouped = grouped,
+                                locallyHighlighted = localHighlightId == message.id,
                                 messages = messages,
                                 onDownloadAttachment = onDownloadAttachment,
                                 onOpenTask = onOpenTask,
+                                onJumpToMessage = jumpToMessage,
+                                onCreateTaskFromMessage = onCreateTaskFromMessage,
                                 viewModel = viewModel,
                                 forwardTargets = forwardTargets
                             )
@@ -275,15 +358,36 @@ fun ConversationPanel(
                         item(key = "empty") { Text("Сообщений пока нет. Напишите первым.", Modifier.padding(8.dp)) }
                     }
                 }
-                if (pendingNewCount > 0) {
+                if (pendingNewCount > 0 || isAwayFromBottom) {
                     Surface(
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        TextButton(onClick = {
-                            scrollScope.launch { listState.animateScrollToItem(messages.messages.lastIndex) }
+                        onClick = {
+                            if (messages.messages.isNotEmpty()) {
+                                val headerOffset = if (messages.hasMoreNewer) 1 else 0
+                                scrollScope.launch { listState.animateScrollToItem(messages.messages.lastIndex + headerOffset) }
+                            }
                             pendingNewCount = 0
-                        }) { Text("Новые сообщения: $pendingNewCount") }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 14.dp)
+                            .shadow(6.dp, CircleShape),
+                        shape = CircleShape,
+                        color = if (pendingNewCount > 0) Brand.Blue else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = if (pendingNewCount > 0) Color.White else MaterialTheme.colorScheme.onSurface
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = if (pendingNewCount > 0) 12.dp else 11.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("↓", style = MaterialTheme.typography.titleMedium)
+                            if (pendingNewCount > 0) {
+                                Text(
+                                    text = "$pendingNewCount",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -319,6 +423,7 @@ fun ConversationPanel(
 
 @Composable
 private fun ConversationMessageSearch(state: ConversationMessagesUiState, viewModel: ConversationViewModel) {
+    var mediaFilter by remember { mutableStateOf("ALL") }
     Column(Modifier.padding(horizontal = 8.dp)) {
         OutlinedTextField(
             value = state.searchQuery,
@@ -327,12 +432,37 @@ private fun ConversationMessageSearch(state: ConversationMessagesUiState, viewMo
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            listOf(
+                "ALL" to "Все",
+                "FILES" to "Файлы",
+                "IMAGES" to "Фото",
+                "LINKS" to "Ссылки",
+                "POLLS" to "Опросы"
+            ).forEach { (key, label) ->
+                androidx.compose.material3.FilterChip(
+                    selected = mediaFilter == key,
+                    onClick = { mediaFilter = key },
+                    label = { Text(label) }
+                )
+            }
+        }
         state.searchError?.let { ErrorMessageCard(it) }
         if (state.searchLoading) Text("Поиск…")
-        if (state.searchQuery.isNotBlank() && !state.searchLoading) {
-            if (state.searchResults.isEmpty()) Text("Ничего не найдено.")
+        val filteredResults = when (mediaFilter) {
+            "FILES" -> state.messages.filter { it.attachments.isNotEmpty() }
+            "IMAGES" -> state.messages.filter { m -> m.attachments.any { isPreviewableImage(it.mimeType, it.sizeBytes) } }
+            "LINKS" -> state.messages.filter { it.content.contains("http://") || it.content.contains("https://") }
+            "POLLS" -> state.messages.filter { it.poll != null }
+            else -> state.searchResults
+        }
+        if ((state.searchQuery.isNotBlank() || mediaFilter != "ALL") && !state.searchLoading) {
+            if (filteredResults.isEmpty()) Text("Ничего не найдено.")
             Column(Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState())) {
-                state.searchResults.forEach { result ->
+                filteredResults.forEach { result ->
                     Text(
                         "${result.author?.fullName ?: "Неизвестный автор"} · ${chatSnippet(result.content, 100)}",
                         maxLines = 1,
@@ -396,10 +526,31 @@ private fun ConversationComposer(
         }
     }
     val options = participants.map { UserOptionDto(it.userId, it.fullName) }
-    mentionSuggestions(options, state.draft).take(5).forEach { user ->
-        Text(user.fullName, Modifier.fillMaxWidth().clickable {
-            onDraftChange(insertMention(state.draft, user.fullName))
-        }.padding(horizontal = 12.dp, vertical = 5.dp))
+    val suggestions = mentionSuggestions(options, state.draft).take(5)
+    if (suggestions.isNotEmpty()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            tonalElevation = 4.dp,
+            shadowElevation = 4.dp
+        ) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                suggestions.forEach { user ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onDraftChange(insertMention(state.draft, user.fullName)) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Avatar(name = user.fullName, size = 24.dp)
+                        Text(user.fullName, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
     }
     if (editingMessage == null) {
         state.pendingFiles.forEach { file ->
@@ -411,19 +562,30 @@ private fun ConversationComposer(
     } else {
         (state.draft.isNotBlank() || state.pendingFiles.isNotEmpty()) && !state.isSending
     }
+    val prefs by org.example.project.ui.main.UserPreferencesStore.state.collectAsState()
     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.Bottom) {
         OutlinedTextField(
             value = state.draft,
             onValueChange = onDraftChange,
             label = {
-                Text(if (editingMessage != null) "Изменить сообщение (Ctrl+Enter: сохранить)" else "Сообщение (Ctrl+Enter: отправить)")
+                Text(
+                    when {
+                        editingMessage != null -> "Изменить сообщение (${if (prefs.sendMessageOnEnter) "Enter" else "Ctrl+Enter"}: сохранить)"
+                        prefs.sendMessageOnEnter -> "Сообщение (Enter — отправить, Shift+Enter — новая строка)"
+                        else -> "Сообщение (Ctrl+Enter — отправить)"
+                    }
+                )
             },
             minLines = 1,
             maxLines = 4,
             modifier = Modifier.weight(1f).onPreviewKeyEvent { event ->
                 when {
+                    prefs.sendMessageOnEnter && event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed -> {
+                        if (canSubmit) onSend()
+                        true
+                    }
                     event.type == KeyEventType.KeyDown && event.isCtrlPressed && event.key == Key.Enter -> {
-                        onSend()
+                        if (canSubmit) onSend()
                         true
                     }
                     event.type == KeyEventType.KeyDown && event.key == Key.Escape && editingMessage != null -> {
@@ -449,6 +611,46 @@ private fun ConversationComposer(
                 modifier = Modifier.size(20.dp)
             )
         }
+        var pollDialogOpen by remember { mutableStateOf(false) }
+        var scheduleDialogOpen by remember { mutableStateOf(false) }
+        if (viewModel != null && editingMessage == null) {
+            IconButton(
+                onClick = { pollDialogOpen = true },
+                enabled = !state.isSending,
+                modifier = Modifier.size(36.dp).semantics { contentDescription = "Создать опрос" }
+            ) {
+                Text("📊", style = MaterialTheme.typography.titleMedium)
+            }
+            IconButton(
+                onClick = {
+                    viewModel.loadScheduled()
+                    scheduleDialogOpen = true
+                },
+                enabled = !state.isSending,
+                modifier = Modifier.size(36.dp).semantics { contentDescription = "Отложенное или тихое сообщение" }
+            ) {
+                ErpIcon(
+                    glyph = ErpIconGlyph.Clock,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        if (pollDialogOpen && viewModel != null) {
+            CreatePollDialog(
+                onDismiss = { pollDialogOpen = false },
+                onCreate = viewModel::createPoll
+            )
+        }
+        if (scheduleDialogOpen && viewModel != null) {
+            val convUiState by viewModel.uiState.collectAsState()
+            ScheduleMessageDialog(
+                initialContent = state.draft,
+                scheduledMessages = convUiState.scheduledMessages,
+                onSchedule = viewModel::scheduleMessage,
+                onDismiss = { scheduleDialogOpen = false }
+            )
+        }
         Button(onClick = onSend, enabled = canSubmit) {
             Text(
                 when {
@@ -468,9 +670,13 @@ private fun ConversationMessageItem(
     message: ConversationMessageDto,
     currentUserId: Long,
     canWrite: Boolean,
+    grouped: Boolean = false,
+    locallyHighlighted: Boolean = false,
     messages: ConversationMessagesUiState,
     onDownloadAttachment: (AttachmentDto) -> Unit,
     onOpenTask: (Long) -> Unit = {},
+    onJumpToMessage: (Long) -> Unit = {},
+    onCreateTaskFromMessage: ((String) -> Unit)? = null,
     viewModel: ConversationViewModel?,
     forwardTargets: List<ConversationListItemDto>
 ) {
@@ -479,10 +685,20 @@ private fun ConversationMessageItem(
     var actionsOpen by remember(message.id) { mutableStateOf(false) }
     var revoking by remember(message.id) { mutableStateOf(false) }
     var forwarding by remember(message.id) { mutableStateOf(false) }
-    val highlighted = messages.highlightedMessageId == message.id
+    var copiedNotice by remember(message.id) { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    val hoverSource = remember { MutableInteractionSource() }
+    val hovered by hoverSource.collectIsHoveredAsState()
+    LaunchedEffect(copiedNotice) {
+        if (copiedNotice) {
+            kotlinx.coroutines.delay(1_400)
+            copiedNotice = false
+        }
+    }
+    val highlighted = locallyHighlighted || messages.highlightedMessageId == message.id
     val bubbleShape = RoundedCornerShape(
-        topStart = 20.dp,
-        topEnd = 20.dp,
+        topStart = if (grouped && !own) 8.dp else 20.dp,
+        topEnd = if (grouped && own) 8.dp else 20.dp,
         bottomEnd = if (own) 6.dp else 20.dp,
         bottomStart = if (own) 20.dp else 6.dp
     )
@@ -498,6 +714,7 @@ private fun ConversationMessageItem(
     }
     val status = buildString {
         append(message.createdAt.substringAfter('T').take(5))
+        if (message.isSilent) append(" · 🔇 тихо")
         if (message.editedAt != null) append(" · изменено")
         if (own && message.revokedAt == null) {
             append(if (message.readByCount > 0) " · Прочитано" else " · Доставлено")
@@ -505,22 +722,82 @@ private fun ConversationMessageItem(
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .hoverable(hoverSource),
         horizontalArrangement = if (own) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Top
     ) {
         if (!own) {
-            Avatar(message.author?.fullName ?: "Неизвестный автор", size = 32.dp)
+            if (!grouped) {
+                Avatar(message.author?.fullName ?: "Неизвестный автор", size = 32.dp)
+            } else {
+                Spacer(Modifier.width(32.dp))
+            }
             Spacer(Modifier.width(8.dp))
         }
-        Column(Modifier.widthIn(max = 560.dp)) {
-            if (!own) {
+        Column(
+            modifier = Modifier.widthIn(max = 560.dp),
+            horizontalAlignment = if (own) Alignment.End else Alignment.Start
+        ) {
+            if (!own && !grouped) {
                 Text(
                     text = message.author?.fullName ?: "Неизвестный автор",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, bottom = 3.dp)
                 )
+            }
+            if ((hovered || actionsOpen || copiedNotice) && message.revokedAt == null) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    tonalElevation = 3.dp,
+                    shadowElevation = 3.dp,
+                    modifier = Modifier.padding(bottom = 3.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        if (canWrite) {
+                            listOf("👍", "❤️", "👀").forEach { emoji ->
+                                Text(
+                                    text = emoji,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .clickable { viewModel?.toggleReaction(message.id, emoji) }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                            Text(
+                                text = "Ответить",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { viewModel?.setReplyToMessageId(message.id) }
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                        if (message.content.isNotBlank()) {
+                            Text(
+                                text = if (copiedNotice) "Скопировано ✓" else "Копировать",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (copiedNotice) Brand.Teal else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        clipboardManager.setText(AnnotatedString(message.content))
+                                        copiedNotice = true
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
             }
             Box(
                 modifier = Modifier
@@ -544,12 +821,16 @@ private fun ConversationMessageItem(
                     }
                     message.replyTo?.let { reply ->
                         Surface(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { onJumpToMessage(reply.id) },
                             shape = RoundedCornerShape(6.dp),
-                            color = contentColor.copy(alpha = 0.06f)
+                            color = contentColor.copy(alpha = 0.08f)
                         ) {
                             Text(
-                                text = "${reply.author?.fullName ?: "Неизвестный автор"}: ${reply.contentPreview}",
+                                text = "↩ ${reply.author?.fullName ?: "Неизвестный автор"}: ${reply.contentPreview}",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                 color = contentColor,
                                 style = MaterialTheme.typography.bodySmall,
@@ -566,7 +847,14 @@ private fun ConversationMessageItem(
                         )
                     } else {
                         val taskLink = parseTaskMessageLink(message.content)
-                        if (taskLink != null) {
+                        val poll = message.poll
+                        if (poll != null) {
+                            PollMessageCard(
+                                poll = poll,
+                                contentColor = contentColor,
+                                onVote = { optionIds -> viewModel?.votePoll(poll.id, optionIds) }
+                            )
+                        } else if (taskLink != null) {
                             SharedTaskMessageCard(
                                 link = taskLink,
                                 onClick = { onOpenTask(taskLink.taskId) },
@@ -582,7 +870,13 @@ private fun ConversationMessageItem(
                         message.attachments.forEach { attachment ->
                             if (isPreviewableImage(attachment.mimeType, attachment.sizeBytes)) {
                                 LaunchedEffect(attachment.id) { viewModel?.loadImagePreview(attachment) }
-                                messages.imagePreviews[attachment.id]?.let { DecodedImagePreview(it) }
+                                messages.imagePreviews[attachment.id]?.let {
+                                    DecodedImagePreview(
+                                        bytes = it,
+                                        fileName = attachment.fileName,
+                                        onDownload = { onDownloadAttachment(attachment) }
+                                    )
+                                }
                             }
                             Surface(
                                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
@@ -611,6 +905,18 @@ private fun ConversationMessageItem(
                         actionColor = if (own && !highlighted) Color.White else MaterialTheme.colorScheme.primary,
                         showAddButton = false
                     )
+                    if (message.threadReplyCount > 0 && message.revokedAt == null) {
+                        Text(
+                            text = "💬 Ответов в ветке: ${message.threadReplyCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (own && !highlighted) Color.White else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(top = 4.dp, bottom = 2.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { viewModel?.openThread(message) }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val statusContent: @Composable () -> Unit = {
                             Text(
@@ -667,6 +973,30 @@ private fun ConversationMessageItem(
                                             viewModel?.setReplyToMessageId(message.id)
                                         }
                                     )
+                                    DropdownMenuItem(
+                                        text = { Text("Обсудить в ветке") },
+                                        onClick = {
+                                            actionsOpen = false
+                                            viewModel?.openThread(message)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(if (message.isPinned) "Открепить" else "Закрепить") },
+                                        onClick = {
+                                            actionsOpen = false
+                                            if (message.isPinned) viewModel?.unpinMessage(message.id)
+                                            else viewModel?.pinMessage(message.id)
+                                        }
+                                    )
+                                    if (onCreateTaskFromMessage != null && message.content.isNotBlank()) {
+                                        DropdownMenuItem(
+                                            text = { Text("Создать задачу") },
+                                            onClick = {
+                                                actionsOpen = false
+                                                onCreateTaskFromMessage(message.content)
+                                            }
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text("Переслать") },
                                         onClick = {
@@ -885,11 +1215,15 @@ private fun ConversationSystemEvent(message: ConversationMessageDto) {
 
 @Composable
 private fun MessageDateSeparator(date: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         HorizontalDivider(Modifier.weight(1f))
         Text(
             org.example.project.ui.theme.ErpFormat.dateRu(date),
             style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 8.dp)
         )
         HorizontalDivider(Modifier.weight(1f))
@@ -898,9 +1232,17 @@ private fun MessageDateSeparator(date: String) {
 
 @Composable
 private fun FirstUnreadDivider() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
-        Text("Непрочитанные", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+        Text(
+            "Непрочитанные",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
         HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
     }
 }

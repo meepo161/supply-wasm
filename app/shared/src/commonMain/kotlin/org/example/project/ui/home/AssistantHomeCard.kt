@@ -92,7 +92,7 @@ fun AssistantHomeCard(
 ) {
     val scheme = MaterialTheme.colorScheme
     val scroll = rememberScrollState()
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(true) }
     var showHistory by remember { mutableStateOf(false) }
 
     LaunchedEffect(messages.size, isLoading) {
@@ -147,12 +147,14 @@ fun AssistantHomeCard(
                 if (conversations.isNotEmpty()) {
                     SoftButton(
                         text = if (showHistory) "Скрыть историю" else "История (${conversations.size})",
-                        onClick = { showHistory = !showHistory }
+                        onClick = { showHistory = !showHistory },
+                        compact = true
                     )
                 }
                 SoftButton(
-                    text = if (expanded) "Свернуть" else "Развернуть",
-                    onClick = { expanded = !expanded }
+                    text = if (expanded) "Компактно" else "Развернуть",
+                    onClick = { expanded = !expanded },
+                    compact = true
                 )
                 if (messages.isNotEmpty()) {
                     TextButton(onClick = onClear) {
@@ -234,10 +236,10 @@ fun AssistantHomeCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 140.dp, max = if (expanded) 400.dp else 240.dp)
+                        .heightIn(min = 240.dp, max = if (expanded) 500.dp else 260.dp)
                         .verticalScroll(scroll)
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     messages.forEach { msg ->
                         if (msg.role == AssistantRole.USER) {
@@ -279,6 +281,31 @@ fun AssistantHomeCard(
                 )
             }
 
+            // Быстрые подсказки всегда под рукой над полем ввода
+            if (messages.isNotEmpty()) {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "Задачи" to "Какие у меня открытые и просроченные задачи?",
+                        "Склад и дефицит" to "Проверь остатки на складе и что ниже минимума",
+                        "Снабжение" to "Покажи последние потребности и заказы поставщикам",
+                        "Проекты" to "Дай сводку по активным проектам и рискам"
+                    ).forEach { (label, prompt) ->
+                        SoftButton(
+                            text = label,
+                            onClick = { onSend(prompt) },
+                            enabled = !isLoading,
+                            compact = true
+                        )
+                    }
+                }
+            }
+
             // Unified desktop composer
             ComposerBox(
                 input = input,
@@ -288,7 +315,7 @@ fun AssistantHomeCard(
                 onPickFile = onPickFile,
                 onRemovePendingFile = onRemovePendingFile,
                 onSend = { onSend(null) },
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 16.dp)
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 14.dp)
             )
         }
     }
@@ -321,28 +348,44 @@ private fun WelcomeStarterSection(
             modifier = Modifier.fillMaxWidth()
         ) {
             StarterCard(
-                title = "Мои задачи",
-                subtitle = "Открытые и просроченные назначения",
+                title = "Мои задачи и сроки",
+                subtitle = "Открытые, просроченные и на приёмке",
                 glyph = ErpIconGlyph.Tasks,
                 accent = Brand.Blue,
                 enabled = !isLoading,
                 onClick = { onSelectPrompt("Какие у меня открытые и просроченные задачи?") }
             )
             StarterCard(
-                title = "Остатки на складе",
-                subtitle = "Поиск номенклатуры, ячеек и резервов",
+                title = "Склад и дефицит",
+                subtitle = "Остатки, ячейки и позиции ниже минимума",
                 glyph = ErpIconGlyph.Warehouse,
                 accent = Brand.Teal,
                 enabled = !isLoading,
-                onClick = { onSelectPrompt("Что сейчас лежит на складе?") }
+                onClick = { onSelectPrompt("Проверь остатки на складе и что ниже минимума") }
             )
             StarterCard(
-                title = "Снабжение",
-                subtitle = "Последние потребности и заказы поставщикам",
+                title = "Снабжение и заказы",
+                subtitle = "Потребности, счета и заказы поставщикам",
                 glyph = ErpIconGlyph.Cart,
                 accent = Brand.Indigo,
                 enabled = !isLoading,
                 onClick = { onSelectPrompt("Покажи последние потребности и заказы поставщикам") }
+            )
+            StarterCard(
+                title = "Проекты и риски",
+                subtitle = "Статус активных проектов и узких мест",
+                glyph = ErpIconGlyph.Projects,
+                accent = Brand.Violet,
+                enabled = !isLoading,
+                onClick = { onSelectPrompt("Дай сводку по активным проектам и рискам") }
+            )
+            StarterCard(
+                title = "Создать потребность",
+                subtitle = "Оформить новую заявку по тексту или списку",
+                glyph = ErpIconGlyph.Plus,
+                accent = Brand.Orange,
+                enabled = !isLoading,
+                onClick = { onSelectPrompt("Помоги оформить новую потребность на закупку") }
             )
             StarterCard(
                 title = "Разобрать счёт или файл",
@@ -845,12 +888,12 @@ private fun DraftConfirmationCard(
 }
 
 private fun localizeDestinationLabel(target: String): String = when (target) {
-    "DEMANDS" -> "Открыть «Потребности»"
+    "DEMANDS" -> "Открыть «Снабжение»"
     "TASKS" -> "Открыть «Задачи»"
     "PROJECTS" -> "Открыть «Проекты»"
     "WMS" -> "Открыть «Склад»"
-    "SUPPLIERS" -> "Открыть «Поставщики»"
-    "PURCHASE_ORDERS" -> "Открыть «Заказы поставщикам»"
+    "SUPPLIERS" -> "Открыть «Снабжение → Поставщики»"
+    "PURCHASE_ORDERS" -> "Открыть «Снабжение → Заказы»"
     else -> "Открыть раздел"
 }
 

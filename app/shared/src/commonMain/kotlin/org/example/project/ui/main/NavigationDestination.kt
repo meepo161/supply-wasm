@@ -36,28 +36,12 @@ enum class NavigationDestination(
     BOM("Спецификации (BOM)", listOf("bom:read_any"), glyph = ErpIconGlyph.Layers, group = NavGroup.SUPPLY,
         gradient = Gradients.Berry, description = "Состав изделий и ревизии"),
     DEMANDS(
-        "Снабжение (Заявки)",
+        "Снабжение",
         listOf("demands:create", "demands:read_any", "suppliers:read", "suppliers:offer", "suppliers:order"),
         glyph = ErpIconGlyph.Cart,
         group = NavGroup.SUPPLY,
         gradient = Gradients.Sunset,
-        description = "Пульт заявок, предложения, оплата и статус склада"
-    ),
-    PURCHASE_ORDERS(
-        "Реестр заказов и счетов",
-        listOf("suppliers:read"),
-        glyph = ErpIconGlyph.Documents,
-        group = NavGroup.SUPPLY,
-        gradient = Gradients.Berry,
-        description = "Все заказы, поставки и счета"
-    ),
-    SUPPLIERS(
-        "База поставщиков",
-        listOf("suppliers:read"),
-        glyph = ErpIconGlyph.Cart,
-        group = NavGroup.SUPPLY,
-        gradient = Gradients.Sunset,
-        description = "Справочник контрагентов и предложения"
+        description = "Заявки, заказы, поставки, счета и поставщики"
     ),
     DOCUMENTS("Документы", glyph = ErpIconGlyph.Documents, group = NavGroup.SUPPLY,
         gradient = Gradients.AmberGlow, description = "Файлы и версии"),
